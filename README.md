@@ -9,7 +9,7 @@
 پیش‌نیاز: Linux دارای Docker Engine، Docker Compose، `curl`، `tar` و `ss`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/emssebi/EMS_IPAM/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 ```
 
 نصب‌کننده رمز دیتابیس، نام کاربری و رمز مدیر، پورت پنل و وضعیت HTTPS را می‌پرسد. اگر پورت انتخابی اشغال باشد، نصب پیش از ساخت کانتینرها متوقف می‌شود.
