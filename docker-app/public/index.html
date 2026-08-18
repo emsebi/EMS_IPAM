@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>EMS IPAM — مدیریت تصویری شبکه</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <section id="loginView" class="login-view">
+    <div class="login-card">
+      <div class="login-mark">IP</div>
+      <h1>مدیریت تصویری شبکه</h1>
+      <p>ورود به سامانه EMS IPAM</p>
+      <form id="loginForm" class="stack-form">
+        <label>نام کاربری<input id="loginUsername" autocomplete="username" required></label>
+        <label>رمز عبور<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <button class="btn primary wide" type="submit">ورود</button>
+        <div id="loginError" class="form-error hidden"></div>
+      </form>
+    </div>
+  </section>
+
+  <div id="appView" class="app hidden">
+    <header class="topbar">
+      <button id="homeButton" class="brand" type="button" aria-label="صفحه اصلی">
+        <span class="brandmark">IP</span>
+        <span><b>EMS IPAM</b><small>مدیریت تصویری شبکه</small></span>
+      </button>
+      <div class="context-selectors">
+        <select id="companySelect" aria-label="شرکت"></select>
+        <select id="spaceSelect" aria-label="رنج اصلی"></select>
+      </div>
+      <div class="searchbox">
+        <span>⌕</span>
+        <input id="searchInput" placeholder="جست‌وجوی IP، نام سیستم، MAC، کاربر یا رنج…" autocomplete="off">
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <div class="top-actions">
+        <span id="liveBadge" class="live-badge"><i></i><span>اتصال زنده</span></span>
+        <button id="exportButton" class="iconbtn" title="خروجی JSON" aria-label="خروجی JSON">⇩</button>
+        <button id="usersButton" class="iconbtn admin-only" title="کاربران" aria-label="کاربران">♙</button>
+        <button id="settingsButton" class="iconbtn admin-only" title="تنظیمات ابزارها" aria-label="تنظیمات ابزارها">⚙</button>
+        <button id="logoutButton" class="iconbtn" title="خروج" aria-label="خروج">↪</button>
+      </div>
+    </header>
+    <main id="page" class="page"></main>
+  </div>
+
+  <dialog id="companyDialog">
+    <form id="companyForm">
+      <div class="modal-head"><div><h3>افزودن شرکت</h3><p>گروه اصلی برای رنج‌ها و کاربران</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <label class="field">نام شرکت<input id="companyName" required placeholder="مثلاً شرکت ۱"></label>
+        <label class="field full">توضیحات<textarea id="companyDescription"></textarea></label>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="spaceDialog">
+    <form id="spaceForm">
+      <div class="modal-head"><div><h3>افزودن رنج اصلی</h3><p>رنج‌های اصلی از /16 تا /24 پشتیبانی می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <label class="field">نام رنج<input id="spaceName" required placeholder="مثلاً شبکه دفتر مرکزی"></label>
+        <label class="field">CIDR<input id="spaceCidr" class="ltr mono" required placeholder="172.16.0.0/16"></label>
+        <label class="field">رنگ<input id="spaceColor" type="color" value="#3157d5"></label>
+        <label class="field full">توضیحات<textarea id="spaceDescription"></textarea></label>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="prefixDialog">
+    <form id="prefixForm">
+      <div class="modal-head"><div><h3 id="prefixDialogTitle">ثبت رنج</h3><p id="prefixCidrTitle" class="ltr mono"></p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body">
+        <input id="prefixId" type="hidden"><input id="prefixCidr" type="hidden">
+        <div class="form-grid">
+          <label class="field">نام رنج<input id="prefixName" required placeholder="مثلاً کاربران وایرلس"></label>
+          <label class="field">وضعیت<select id="prefixStatus"><option value="active">فعال</option><option value="reserved">رزروشده</option><option value="planned">برنامه‌ریزی‌شده</option><option value="quarantine">قرنطینه</option><option value="retired">غیرفعال</option></select></label>
+          <label class="field">کاربرد<input id="prefixRole" placeholder="کاربران، سرورها، دوربین‌ها…"></label>
+          <label class="field">VLAN<input id="prefixVlan" class="ltr" inputmode="numeric"></label>
+          <label class="field">Gateway<input id="prefixGateway" class="ltr mono"></label>
+          <label class="field">رنگ<input id="prefixColor" type="color" value="#3157d5"></label>
+          <label class="field full">توضیحات<textarea id="prefixDescription"></textarea></label>
+        </div>
+      </div>
+      <div class="modal-foot split"><button id="deletePrefixButton" class="btn danger hidden" type="button">حذف رنج</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره و اعمال رنگ</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="hostDialog" class="wide-dialog">
+    <form id="hostForm">
+      <div class="modal-head"><div><h3>اطلاعات IP</h3><p id="hostIpTitle" class="ltr mono"></p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body">
+        <input id="hostId" type="hidden"><input id="hostIp" type="hidden">
+        <div class="form-grid">
+          <label class="field">نام سیستم / Hostname<input id="hostName" placeholder="مثلاً ESXi-01"></label>
+          <label class="field">وضعیت<select id="hostStatus"><option value="active">فعال</option><option value="reserved">رزرو</option><option value="offline">خاموش</option><option value="fault">نیازمند بررسی</option><option value="free">آزاد</option></select></label>
+          <label class="field">نوع تجهیز<select id="hostType"><option value=""></option><option>سرور</option><option>ماشین مجازی</option><option>رایانه</option><option>روتر</option><option>سوئیچ</option><option>دوربین</option><option>اکسس‌پوینت</option><option>پرینتر</option><option>سایر</option></select></label>
+          <label class="field">سیستم‌عامل<input id="hostOs"></label>
+          <label class="field">MAC Address<input id="hostMac" class="ltr mono"></label>
+          <label class="field">VLAN<input id="hostVlan" class="ltr"></label>
+          <label class="field">نام کاربری<input id="hostUsername"></label>
+          <label class="field">مسئول / مالک<input id="hostOwner"></label>
+          <label class="field">موقعیت<input id="hostLocation"></label>
+          <label class="field">مرجع رمز در Password Manager<input id="hostSecretRef" placeholder="مثلاً Bitwarden/Network/Router-01"></label>
+          <fieldset class="field full ports-fieldset">
+            <legend>پورت اختصاصی ابزارها</legend>
+            <p>خالی بماند، پورت پیش‌فرض استفاده می‌شود.</p>
+            <div id="hostPorts" class="port-grid"></div>
+          </fieldset>
+          <label class="field full">توضیحات<textarea id="hostNotes"></textarea></label>
+        </div>
+      </div>
+      <div class="modal-foot split"><button id="deleteHostButton" class="btn danger hidden" type="button">حذف اطلاعات</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="usersDialog" class="wide-dialog">
+    <div class="modal-head"><div><h3>کاربران و دسترسی‌ها</h3><p>مدیر، ویرایشگر و مشاهده‌گر</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body users-layout">
+      <form id="userForm" class="card-form">
+        <input id="userId" type="hidden">
+        <h4 id="userFormTitle">کاربر جدید</h4>
+        <label class="field">نام کاربری<input id="userUsername" required autocomplete="off"></label>
+        <label class="field">نام نمایشی<input id="userDisplayName"></label>
+        <label class="field">رمز عبور<input id="userPassword" type="password" autocomplete="new-password"><small id="passwordHint">حداقل ۸ کاراکتر</small></label>
+        <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="editor">ویرایشگر</option><option value="admin">مدیر کل</option></select></label>
+        <label id="userActiveWrap" class="check-field hidden"><input id="userActive" type="checkbox" checked> کاربر فعال باشد</label>
+        <fieldset id="companyAccessField" class="company-access"><legend>شرکت‌های قابل دسترسی</legend><div id="companyAccessList"></div></fieldset>
+        <button class="btn primary" type="submit">ذخیره کاربر</button>
+        <button id="cancelUserEdit" class="btn hidden" type="button">انصراف از ویرایش</button>
+      </form>
+      <div><div id="usersList" class="table-list"></div></div>
+    </div>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm">
+      <div class="modal-head"><div><h3>پورت‌های پیش‌فرض</h3><p>هر IP می‌تواند این مقادیر را جداگانه تغییر دهد.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div id="toolsSettings" class="modal-body tool-settings"></div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره تنظیمات</button></div>
+    </form>
+  </dialog>
+
+  <div id="toolMenu" class="tool-menu hidden"></div>
+  <div id="toast" class="toast"></div>
+  <script src="/mock-api.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

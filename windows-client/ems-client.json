@@ -1,0 +1,20 @@
+{
+  "tools": {
+    "VNC": {
+      "path": "C:\\Program Files\\RealVNC\\VNC Viewer\\vncviewer.exe",
+      "mode": "vnc"
+    },
+    "MIK": {
+      "path": "C:\\tools\\winbox.exe",
+      "mode": "winbox"
+    },
+    "RDP": {
+      "path": "C:\\Windows\\System32\\mstsc.exe",
+      "mode": "rdp"
+    },
+    "SSH": {
+      "path": "C:\\tools\\putty.exe",
+      "mode": "putty"
+    }
+  }
+}

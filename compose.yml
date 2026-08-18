@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:18.6-alpine3.24
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: ems_ipam
+      POSTGRES_USER: ems_ipam
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ems_ipam_database:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ems_ipam -d ems_ipam"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - ems_internal
+
+  app:
+    build:
+      context: ./docker-app
+    image: ems-ipam:0.1.0
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ems_ipam
+      PGUSER: ems_ipam
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
+      EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PORT: 8080
+      TZ: Asia/Tehran
+    ports:
+      - "${EMS_HTTP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: unless-stopped
+    networks:
+      - ems_internal
+
+volumes:
+  ems_ipam_database:
+    name: ems_ipam_database
+
+networks:
+  ems_internal:
+    name: ems_ipam_internal
+    driver: bridge
