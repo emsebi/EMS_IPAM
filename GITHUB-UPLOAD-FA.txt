@@ -1,6 +1,6 @@
 تنظیمات ساخت Repository
 
-Owner: emssebi
+Owner: emsebi
 Repository name: EMS_IPAM
 Visibility: Public
 Add README: Off
@@ -14,7 +14,7 @@ Add license: No license فعلاً
 
 دستور نصب پس از کامل‌شدن Upload:
 
-curl -fsSL https://raw.githubusercontent.com/emssebi/EMS_IPAM/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 
 توجه: تا زمانی که تمام فایل‌ها، به‌خصوص install.sh، compose.yml و docker-app،
 در Repository قرار نگرفته‌اند این دستور را اجرا نکنید.
