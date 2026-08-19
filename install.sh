@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPOSITORY="${EMS_REPOSITORY:-emssebi/EMS_IPAM}"
+REPOSITORY="${EMS_REPOSITORY:-emsebi/EMS_IPAM}"
 REPOSITORY_REF="${EMS_REPOSITORY_REF:-main}"
 INSTALL_DIR="${EMS_INSTALL_DIR:-/opt/ems-ipam}"
 SOURCE_OVERRIDE="${EMS_INSTALL_SOURCE_DIR:-}"
@@ -13,7 +13,7 @@ log() {
 }
 
 fail() {
-  printf '\nخطا: %s\n' "$*" >&2
+  printf '\nError: %s\n' "$*" >&2
   exit 1
 }
 
@@ -25,7 +25,7 @@ cleanup() {
 trap cleanup EXIT
 
 need_command() {
-  command -v "$1" >/dev/null 2>&1 || fail "دستور $1 روی سرور نصب نیست."
+  command -v "$1" >/dev/null 2>&1 || fail "Required command '$1' is not installed."
 }
 
 read_default() {
@@ -33,7 +33,7 @@ read_default() {
   local prompt_text="$2"
   local default_value="$3"
   local entered=""
-  read -r -p "$prompt_text [$default_value]: " entered <"$TTY_DEVICE" || fail "خواندن ورودی ممکن نیست."
+  read -r -p "$prompt_text [$default_value]: " entered <"$TTY_DEVICE" || fail "Unable to read terminal input."
   printf -v "$variable_name" '%s' "${entered:-$default_value}"
 }
 
@@ -44,20 +44,20 @@ read_secret_twice() {
   local first=""
   local second=""
   while true; do
-    read -r -s -p "$prompt_text: " first <"$TTY_DEVICE" || fail "خواندن رمز ممکن نیست."
+    read -r -s -p "$prompt_text: " first <"$TTY_DEVICE" || fail "Unable to read the password."
     printf '\n'
     if (( ${#first} < minimum_length )); then
-      printf 'رمز باید حداقل %s کاراکتر باشد.\n' "$minimum_length" >&2
+      printf 'Password must contain at least %s characters.\n' "$minimum_length" >&2
       continue
     fi
     if [[ "$first" == *"'"* ]]; then
-      printf "برای سازگاری با فایل تنظیمات، از علامت ' در رمز استفاده نکنید.\n" >&2
+      printf "Do not use an apostrophe (') in the password.\n" >&2
       continue
     fi
-    read -r -s -p "تکرار رمز: " second <"$TTY_DEVICE" || fail "خواندن تکرار رمز ممکن نیست."
+    read -r -s -p "Confirm password: " second <"$TTY_DEVICE" || fail "Unable to read the password confirmation."
     printf '\n'
     if [[ "$first" != "$second" ]]; then
-      printf 'دو رمز یکسان نیستند؛ دوباره وارد کنید.\n' >&2
+      printf 'Passwords do not match. Try again.\n' >&2
       continue
     fi
     printf -v "$variable_name" '%s' "$first"
@@ -86,74 +86,80 @@ port_is_busy() {
 }
 
 if (( EUID != 0 )); then
-  fail "نصب باید با sudo اجرا شود."
+  fail "Run this installer with sudo."
 fi
 
-[[ -r "$TTY_DEVICE" ]] || fail "این نصب‌کننده باید داخل ترمینال تعاملی اجرا شود."
+[[ -r "$TTY_DEVICE" ]] || fail "This installer must run in an interactive terminal."
 
 for command_name in docker curl tar ss awk grep; do
   need_command "$command_name"
 done
 
-docker info >/dev/null 2>&1 || fail "سرویس Docker در دسترس نیست."
-docker compose version >/dev/null 2>&1 || fail "افزونه Docker Compose نصب نیست."
+docker info >/dev/null 2>&1 || fail "Docker is not running or is not accessible."
+docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is not installed."
 
 if [[ -e "$INSTALL_DIR" ]]; then
-  fail "مسیر $INSTALL_DIR از قبل وجود دارد؛ برای جلوگیری از بازنویسی، نصب متوقف شد."
+  fail "Installation directory '$INSTALL_DIR' already exists. Nothing was overwritten."
 fi
 
-log "تنظیمات نصب"
-read_secret_twice POSTGRES_PASSWORD "رمز قوی دیتابیس POSTGRES_PASSWORD" 16
+log "Installation settings"
+read_secret_twice POSTGRES_PASSWORD "POSTGRES_PASSWORD (minimum 16 characters)" 16
 
 while true; do
-  read_default EMS_ADMIN_USERNAME "نام کاربری مدیر EMS_ADMIN_USERNAME" "admin"
+  read_default EMS_ADMIN_USERNAME "EMS_ADMIN_USERNAME" "admin"
   if [[ "$EMS_ADMIN_USERNAME" =~ ^[A-Za-z0-9_.-]{3,80}$ ]]; then
     break
   fi
-  printf 'نام کاربری باید ۳ تا ۸۰ کاراکتر و شامل حروف، عدد، نقطه، زیرخط یا خط تیره باشد.\n' >&2
+  printf 'Username must be 3-80 characters and use only letters, numbers, dot, underscore or hyphen.\n' >&2
 done
 
-read_secret_twice EMS_ADMIN_PASSWORD "رمز مدیر EMS_ADMIN_PASSWORD" 12
+read_secret_twice EMS_ADMIN_PASSWORD "EMS_ADMIN_PASSWORD (minimum 12 characters)" 12
 
 while true; do
-  read_default EMS_HTTP_PORT "پورت پنل EMS_HTTP_PORT" "8080"
+  read_default EMS_HTTP_PORT "EMS_HTTP_PORT" "8080"
   if [[ "$EMS_HTTP_PORT" =~ ^[0-9]+$ ]]; then
     EMS_HTTP_PORT=$((10#$EMS_HTTP_PORT))
     if (( EMS_HTTP_PORT >= 1 && EMS_HTTP_PORT <= 65535 )); then
       break
     fi
   fi
-  printf 'پورت باید عددی بین ۱ تا ۶۵۵۳۵ باشد.\n' >&2
+  printf 'Port must be a number between 1 and 65535.\n' >&2
 done
 
 while true; do
-  read_default cookie_input "آیا پنل پشت HTTPS است؟ COOKIE_SECURE" "false"
+  read_default cookie_input "COOKIE_SECURE (true for HTTPS, false for HTTP)" "false"
   if COOKIE_SECURE="$(normalize_boolean "$cookie_input")"; then
     break
   fi
-  printf 'فقط true یا false وارد کنید.\n' >&2
+  printf 'Enter true or false.\n' >&2
 done
 
 if port_is_busy "$EMS_HTTP_PORT"; then
-  fail "پورت $EMS_HTTP_PORT اشغال است؛ هیچ کانتینری ایجاد نشد. نصب را دوباره اجرا و پورت دیگری انتخاب کنید."
+  fail "Port $EMS_HTTP_PORT is already in use. No containers were created. Run the installer again and choose another port."
 fi
 
-log "دریافت فایل‌های پروژه"
+log "Downloading project files"
 TEMP_DIR="$(mktemp -d /tmp/ems-ipam-install.XXXXXX)"
 SOURCE_DIR="$TEMP_DIR/source"
 mkdir -p "$SOURCE_DIR"
 
 if [[ -n "$SOURCE_OVERRIDE" ]]; then
-  [[ -d "$SOURCE_OVERRIDE" ]] || fail "مسیر سورس آزمایشی پیدا نشد."
+  [[ -d "$SOURCE_OVERRIDE" ]] || fail "Source override directory was not found."
   cp -a "$SOURCE_OVERRIDE/." "$SOURCE_DIR/"
 else
   ARCHIVE_URL="https://github.com/${REPOSITORY}/archive/refs/heads/${REPOSITORY_REF}.tar.gz"
-  curl -fsSL --retry 3 --connect-timeout 15 "$ARCHIVE_URL" \
-    | tar -xz --strip-components=1 -C "$SOURCE_DIR"
+  ARCHIVE_PATH="$TEMP_DIR/source.tar.gz"
+  if ! curl -fsSL --retry 3 --connect-timeout 15 --output "$ARCHIVE_PATH" "$ARCHIVE_URL"; then
+    fail "Project download failed: $ARCHIVE_URL"
+  fi
+  if ! tar -tzf "$ARCHIVE_PATH" >/dev/null 2>&1; then
+    fail "Downloaded project archive is invalid or incomplete."
+  fi
+  tar -xzf "$ARCHIVE_PATH" --strip-components=1 -C "$SOURCE_DIR"
 fi
 
 for required_path in compose.yml docker-app/Dockerfile docker-app/package.json docker-app/server/main.mjs; do
-  [[ -e "$SOURCE_DIR/$required_path" ]] || fail "فایل ضروری $required_path در Repository وجود ندارد."
+  [[ -e "$SOURCE_DIR/$required_path" ]] || fail "Required file '$required_path' is missing from the repository."
 done
 
 umask 077
@@ -171,23 +177,23 @@ chmod 600 "$INSTALL_DIR/.env"
 
 compose=(docker compose --project-name ems-ipam --env-file "$INSTALL_DIR/.env" -f "$INSTALL_DIR/compose.yml")
 
-log "دریافت ایمیج دیتابیس"
+log "Pulling database image"
 "${compose[@]}" pull db
 
-log "ساخت ایمیج EMS IPAM"
+log "Building EMS IPAM image"
 "${compose[@]}" build --pull app
 
-log "راه‌اندازی سرویس"
+log "Starting services"
 "${compose[@]}" up -d
 
-log "بررسی سلامت سرویس"
+log "Checking service health"
 for (( attempt=1; attempt<=60; attempt+=1 )); do
   if curl -fsS --max-time 2 "http://127.0.0.1:${EMS_HTTP_PORT}/health" >/dev/null 2>&1; then
     SERVER_IP="$(hostname -I 2>/dev/null || true)"
     SERVER_IP="${SERVER_IP%% *}"
-    printf '\nنصب با موفقیت انجام شد.\n'
-    printf 'آدرس پنل: http://%s:%s\n' "${SERVER_IP:-IP-SERVER}" "$EMS_HTTP_PORT"
-    printf 'مسیر نصب: %s\n' "$INSTALL_DIR"
+    printf '\nInstallation completed successfully.\n'
+    printf 'Panel URL: http://%s:%s\n' "${SERVER_IP:-SERVER-IP}" "$EMS_HTTP_PORT"
+    printf 'Installation directory: %s\n' "$INSTALL_DIR"
     exit 0
   fi
   sleep 2
@@ -195,4 +201,4 @@ done
 
 "${compose[@]}" ps >&2 || true
 "${compose[@]}" logs --tail 80 app db >&2 || true
-fail "سرویس در زمان تعیین‌شده سالم نشد؛ لاگ‌ها در بالا نمایش داده شدند."
+fail "The service did not become healthy in time. Container logs are shown above."
