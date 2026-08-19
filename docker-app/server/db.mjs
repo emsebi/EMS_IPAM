@@ -36,16 +36,6 @@ export function createDatabase(connectionString) {
       );
     }
 
-    const companyCount = Number((await pool.query("SELECT count(*) AS count FROM companies")).rows[0].count);
-    if (companyCount === 0) {
-      const companyId = crypto.randomUUID();
-      await pool.query("INSERT INTO companies(id,name,description) VALUES($1,$2,$3)", [companyId, "شرکت ۱", "ساختار اولیه پروژه"]);
-      await pool.query(
-        "INSERT INTO address_spaces(id,company_id,name,cidr,color) VALUES($1,$2,$3,$4,$5),($6,$2,$7,$8,$9)",
-        [crypto.randomUUID(), companyId, "شبکه اصلی", "192.168.0.0/16", "#3157d5", crypto.randomUUID(), "شبکه 10.200", "10.200.0.0/16", "#2fa36f"],
-      );
-    }
-
     const tools = [
       ["VNC", "VNC", 5800, "#d94b5b"],
       ["MIK", "Winbox", 9191, "#3478d4"],

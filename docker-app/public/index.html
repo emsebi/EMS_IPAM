@@ -50,25 +50,27 @@
 
   <dialog id="companyDialog">
     <form id="companyForm">
-      <div class="modal-head"><div><h3>افزودن شرکت</h3><p>گروه اصلی برای رنج‌ها و کاربران</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3 id="companyDialogTitle">افزودن شرکت</h3><p>گروه اصلی برای رنج‌ها و کاربران</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
+        <input id="companyId" type="hidden">
         <label class="field">نام شرکت<input id="companyName" required placeholder="مثلاً شرکت ۱"></label>
         <label class="field full">توضیحات<textarea id="companyDescription"></textarea></label>
       </div>
-      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+      <div class="modal-foot split"><button id="deleteCompanyButton" class="btn danger hidden" type="button">حذف شرکت</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
     </form>
   </dialog>
 
   <dialog id="spaceDialog">
     <form id="spaceForm">
-      <div class="modal-head"><div><h3>افزودن رنج اصلی</h3><p>رنج‌های اصلی از /16 تا /24 پشتیبانی می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3 id="spaceDialogTitle">افزودن رنج اصلی</h3><p>رنج‌های اصلی از /16 تا /24 پشتیبانی می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
+        <input id="spaceId" type="hidden">
         <label class="field">نام رنج<input id="spaceName" required placeholder="مثلاً شبکه دفتر مرکزی"></label>
         <label class="field">CIDR<input id="spaceCidr" class="ltr mono" required placeholder="172.16.0.0/16"></label>
         <label class="field">رنگ<input id="spaceColor" type="color" value="#3157d5"></label>
         <label class="field full">توضیحات<textarea id="spaceDescription"></textarea></label>
       </div>
-      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+      <div class="modal-foot split"><button id="deleteSpaceButton" class="btn danger hidden" type="button">حذف رنج اصلی</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
     </form>
   </dialog>
 
@@ -104,6 +106,7 @@
           <label class="field">MAC Address<input id="hostMac" class="ltr mono"></label>
           <label class="field">VLAN<input id="hostVlan" class="ltr"></label>
           <label class="field">نام کاربری<input id="hostUsername"></label>
+          <label class="field">رمز تجهیز<input id="hostPassword" type="password" autocomplete="new-password" placeholder="برای حفظ رمز فعلی خالی بماند"><span class="inline-actions"><button id="revealHostPassword" class="btn sm hidden" type="button">نمایش رمز فعلی</button><span id="clearHostPasswordWrap" class="check-field hidden"><input id="clearHostPassword" type="checkbox"> حذف رمز ذخیره‌شده</span></span></label>
           <label class="field">مسئول / مالک<input id="hostOwner"></label>
           <label class="field">موقعیت<input id="hostLocation"></label>
           <label class="field">مرجع رمز در Password Manager<input id="hostSecretRef" placeholder="مثلاً Bitwarden/Network/Router-01"></label>

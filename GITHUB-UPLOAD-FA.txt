@@ -10,6 +10,9 @@ Add license: No license فعلاً
 پس از ساخت Repository، محتویات پوشه EMS_IPAM را مستقیماً در ریشه Repository
 قرار دهید؛ خود پوشه EMS_IPAM را به‌عنوان یک زیرپوشه اضافه نکنید.
 
+پوشه‌های docker-app، windows-client و docs را همراه با همه فایل‌های داخلشان
+آپلود کنید. تصویر README در مسیر docs/ems-ipam-preview.png قرار دارد.
+
 شاخه پیش‌فرض باید main باشد.
 
 دستور نصب پس از کامل‌شدن Upload:

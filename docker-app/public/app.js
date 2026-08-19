@@ -9,6 +9,7 @@ const state = {
   currentSpaceId: null,
   view: "companies",
   sheetCidr: null,
+  displayMode: "grid",
   paint: false,
   paintPrefix: 24,
   selectedCidr: null,
@@ -90,20 +91,8 @@ function contains(container, candidate) {
   return Boolean(a && b && b.start !== null && b.start >= a.start && b.end <= a.end);
 }
 
-function overlaps(a, b) {
-  return a && b && a.start <= b.end && b.start <= a.end;
-}
-
 function networkAt(address, prefix) {
   return parseCidr(`${intToIpv4(address)}/${prefix}`);
-}
-
-function currentSpace() {
-  return state.bootstrap?.spaces.find((item) => item.id === state.currentSpaceId) || state.data?.space || null;
-}
-
-function currentCompany() {
-  return state.bootstrap?.companies.find((item) => item.id === state.currentCompanyId) || null;
 }
 
 function canWrite() {
@@ -234,37 +223,19 @@ function renderCompanies() {
     const spaces = state.bootstrap.spaces.filter((item) => item.companyId === company.id);
     return `<article class="company-card">
       <div class="company-card-head"><div><h3>${escapeHtml(company.name)}</h3><p>${escapeHtml(company.description || `${spaces.length} رنج اصلی`)}</p></div>
-      ${canWrite() ? `<button class="btn sm add-space" data-company="${escapeHtml(company.id)}">افزودن رنج</button>` : ""}</div>
-      ${spaces.map((space) => `<button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small></button>`).join("") || `<div class="empty-state">هنوز رنج اصلی تعریف نشده است.</div>`}
+      <div class="entity-actions">${isAdmin() ? `<button class="btn sm edit-company" data-company="${escapeHtml(company.id)}">ویرایش</button><button class="btn sm danger delete-company" data-company="${escapeHtml(company.id)}">حذف</button>` : ""}${canWrite() ? `<button class="btn sm add-space" data-company="${escapeHtml(company.id)}">افزودن رنج</button>` : ""}</div></div>
+      ${spaces.map((space) => `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small></button>${canWrite() ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`).join("") || `<div class="empty-state">هنوز رنج اصلی تعریف نشده است.</div>`}
     </article>`;
   }).join("");
   page.innerHTML = `<div class="headline"><div><div class="crumb">نمای سازمانی</div><h2>شرکت‌ها و رنج‌های اصلی</h2><div class="subtitle">هر شرکت می‌تواند چند فضای آدرس مستقل و حتی رنج‌های هم‌نام داشته باشد.</div></div><div class="head-actions">${isAdmin() ? `<button id="addCompanyButton" class="btn">افزودن شرکت</button>` : ""}${canWrite() && state.currentCompanyId ? `<button id="addSpaceButton" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></div><section class="company-grid">${cards || `<div class="empty-state panel">شرکتی برای نمایش وجود ندارد.</div>`}</section>`;
-  $("addCompanyButton")?.addEventListener("click", openCompanyDialog);
+  $("addCompanyButton")?.addEventListener("click", () => openCompanyDialog());
   $("addSpaceButton")?.addEventListener("click", () => openSpaceDialog(state.currentCompanyId));
   page.querySelectorAll(".add-space").forEach((node) => node.addEventListener("click", () => openSpaceDialog(node.dataset.company)));
   page.querySelectorAll(".open-space").forEach((node) => node.addEventListener("click", () => loadSpace(node.dataset.space)));
-}
-
-function rangeBand(item, row, column, span) {
-  const title = item.name || item.cidr;
-  return `<button class="range-band edit-prefix" data-id="${escapeHtml(item.id)}" style="grid-row:${row};grid-column:${column}/span ${span};background:${escapeHtml(item.color)}" title="${escapeHtml(`${title} — ${item.cidr}`)}">${escapeHtml(title)} <small>${escapeHtml(item.cidr)}</small></button>`;
-}
-
-function overviewBands(rowStartIndex, rowTileCount, root, tileSize) {
-  const rowStart = root.start + rowStartIndex * tileSize;
-  const rowEnd = rowStart + rowTileCount * tileSize - 1;
-  const relevant = prefixesIn(rowStart, rowEnd).map((item) => ({ item, info: prefixInfo(item) })).filter(({ info }) => info.prefix <= 24);
-  const defaults = [20, 21, 22, 23, 24].filter((prefix) => prefix > root.prefix);
-  const levels = [...new Set([...defaults, ...relevant.map(({ info }) => info.prefix)])].sort((a, b) => a - b);
-  let html = `<div class="band-stack">${levels.map((_, index) => `<i class="band-guide" style="grid-row:${index + 1}"></i>`).join("")}`;
-  for (const { item, info } of relevant) {
-    const segmentStart = Math.max(rowStart, info.start);
-    const segmentEnd = Math.min(rowEnd, info.end);
-    const column = Math.floor((segmentStart - rowStart) / tileSize) + 2;
-    const span = Math.floor((segmentEnd - segmentStart + 1) / tileSize);
-    html += rangeBand(item, levels.indexOf(info.prefix) + 1, column, Math.max(1, span));
-  }
-  return html + `</div>`;
+  page.querySelectorAll(".edit-company").forEach((node) => node.addEventListener("click", () => openCompanyDialog(node.dataset.company)));
+  page.querySelectorAll(".delete-company").forEach((node) => node.addEventListener("click", () => deleteCompany(node.dataset.company)));
+  page.querySelectorAll(".edit-space").forEach((node) => node.addEventListener("click", () => openSpaceDialog(null, node.dataset.space)));
+  page.querySelectorAll(".delete-space").forEach((node) => node.addEventListener("click", () => deleteSpace(node.dataset.space)));
 }
 
 function tileVisual(start) {
@@ -304,6 +275,18 @@ function attachPrefixEditHandlers() {
   }));
 }
 
+function attachPrefixDeleteHandlers() {
+  page.querySelectorAll(".quick-delete-prefix").forEach((node) => node.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    if (!confirm("این رنج حذف شود؟ اطلاعات جداگانهٔ IPها حذف نمی‌شود.")) return;
+    try {
+      await request(`/api/prefixes/${encodeURIComponent(node.dataset.id)}`, { method: "DELETE" });
+      state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
+      renderCurrent(); toast("رنج حذف شد.");
+    } catch (error) { toast(error.message); }
+  }));
+}
+
 function prefixButtons(minimum, maximum) {
   const items = [];
   for (let prefix = maximum; prefix >= minimum; prefix -= 1) items.push(`<button class="paint-prefix ${state.paintPrefix === prefix ? "active" : ""}" data-prefix="${prefix}">/${prefix}</button>`);
@@ -323,7 +306,6 @@ function renderOverview() {
   for (let row = 0; row < rows; row += 1) {
     const rowStartIndex = row * tilesPerRow;
     const rowCount = Math.min(tilesPerRow, tileCount - rowStartIndex);
-    grid += overviewBands(rowStartIndex, rowCount, root, 256);
     grid += `<div class="visual-row"><div class="axis row-axis">${formatNumber(rowStartIndex)}–${formatNumber(rowStartIndex + rowCount - 1)}</div>`;
     for (let col = 0; col < 16; col += 1) {
       const index = rowStartIndex + col;
@@ -335,50 +317,36 @@ function renderOverview() {
         const value = ipv4ToInt(ip); return value >= start && value <= start + 255;
       }).length;
       const visual = tileVisual(start);
-      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${visual.color};--stripe:${visual.stripe}" title="${cidr}"><i class="fill"></i><span class="octet">${third}</span><div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div>${visual.has ? `<i class="stripe"></i>` : ""}</button>`;
+      const exact = state.data.prefixes.find((item) => item.cidr === cidr);
+      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${visual.color};--stripe:${visual.stripe}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div>${visual.has ? `<i class="stripe"></i>` : ""}</button>`;
     }
     grid += `</div>`;
   }
   grid += `</div>`;
   const rangeRows = [...state.data.prefixes].sort((a, b) => prefixInfo(a).start - prefixInfo(b).start || prefixInfo(a).prefix - prefixInfo(b).prefix).map((item) => {
     const info = prefixInfo(item);
-    return `<div class="range-row edit-prefix" data-id="${escapeHtml(item.id)}"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(info.size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><button class="btn sm open-prefix-sheet" data-cidr="${escapeHtml(item.cidr)}">نمایش</button></div>`;
+    return `<div class="range-row"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(info.size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><div class="row-actions">${info.prefix >= 21 && info.prefix <= 24 ? `<button class="btn sm open-prefix-sheet" data-cidr="${escapeHtml(item.cidr)}">نمایش</button>` : ""}${canWrite() ? `<button class="btn sm edit-prefix" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger quick-delete-prefix" data-id="${escapeHtml(item.id)}">حذف</button>` : ""}</div></div>`;
   }).join("");
-  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر خانه یک شبکهٔ /24 است.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn primary" id="paintToggle">${state.paint ? "پایان رنگ‌کردن" : "رنگ‌کردن رنج"}</button>` : ""}</div></div>
+  const selectionMinimum = Math.max(root.prefix, 23);
+  if (state.paintPrefix < selectionMinimum || state.paintPrefix > 24) state.paintPrefix = 24;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر خانه یک شبکهٔ /24 است.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
-    <section class="panel"><div class="toolbar"><div class="toolgroup">${state.paint ? `<span class="mode-note">اندازه را انتخاب کنید، سپس روی یک خانه بزنید.</span>` : `<span class="mode-note">روی هر خانه کلیک کنید تا صفحهٔ /24 باز شود.</span>`}</div>${state.paint ? prefixButtons(root.prefix, 24) : `<div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div>`}</div><div class="map-wrap">${grid}</div></section>
+    <section class="panel"><div class="toolbar"><div class="toolgroup"><b>اندازهٔ انتخاب</b>${prefixButtons(selectionMinimum, 24)}<span class="mode-note">برای /23 روی یکی از دو خانهٔ /24 کلیک کنید؛ هر دو جدول باز می‌شوند.</span></div><div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div></div><div class="map-wrap">${grid}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
   $("companyBack").addEventListener("click", renderCompanies);
-  $("paintToggle")?.addEventListener("click", () => { state.paint = !state.paint; state.paintPrefix = 24; renderOverview(); });
+  $("editCurrentSpace")?.addEventListener("click", () => openSpaceDialog(null, space.id));
   page.querySelectorAll(".paint-prefix").forEach((node) => node.addEventListener("click", () => { state.paintPrefix = Number(node.dataset.prefix); renderOverview(); }));
   page.querySelectorAll(".open-tile").forEach((node) => node.addEventListener("click", () => {
     const tile = parseCidr(node.dataset.cidr);
-    if (state.paint) {
-      const target = networkAt(tile.start, state.paintPrefix);
-      openPrefixDialog(target.cidr);
-    } else {
-      state.view = "sheet"; state.sheetCidr = tile.cidr; state.paint = false; renderSheet(); window.scrollTo(0, 0);
-    }
+    const target = networkAt(tile.start, state.paintPrefix);
+    state.view = "sheet"; state.sheetCidr = target.cidr; state.paint = false; renderSheet(); window.scrollTo(0, 0);
   }));
   page.querySelectorAll(".open-prefix-sheet").forEach((node) => node.addEventListener("click", (event) => {
     event.stopPropagation();
-    const info = parseCidr(node.dataset.cidr); state.view = "sheet"; state.sheetCidr = `${intToIpv4(info.start & 0xffffff00)}/24`; state.paint = false; renderSheet();
+    state.view = "sheet"; state.sheetCidr = node.dataset.cidr; state.paint = false; renderSheet();
   }));
   attachPrefixEditHandlers();
-}
-
-function sheetBands(sheet, rowStartLast, relevant) {
-  const rowStart = sheet.start + rowStartLast;
-  const rowEnd = rowStart + 15;
-  const items = relevant.map((item) => ({ item, info: prefixInfo(item) })).filter(({ info }) => info.prefix >= 25 && overlaps(info, { start: rowStart, end: rowEnd }));
-  const levels = [...new Set([25, 26, 27, 28, 29, 30, ...items.map(({ info }) => info.prefix)])].sort((a, b) => a - b);
-  let html = `<div class="band-stack">${levels.map((_, index) => `<i class="band-guide" style="grid-row:${index + 1}"></i>`).join("")}`;
-  for (const { item, info } of items) {
-    const start = Math.max(info.start, rowStart);
-    const end = Math.min(info.end, rowEnd);
-    html += rangeBand(item, levels.indexOf(info.prefix) + 1, start - rowStart + 2, end - start + 1);
-  }
-  return html + `</div>`;
+  attachPrefixDeleteHandlers();
 }
 
 function pingClass(ip, system, pings) {
@@ -389,17 +357,11 @@ function pingClass(ip, system, pings) {
   return item.online ? "online" : "offline";
 }
 
-function renderSheet() {
-  const sheet = parseCidr(state.sheetCidr);
-  const space = state.data.space;
+function renderIpGrid(sheet) {
   const hosts = hostMap();
   const pings = pingMap();
-  const relevant = prefixesIn(sheet.start, sheet.end);
-  const hostCount = [...hosts.keys()].filter((ip) => contains(sheet, ip)).length;
-  const onlineCount = [...pings.values()].filter((item) => contains(sheet, item.ip) && item.online).length;
   let grid = `<div class="visual-map ip-map"><div class="visual-row axis-row"><div></div>${Array.from({ length: 16 }, (_, index) => `<div class="axis">${index}</div>`).join("")}</div>`;
   for (let row = 0; row < 16; row += 1) {
-    grid += sheetBands(sheet, row * 16, relevant);
     grid += `<div class="visual-row"><div class="axis row-axis">${row * 16}–${row * 16 + 15}</div>`;
     for (let col = 0; col < 16; col += 1) {
       const last = row * 16 + col;
@@ -408,42 +370,80 @@ function renderSheet() {
       const host = hosts.get(ip);
       const prefix = mostSpecific(address);
       const system = last === 0 || last === 255;
-      const selected = state.selectedCidr && contains(parseCidr(state.selectedCidr), address);
-      grid += `<div class="ip-cell ${host ? "recorded" : ""} ${system ? "system" : ""} ${selected ? "selected" : ""}" data-ip="${ip}" style="--cell-color:${prefix?.color || "#eef1f6"};--host-color:${HOST_COLORS[host?.status] || "#3157d5"}" title="${escapeHtml(host?.name || ip)}"><i class="fill"></i><button class="ping-dot ${pingClass(ip, system, pings)}" data-ip="${ip}" title="ابزارهای اتصال"></button><span class="last">${last}</span>${host ? `<div class="host-name">${escapeHtml(host.name || host.type || STATUS_LABELS[host.status])}</div>` : system ? `<div class="host-name">${last === 0 ? "Network" : "Broadcast"}</div>` : ""}</div>`;
+      grid += `<div class="ip-cell ${host ? "recorded" : ""} ${system ? "system" : ""}" data-ip="${ip}" style="--cell-color:${prefix?.color || "#eef1f6"};--host-color:${HOST_COLORS[host?.status] || "#3157d5"}" title="${escapeHtml(host?.name || ip)}"><i class="fill"></i><button class="ping-dot ${pingClass(ip, system, pings)}" data-ip="${ip}" title="ابزارهای اتصال"></button><span class="last">${last}</span>${host ? `<div class="host-name">${escapeHtml(host.name || host.type || STATUS_LABELS[host.status])}</div>` : system ? `<div class="host-name">${last === 0 ? "Network" : "Broadcast"}</div>` : ""}</div>`;
     }
     grid += `</div>`;
   }
-  grid += `</div>`;
-  const root = parseCidr(space.cidr);
-  const sheetIndex = Math.floor((sheet.start - (root.start & 0xffffff00)) / 256);
-  const sheetCount = 2 ** (24 - root.prefix);
-  const options = Array.from({ length: sheetCount }, (_, index) => {
-    const cidr = `${intToIpv4(root.start + index * 256)}/24`;
-    return `<option value="${cidr}" ${cidr === sheet.cidr ? "selected" : ""}>${cidr}</option>`;
+  return grid + `</div>`;
+}
+
+function renderSubnetMap(sheet) {
+  const exactPrefixes = new Map(state.data.prefixes.map((item) => [item.cidr, item]));
+  const hosts = hostMap();
+  let html = `<div class="subnet-map" dir="ltr">`;
+  const ipCells = Array.from({ length: 256 }, (_, last) => {
+    const ip = intToIpv4(sheet.start + last);
+    const host = hosts.get(ip);
+    return `<button class="map-cell map-ip-cell ${host ? "recorded" : ""}" data-ip="${ip}" style="grid-column:${last + 2}" title="${escapeHtml(host?.name || ip)}"><b>${last}</b>${host?.name ? `<small>${escapeHtml(host.name)}</small>` : ""}</button>`;
   }).join("");
-  const rangeRows = relevant.sort((a, b) => prefixInfo(a).start - prefixInfo(b).start || prefixInfo(a).prefix - prefixInfo(b).prefix).map((item) => `<div class="range-row edit-prefix" data-id="${escapeHtml(item.id)}"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(prefixInfo(item).size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><button class="btn sm select-range" data-cidr="${escapeHtml(item.cidr)}">نمایش</button></div>`).join("");
-  const sheetColor = relevant.length ? relevant[0].color : space.color;
-  page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><h2 class="ltr mono">${escapeHtml(sheet.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)}</p></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / 254 * 100)}" data-value="${formatNumber(Math.round(hostCount / 254 * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${sheetIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${sheetIndex >= sheetCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
-    <section class="panel"><div class="toolbar"><div class="toolgroup">${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="sheetPaintToggle">${state.paint ? "پایان رنگ‌کردن" : "رنگ‌کردن زیرشبکه"}</button><button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}<span class="mode-note">${state.paint ? "اندازه را انتخاب کنید، سپس روی IP شروع بزنید." : "سبز یعنی پاسخ پینگ؛ قرمز یعنی بدون پاسخ، نه آزادبودن IP."}</span></div>${state.paint ? prefixButtons(25, 30) : `<div class="legend"><span><i class="dot" style="background:#20a86b"></i>پاسخ دارد</span><span><i class="dot" style="background:#e04455"></i>بدون پاسخ</span><span><i class="dot" style="background:#8c96a8"></i>بررسی‌نشده</span></div>`}</div><div class="ip-wrap">${grid}</div></section>
-    <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط با این صفحه</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این صفحه رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه صفحه</h3></div><div class="summary-list"><div class="summary-item"><span>آدرس قابل استفاده</span><b>۲۵۴</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
+  html += `<div class="subnet-map-row"><strong>/32</strong>${ipCells}</div>`;
+  for (const prefix of [30, 29, 28, 27, 26, 25, 24]) {
+    const size = 2 ** (32 - prefix);
+    let cells = "";
+    for (let offset = 0; offset < 256; offset += size) {
+      const cidr = `${intToIpv4(sheet.start + offset)}/${prefix}`;
+      const item = exactPrefixes.get(cidr);
+      cells += `<button class="map-cell map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" style="grid-column:${offset + 2}/span ${size};--range-color:${item?.color || "#f2f4f8"}" title="${escapeHtml(item?.name || cidr)}"><b>${offset}${size > 1 ? `–${offset + size - 1}` : ""}</b>${item?.name ? `<small>${escapeHtml(item.name)}</small>` : ""}</button>`;
+    }
+    html += `<div class="subnet-map-row"><strong>/${prefix}</strong>${cells}</div>`;
+  }
+  return html + `</div>`;
+}
+
+function renderSheet() {
+  const selected = parseCidr(state.sheetCidr);
+  const space = state.data.space;
+  const root = parseCidr(space.cidr);
+  if (!selected || selected.prefix > 24 || !contains(root, selected)) { state.view = "overview"; renderOverview(); return; }
+  const blockCount = selected.size / 256;
+  const hosts = hostMap();
+  const pings = pingMap();
+  const relevant = prefixesIn(selected.start, selected.end);
+  const hostCount = [...hosts.keys()].filter((ip) => contains(selected, ip)).length;
+  const onlineCount = [...pings.values()].filter((item) => contains(selected, item.ip) && item.online).length;
+  const blocks = Array.from({ length: blockCount }, (_, index) => {
+    const sheet = parseCidr(`${intToIpv4(selected.start + index * 256)}/24`);
+    const content = state.displayMode === "map" ? renderSubnetMap(sheet) : renderIpGrid(sheet);
+    return `<section class="panel detail-block"><div class="section-title"><div><h3 class="ltr mono">${escapeHtml(sheet.cidr)}</h3><span class="subtitle">IP 0–255</span></div>${canWrite() ? `<button class="btn sm edit-exact-prefix" data-cidr="${escapeHtml(sheet.cidr)}">ثبت / ویرایش مشخصات /24</button>` : ""}</div><div class="ip-wrap">${content}</div></section>`;
+  }).join("");
+  const selectionIndex = Math.floor((selected.start - root.start) / selected.size);
+  const selectionCount = Math.floor(root.size / selected.size);
+  const options = Array.from({ length: selectionCount }, (_, index) => {
+    const cidr = `${intToIpv4(root.start + index * selected.size)}/${selected.prefix}`;
+    return `<option value="${cidr}" ${cidr === selected.cidr ? "selected" : ""}>${cidr}</option>`;
+  }).join("");
+  const rangeRows = relevant.sort((a, b) => prefixInfo(a).start - prefixInfo(b).start || prefixInfo(a).prefix - prefixInfo(b).prefix).map((item) => `<div class="range-row"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(prefixInfo(item).size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><div class="row-actions">${canWrite() ? `<button class="btn sm edit-prefix" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger quick-delete-prefix" data-id="${escapeHtml(item.id)}">حذف</button>` : ""}</div></div>`).join("");
+  const sheetColor = relevant[0]?.color || space.color;
+  const usable = blockCount * 254;
+  page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
+    <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "grid" ? "active" : ""}" data-mode="grid">IP Grid</button><button class="display-mode ${state.displayMode === "map" ? "active" : ""}" data-mode="map">Subnet Map</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در Subnet Map هر خانه مستقیماً قابل انتخاب است؛ /30 شامل ۴ IP است.</span></div></section>
+    <div class="detail-stack">${blocks}</div>
+    <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
   $("overviewBack").addEventListener("click", () => { state.view = "overview"; state.paint = false; renderOverview(); });
-  $("prevSheet").addEventListener("click", () => { if (sheetIndex > 0) { state.sheetCidr = `${intToIpv4(root.start + (sheetIndex - 1) * 256)}/24`; renderSheet(); } });
-  $("nextSheet").addEventListener("click", () => { if (sheetIndex < sheetCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (sheetIndex + 1) * 256)}/24`; renderSheet(); } });
+  $("prevSheet").addEventListener("click", () => { if (selectionIndex > 0) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex - 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
+  $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("sheetSelect").addEventListener("change", (event) => { state.sheetCidr = event.target.value; renderSheet(); });
-  $("sheetPaintToggle")?.addEventListener("click", () => { state.paint = !state.paint; state.paintPrefix = 30; state.selectedCidr = null; renderSheet(); });
   $("scanButton")?.addEventListener("click", runPing);
-  page.querySelectorAll(".paint-prefix").forEach((node) => node.addEventListener("click", () => { state.paintPrefix = Number(node.dataset.prefix); renderSheet(); }));
+  page.querySelectorAll(".display-mode").forEach((node) => node.addEventListener("click", () => { state.displayMode = node.dataset.mode; renderSheet(); }));
   page.querySelectorAll(".ip-cell").forEach((node) => node.addEventListener("click", (event) => {
     if (event.target.closest(".ping-dot")) return;
-    const address = ipv4ToInt(node.dataset.ip);
-    if (state.paint && canWrite()) {
-      const target = networkAt(address, state.paintPrefix);
-      state.selectedCidr = target.cidr; renderSheet(); openPrefixDialog(target.cidr);
-    } else openHostDialog(node.dataset.ip);
+    openHostDialog(node.dataset.ip);
   }));
+  page.querySelectorAll(".map-ip-cell").forEach((node) => node.addEventListener("click", () => openHostDialog(node.dataset.ip)));
+  page.querySelectorAll(".map-prefix-cell,.edit-exact-prefix").forEach((node) => node.addEventListener("click", () => openPrefixDialog(node.dataset.cidr)));
   page.querySelectorAll(".ping-dot:not(.system)").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
-  page.querySelectorAll(".select-range").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); state.selectedCidr = node.dataset.cidr; renderSheet(); setTimeout(() => { state.selectedCidr = null; }, 1500); }));
   attachPrefixEditHandlers();
+  attachPrefixDeleteHandlers();
 }
 
 async function runPing() {
@@ -456,16 +456,53 @@ async function runPing() {
   finally { state.scanning = false; renderSheet(); }
 }
 
-function openCompanyDialog() {
-  $("companyForm").reset(); $("companyDialog").showModal();
+function openCompanyDialog(id = null) {
+  const item = id ? state.bootstrap.companies.find((entry) => entry.id === id) : null;
+  $("companyForm").reset();
+  $("companyId").value = item?.id || "";
+  $("companyName").value = item?.name || "";
+  $("companyDescription").value = item?.description || "";
+  $("companyDialogTitle").textContent = item ? "ویرایش شرکت" : "افزودن شرکت";
+  $("deleteCompanyButton").classList.toggle("hidden", !item);
+  $("companyDialog").showModal();
 }
 
-function openSpaceDialog(companyId) {
-  $("spaceForm").reset(); $("spaceColor").value = COLORS[(state.bootstrap.spaces.length + 1) % COLORS.length]; $("spaceForm").dataset.company = companyId; $("spaceDialog").showModal();
+function openSpaceDialog(companyId, id = null) {
+  const item = id ? state.bootstrap.spaces.find((entry) => entry.id === id) : null;
+  $("spaceForm").reset();
+  $("spaceId").value = item?.id || "";
+  $("spaceName").value = item?.name || "";
+  $("spaceCidr").value = item?.cidr || "";
+  $("spaceColor").value = item?.color || COLORS[(state.bootstrap.spaces.length + 1) % COLORS.length];
+  $("spaceDescription").value = item?.description || "";
+  $("spaceForm").dataset.company = item?.companyId || companyId;
+  $("spaceDialogTitle").textContent = item ? "ویرایش رنج اصلی" : "افزودن رنج اصلی";
+  $("deleteSpaceButton").classList.toggle("hidden", !item);
+  $("spaceDialog").showModal();
+}
+
+async function deleteCompany(id) {
+  const item = state.bootstrap.companies.find((entry) => entry.id === id);
+  if (!item || !confirm(`شرکت «${item.name}» و همه رنج‌ها و اطلاعات وابسته حذف شود؟`)) return;
+  try {
+    await request(`/api/companies/${encodeURIComponent(id)}`, { method: "DELETE" });
+    $("companyDialog").close(); state.bootstrap = await request("/api/bootstrap");
+    state.currentCompanyId = state.bootstrap.companies[0]?.id || null; renderCompanies(); toast("شرکت حذف شد.");
+  } catch (error) { toast(error.message); }
+}
+
+async function deleteSpace(id) {
+  const item = state.bootstrap.spaces.find((entry) => entry.id === id);
+  if (!item || !confirm(`رنج اصلی ${item.cidr} و همه اطلاعات وابسته حذف شود؟`)) return;
+  try {
+    await request(`/api/spaces/${encodeURIComponent(id)}`, { method: "DELETE" });
+    $("spaceDialog").close(); state.bootstrap = await request("/api/bootstrap"); state.currentSpaceId = null;
+    renderCompanies(); toast("رنج اصلی حذف شد.");
+  } catch (error) { toast(error.message); }
 }
 
 function openPrefixDialog(cidr, id = null) {
-  const item = id ? state.data.prefixes.find((entry) => entry.id === id) : null;
+  const item = id ? state.data.prefixes.find((entry) => entry.id === id) : state.data.prefixes.find((entry) => entry.cidr === cidr) || null;
   const value = item || { id: "", cidr, name: "", status: "active", role: "", vlan: "", gateway: "", color: COLORS[state.data.prefixes.length % COLORS.length], description: "" };
   if (!value.cidr) return;
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
@@ -494,6 +531,11 @@ function openHostDialog(ip) {
   const value = item || { id: "", ip, name: "", status: "active", type: "", os: "", mac: "", vlan: "", username: "", owner: "", location: "", secretRef: "", notes: "", ports: {} };
   $("hostIpTitle").textContent = ip;
   for (const [key, field] of [["id", "hostId"], ["ip", "hostIp"], ["name", "hostName"], ["status", "hostStatus"], ["type", "hostType"], ["os", "hostOs"], ["mac", "hostMac"], ["vlan", "hostVlan"], ["username", "hostUsername"], ["owner", "hostOwner"], ["location", "hostLocation"], ["secretRef", "hostSecretRef"], ["notes", "hostNotes"]]) $(field).value = value[key] || "";
+  $("hostPassword").value = "";
+  $("hostPassword").type = "password";
+  $("clearHostPassword").checked = false;
+  $("revealHostPassword").classList.toggle("hidden", !item?.hasPassword || !canWrite());
+  $("clearHostPasswordWrap").classList.toggle("hidden", !item?.hasPassword || !canWrite());
   renderHostPorts(value);
   $("deleteHostButton").classList.toggle("hidden", !item || !canWrite());
   setFormWritable($("hostForm"), canWrite());
@@ -557,8 +599,14 @@ function renderCompanyAccess(selected = []) {
 
 async function refreshUsers() {
   const result = await request("/api/users");
-  $("usersList").innerHTML = result.users.map((user) => `<div class="user-row"><div><b>${escapeHtml(user.displayName || user.username)}</b><small>${escapeHtml(user.username)}</small></div><span class="status-pill">${user.role === "admin" ? "مدیر" : user.role === "editor" ? "ویرایشگر" : "مشاهده‌گر"}</span><button class="btn sm edit-user" data-id="${escapeHtml(user.id)}">ویرایش</button></div>`).join("");
+  $("usersList").innerHTML = result.users.map((user) => `<div class="user-row"><div><b>${escapeHtml(user.displayName || user.username)}</b><small>${escapeHtml(user.username)}</small></div><span class="status-pill">${user.role === "admin" ? "مدیر" : user.role === "editor" ? "ویرایشگر" : "مشاهده‌گر"}</span><div class="row-actions"><button class="btn sm edit-user" data-id="${escapeHtml(user.id)}">ویرایش</button><button class="btn sm danger delete-user" data-id="${escapeHtml(user.id)}">حذف</button></div></div>`).join("");
   $("usersList").querySelectorAll(".edit-user").forEach((node) => node.addEventListener("click", () => editUser(result.users.find((item) => item.id === node.dataset.id))));
+  $("usersList").querySelectorAll(".delete-user").forEach((node) => node.addEventListener("click", async () => {
+    const account = result.users.find((item) => item.id === node.dataset.id);
+    if (!account || !confirm(`کاربر «${account.username}» حذف شود؟`)) return;
+    try { await request(`/api/users/${encodeURIComponent(account.id)}`, { method: "DELETE" }); resetUserForm(); await refreshUsers(); toast("کاربر حذف شد."); }
+    catch (error) { toast(error.message); }
+  }));
 }
 
 function resetUserForm() {
@@ -600,13 +648,19 @@ $("exportButton").addEventListener("click", () => state.currentSpaceId ? window.
 
 $("companyForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  try { const result = await request("/api/companies", { method: "POST", body: { name: $("companyName").value, description: $("companyDescription").value } }); $("companyDialog").close(); state.bootstrap = await request("/api/bootstrap"); state.currentCompanyId = result.id; updateSelectors(); renderCompanies(); toast("شرکت اضافه شد."); } catch (error) { toast(error.message); }
+  const id = $("companyId").value;
+  try { const result = await request(id ? `/api/companies/${encodeURIComponent(id)}` : "/api/companies", { method: id ? "PUT" : "POST", body: { name: $("companyName").value, description: $("companyDescription").value } }); $("companyDialog").close(); state.bootstrap = await request("/api/bootstrap"); state.currentCompanyId = id || result.id; updateSelectors(); renderCompanies(); toast(id ? "شرکت ویرایش شد." : "شرکت اضافه شد."); } catch (error) { toast(error.message); }
 });
+
+$("deleteCompanyButton").addEventListener("click", () => deleteCompany($("companyId").value));
 
 $("spaceForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  try { const result = await request("/api/spaces", { method: "POST", body: { companyId: event.currentTarget.dataset.company, name: $("spaceName").value, cidr: $("spaceCidr").value, color: $("spaceColor").value, description: $("spaceDescription").value } }); $("spaceDialog").close(); state.bootstrap = await request("/api/bootstrap"); await loadSpace(result.id); toast("رنج اصلی اضافه شد."); } catch (error) { toast(error.message); }
+  const id = $("spaceId").value;
+  try { const result = await request(id ? `/api/spaces/${encodeURIComponent(id)}` : "/api/spaces", { method: id ? "PUT" : "POST", body: { companyId: event.currentTarget.dataset.company, name: $("spaceName").value, cidr: $("spaceCidr").value, color: $("spaceColor").value, description: $("spaceDescription").value } }); $("spaceDialog").close(); state.bootstrap = await request("/api/bootstrap"); await loadSpace(id || result.id); toast(id ? "رنج اصلی ویرایش شد." : "رنج اصلی اضافه شد."); } catch (error) { toast(error.message); }
 });
+
+$("deleteSpaceButton").addEventListener("click", () => deleteSpace($("spaceId").value));
 
 $("prefixForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -622,7 +676,15 @@ $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const ports = {};
   $("hostPorts").querySelectorAll(".host-port").forEach((node) => { if (node.value !== "") ports[node.dataset.tool] = Number(node.value); });
-  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, owner: $("hostOwner").value, location: $("hostLocation").value, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, ports } }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, password: $("hostPassword").value, clearPassword: $("clearHostPassword").checked, owner: $("hostOwner").value, location: $("hostLocation").value, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, ports } }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
+});
+
+$("revealHostPassword").addEventListener("click", async () => {
+  try {
+    const result = await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}/secret`);
+    $("hostPassword").value = result.password || ""; $("hostPassword").type = "text";
+    setTimeout(() => { $("hostPassword").type = "password"; }, 10000);
+  } catch (error) { toast(error.message); }
 });
 
 $("deleteHostButton").addEventListener("click", async () => {

@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS hosts (
   owner text NOT NULL DEFAULT '',
   location text NOT NULL DEFAULT '',
   secret_ref text NOT NULL DEFAULT '',
+  secret_ciphertext text NOT NULL DEFAULT '',
   notes text NOT NULL DEFAULT '',
   ports jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_by text REFERENCES users(id) ON DELETE SET NULL,
@@ -116,3 +117,5 @@ CREATE INDEX IF NOT EXISTS hosts_space_idx ON hosts(space_id);
 CREATE INDEX IF NOT EXISTS hosts_ip_idx ON hosts(ip);
 CREATE INDEX IF NOT EXISTS audit_space_created_idx ON audit_log(space_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
+
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS secret_ciphertext text NOT NULL DEFAULT '';

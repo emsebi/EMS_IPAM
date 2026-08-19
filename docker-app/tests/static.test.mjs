@@ -10,8 +10,10 @@ test("graphical interface contains the required workflows", async () => {
   for (const id of ["companySelect", "spaceSelect", "prefixDialog", "hostDialog", "hostPorts", "usersDialog", "toolMenu"]) {
     assert.match(html, new RegExp(`id=["']${id}["']`));
   }
-  for (const behavior of ["overviewBands", "sheetBands", "runPing", "openToolMenu", "connectEvents"]) {
+  for (const behavior of ["renderSubnetMap", "renderIpGrid", "runPing", "openToolMenu", "connectEvents", "deleteCompany", "deleteSpace"]) {
     assert.match(script, new RegExp(`function ${behavior}`));
   }
+  assert.match(html, /id=["']hostPassword["']/);
+  assert.match(script, /delete-user/);
   assert.match(script, /emsipam:\/\/open/);
 });

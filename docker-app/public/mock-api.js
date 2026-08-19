@@ -4,7 +4,7 @@
   const spaceId = "space-demo";
   const bootstrap = {
     ok: true,
-    version: "0.1.0",
+    version: "0.2.0",
     user: { id: "admin-demo", username: "admin", displayName: "مدیر سیستم", role: "admin", active: true },
     companies: [{ id: companyId, name: "شرکت ۱", description: "ساختار نمونه برای بررسی رابط" }],
     spaces: [
@@ -28,7 +28,7 @@
       { id: "p4", cidr: "192.168.2.16/28", name: "سرورها", status: "active", role: "Server", vlan: "50", gateway: "", color: "#3157d5", description: "" },
     ],
     hosts: [
-      { id: "h1", ip: "192.168.2.10", name: "ESXi-01", status: "active", type: "سرور", os: "VMware ESXi", mac: "00:50:56:AA:10:20", vlan: "50", username: "admin", owner: "زیرساخت", location: "دیتاسنتر", secretRef: "Vault/ESXi-01", notes: "", ports: { SSH: 2222, RDP: 3390 } },
+      { id: "h1", ip: "192.168.2.10", name: "ESXi-01", status: "active", type: "سرور", os: "VMware ESXi", mac: "00:50:56:AA:10:20", vlan: "50", username: "admin", owner: "زیرساخت", location: "دیتاسنتر", secretRef: "Vault/ESXi-01", hasPassword: true, notes: "", ports: { SSH: 2222, RDP: 3390 } },
       { id: "h2", ip: "192.168.2.20", name: "MikroTik-Core", status: "active", type: "روتر", os: "RouterOS", mac: "", vlan: "99", username: "", owner: "شبکه", location: "دفتر مرکزی", secretRef: "Vault/Router-Core", notes: "", ports: { MIK: 9191 } },
     ],
     pings: [

@@ -23,19 +23,22 @@ import {
   validateRootCidr,
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
+import { createSecretBox } from "./secrets.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATABASE_URL = process.env.DATABASE_URL || undefined;
 const ADMIN_USERNAME = process.env.EMS_ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
+const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 
 if (!DATABASE_URL && !process.env.PGHOST) throw new Error("تنظیمات اتصال PostgreSQL تعریف نشده است.");
 if (ADMIN_PASSWORD.length < 12) throw new Error("EMS_ADMIN_PASSWORD باید حداقل ۱۲ کاراکتر باشد.");
+const secretBox = createSecretBox(SECRET_KEY);
 
 const database = createDatabase(DATABASE_URL);
 await database.initialize({ adminUsername: ADMIN_USERNAME, adminPassword: ADMIN_PASSWORD });
@@ -158,6 +161,19 @@ async function audit(user, action, entityType, entityId, { companyId = null, spa
   );
 }
 
+async function protectLastAdmin(client, targetId, nextRole = null, nextActive = null) {
+  const target = (await client.query("SELECT id,role,active FROM users WHERE id=$1 FOR UPDATE", [targetId])).rows[0];
+  if (!target) throw Object.assign(new Error("کاربر پیدا نشد."), { status: 404 });
+  const removesAdmin = target.role === "admin" && target.active && (nextRole !== "admin" || nextActive === false);
+  if (removesAdmin) {
+    const admins = await client.query("SELECT id FROM users WHERE role='admin' AND active=true FOR UPDATE");
+    if (admins.rows.filter((item) => item.id !== targetId).length === 0) {
+      throw Object.assign(new Error("At least one active administrator is required."), { status: 409 });
+    }
+  }
+  return target;
+}
+
 function broadcast(event) {
   const payload = `event: change\ndata: ${JSON.stringify(event)}\n\n`;
   for (const client of eventClients) {
@@ -197,7 +213,8 @@ async function spaceData(user, spaceId) {
     ),
     pool.query(
       `SELECT id,ip,name,status,type,os,mac,vlan,username,owner,location,
-              secret_ref AS "secretRef",notes,ports,updated_at AS "updatedAt"
+              secret_ref AS "secretRef",(secret_ciphertext <> '') AS "hasPassword",
+              notes,ports,updated_at AS "updatedAt"
          FROM hosts WHERE space_id=$1 ORDER BY ip`,
       [spaceId],
     ),
@@ -310,6 +327,32 @@ async function api(req, res, url, user) {
     return json(res, 201, { ok: true, id });
   }
 
+  const companyMutation = pathname.match(/^\/api\/companies\/([^/]+)$/);
+  if (req.method === "PUT" && companyMutation) {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const name = cleanText(body.name, 120);
+    if (!name) throw new Error("نام شرکت الزامی است.");
+    const updated = await pool.query(
+      "UPDATE companies SET name=$1,description=$2,updated_at=now() WHERE id=$3 RETURNING id",
+      [name, cleanText(body.description, 1000), companyMutation[1]],
+    );
+    if (!updated.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+    await audit(user, "update", "company", companyMutation[1], { companyId: companyMutation[1], detail: { name } });
+    broadcast({ type: "company", companyId: companyMutation[1] });
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "DELETE" && companyMutation) {
+    requireAdmin(user);
+    const found = await pool.query("SELECT id,name FROM companies WHERE id=$1", [companyMutation[1]]);
+    if (!found.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+    await audit(user, "delete", "company", companyMutation[1], { detail: { name: found.rows[0].name } });
+    await pool.query("DELETE FROM companies WHERE id=$1", [companyMutation[1]]);
+    broadcast({ type: "company", companyId: companyMutation[1] });
+    return json(res, 200, { ok: true });
+  }
+
   if (req.method === "POST" && pathname === "/api/spaces") {
     requireWriter(user);
     const body = await readBody(req);
@@ -324,6 +367,38 @@ async function api(req, res, url, user) {
     await audit(user, "create", "space", id, { companyId: body.companyId, spaceId: id, detail: { name, cidr } });
     broadcast({ type: "space", companyId: body.companyId, spaceId: id });
     return json(res, 201, { ok: true, id });
+  }
+
+  const spaceMutation = pathname.match(/^\/api\/spaces\/([^/]+)$/);
+  if (req.method === "PUT" && spaceMutation) {
+    requireWriter(user);
+    const current = await getSpaceForUser(user, spaceMutation[1]);
+    const body = await readBody(req);
+    const next = validateRootCidr(body.cidr);
+    const [prefixes, hosts] = await Promise.all([
+      pool.query("SELECT cidr FROM prefixes WHERE space_id=$1", [current.id]),
+      pool.query("SELECT ip FROM hosts WHERE space_id=$1", [current.id]),
+    ]);
+    if (prefixes.rows.some((item) => !contains(next, parseCidr(item.cidr))) || hosts.rows.some((item) => !contains(next, item.ip))) {
+      throw Object.assign(new Error("رنج جدید شامل همه زیررنج‌ها و IPهای ثبت‌شده نیست."), { status: 409 });
+    }
+    const name = cleanText(body.name, 120) || next.cidr;
+    await pool.query(
+      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5",
+      [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id],
+    );
+    await audit(user, "update", "space", current.id, { companyId: current.companyId, spaceId: current.id, detail: { name, cidr: next.cidr } });
+    broadcast({ type: "space", companyId: current.companyId, spaceId: current.id });
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "DELETE" && spaceMutation) {
+    requireWriter(user);
+    const current = await getSpaceForUser(user, spaceMutation[1]);
+    await audit(user, "delete", "space", current.id, { companyId: current.companyId, detail: { name: current.name, cidr: current.cidr } });
+    await pool.query("DELETE FROM address_spaces WHERE id=$1", [current.id]);
+    broadcast({ type: "space", companyId: current.companyId, spaceId: current.id });
+    return json(res, 200, { ok: true });
   }
 
   if (req.method === "POST" && pathname === "/api/prefixes") {
@@ -371,24 +446,40 @@ async function api(req, res, url, user) {
     const space = await getSpaceForUser(user, body.spaceId);
     const ip = validateHostIp(body.ip, space.cidr);
     const id = cleanText(body.id, 80) || crypto.randomUUID();
+    const existing = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2", [space.id, ip]);
+    let secretCiphertext = existing.rows[0]?.secret || "";
+    if (body.clearPassword === true) secretCiphertext = "";
+    else if (String(body.password || "")) secretCiphertext = secretBox.encrypt(String(body.password));
     const values = [
       id, space.id, ip, cleanText(body.name, 160), cleanText(body.status, 40) || "active",
       cleanText(body.type, 100), cleanText(body.os, 160), cleanText(body.mac, 32), cleanText(body.vlan, 40),
       cleanText(body.username, 120), cleanText(body.owner, 160), cleanText(body.location, 200),
-      cleanText(body.secretRef, 500), cleanText(body.notes, 3000), JSON.stringify(normalizePorts(body.ports)), user.id,
+      cleanText(body.secretRef, 500), secretCiphertext, cleanText(body.notes, 3000), JSON.stringify(normalizePorts(body.ports)), user.id,
     ];
     await pool.query(
-      `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,notes,ports,created_by,updated_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$16)
+      `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17)
        ON CONFLICT(space_id,ip) DO UPDATE SET name=excluded.name,status=excluded.status,type=excluded.type,
          os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
-         location=excluded.location,secret_ref=excluded.secret_ref,notes=excluded.notes,ports=excluded.ports,
+         location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
+         notes=excluded.notes,ports=excluded.ports,
          updated_by=excluded.updated_by,updated_at=now()`,
       values,
     );
     await audit(user, body.id ? "update" : "create", "host", id, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
     broadcast({ type: "host", companyId: space.companyId, spaceId: space.id, entityId: id });
     return json(res, 200, { ok: true, id });
+  }
+
+  const hostSecret = pathname.match(/^\/api\/hosts\/([^/]+)\/([^/]+)\/secret$/);
+  if (req.method === "GET" && hostSecret) {
+    requireWriter(user);
+    const space = await getSpaceForUser(user, hostSecret[1]);
+    const ip = validateHostIp(decodeURIComponent(hostSecret[2]), space.cidr);
+    const found = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2", [space.id, ip]);
+    if (!found.rowCount) throw Object.assign(new Error("اطلاعات IP پیدا نشد."), { status: 404 });
+    await audit(user, "reveal_secret", "host", ip, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
+    return json(res, 200, { ok: true, password: secretBox.decrypt(found.rows[0].secret) });
   }
 
   const hostDelete = pathname.match(/^\/api\/hosts\/([^/]+)\/([^/]+)$/);
@@ -434,6 +525,7 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const username = cleanText(body.username, 80);
     if (!/^[A-Za-z0-9_.-]{3,80}$/.test(username)) throw new Error("نام کاربری باید حداقل ۳ کاراکتر و شامل حروف، عدد، نقطه یا خط تیره باشد.");
+    if (String(body.password || "").length < 8) throw new Error("رمز عبور باید حداقل ۸ کاراکتر باشد.");
     const id = crypto.randomUUID();
     const role = safeRole(body.role);
     const client = await pool.connect();
@@ -467,9 +559,12 @@ async function api(req, res, url, user) {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      await protectLastAdmin(client, userUpdate[1], role, body.active !== false);
       const fields = [cleanText(body.displayName, 120), role, body.active !== false, userUpdate[1]];
-      await client.query("UPDATE users SET display_name=$1,role=$2,active=$3,updated_at=now() WHERE id=$4", fields);
+      const updated = await client.query("UPDATE users SET display_name=$1,role=$2,active=$3,updated_at=now() WHERE id=$4 RETURNING id", fields);
+      if (!updated.rowCount) throw Object.assign(new Error("کاربر پیدا نشد."), { status: 404 });
       if (cleanText(body.password, 500)) {
+        if (String(body.password).length < 8) throw new Error("رمز عبور باید حداقل ۸ کاراکتر باشد.");
         await client.query("UPDATE users SET password_hash=$1 WHERE id=$2", [await hashPassword(String(body.password)), userUpdate[1]]);
       }
       await client.query("DELETE FROM user_company_access WHERE user_id=$1", [userUpdate[1]]);
@@ -483,6 +578,24 @@ async function api(req, res, url, user) {
       throw error;
     } finally { client.release(); }
     await audit(user, "update", "user", userUpdate[1], { detail: { role } });
+    broadcast({ type: "user", entityId: userUpdate[1] });
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "DELETE" && userUpdate) {
+    requireAdmin(user);
+    const client = await pool.connect();
+    let removed;
+    try {
+      await client.query("BEGIN");
+      await protectLastAdmin(client, userUpdate[1], null, false);
+      removed = (await client.query("DELETE FROM users WHERE id=$1 RETURNING username,role", [userUpdate[1]])).rows[0];
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+    await audit(user.id === userUpdate[1] ? null : user, "delete", "user", userUpdate[1], { detail: removed || {} });
     broadcast({ type: "user", entityId: userUpdate[1] });
     return json(res, 200, { ok: true });
   }

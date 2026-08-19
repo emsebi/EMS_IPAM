@@ -18,7 +18,7 @@ services:
       - ems_internal
 
   app:
-    image: ems-ipam:0.1.0
+    image: ems-ipam:0.2.0
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -27,6 +27,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
       EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
+      EMS_SECRET_KEY: ${EMS_SECRET_KEY}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       PORT: 8080
       TZ: Asia/Tehran
