@@ -20,11 +20,13 @@ test("installer validates a downloaded archive before extraction", async () => {
   assert.match(installer, /Downloaded project archive is invalid or incomplete/);
 });
 
-test("setup exposes install, update, backup and both uninstall modes", async () => {
+test("setup exposes install, update, backup, restore and both uninstall modes", async () => {
   const installer = await fs.readFile(installerUrl, "utf8");
-  for (const label of ["Install", "Update", "Backup Database", "Uninstall App (Keep Database)", "Uninstall App + Database"]) {
+  for (const label of ["Install", "Update", "Backup Database", "Restore Database", "Uninstall App (Keep Database)", "Uninstall App + Database"]) {
     assert.match(installer, new RegExp(label.replace(/[()+]/g, "\\$&")));
   }
   assert.match(installer, /EMS_SECRET_KEY/);
   assert.match(installer, /Type DELETE to continue/);
+  assert.match(installer, /Type RESTORE to continue/);
+  assert.match(installer, /backup_database/);
 });

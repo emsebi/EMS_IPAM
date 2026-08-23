@@ -9,13 +9,21 @@ const state = {
   currentSpaceId: null,
   view: "companies",
   sheetCidr: null,
-  displayMode: "grid",
+  displayMode: localStorage.getItem("ems-display-mode") || "classic",
+  drillPrefix: 24,
   paint: false,
   paintPrefix: 24,
   selectedCidr: null,
   scanning: false,
   events: null,
   reloadTimer: null,
+  searchTimer: null,
+  inventory: [],
+  maps: [],
+  currentMapId: null,
+  mapData: null,
+  linkSelection: [],
+  treeFocusCidr: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -103,6 +111,10 @@ function isAdmin() {
   return state.bootstrap?.user.role === "admin";
 }
 
+function canManageCompany(companyId) {
+  return isAdmin() || (canWrite() && (state.bootstrap?.fullCompanyIds || []).includes(companyId));
+}
+
 function prefixInfo(item) {
   return parseCidr(item.cidr);
 }
@@ -185,7 +197,9 @@ function connectEvents() {
         if (state.currentSpaceId && (!change.spaceId || change.spaceId === state.currentSpaceId)) {
           state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
           renderCurrent();
-        } else if (state.view === "companies") renderCompanies();
+        } else if (state.view === "topology" && change.type === "topology") await openTopologyPage(true);
+        else if (state.view === "radios" && change.type === "host") await openRadiosPage(true);
+        else if (state.view === "companies") renderCompanies();
       } catch (error) { console.warn(error); }
     }, 250);
   });
@@ -210,6 +224,8 @@ async function loadSpace(spaceId, { sheetCidr = null } = {}) {
 function renderCurrent() {
   if (state.view === "sheet") renderSheet();
   else if (state.view === "overview") renderOverview();
+  else if (state.view === "radios") renderRadios();
+  else if (state.view === "topology") renderTopology();
   else renderCompanies();
 }
 
@@ -223,11 +239,11 @@ function renderCompanies() {
     const spaces = state.bootstrap.spaces.filter((item) => item.companyId === company.id);
     return `<article class="company-card">
       <div class="company-card-head"><div><h3>${escapeHtml(company.name)}</h3><p>${escapeHtml(company.description || `${spaces.length} رنج اصلی`)}</p></div>
-      <div class="entity-actions">${isAdmin() ? `<button class="btn sm edit-company" data-company="${escapeHtml(company.id)}">ویرایش</button><button class="btn sm danger delete-company" data-company="${escapeHtml(company.id)}">حذف</button>` : ""}${canWrite() ? `<button class="btn sm add-space" data-company="${escapeHtml(company.id)}">افزودن رنج</button>` : ""}</div></div>
+      <div class="entity-actions">${isAdmin() ? `<button class="btn sm edit-company" data-company="${escapeHtml(company.id)}">ویرایش</button><button class="btn sm danger delete-company" data-company="${escapeHtml(company.id)}">حذف</button>` : ""}${canManageCompany(company.id) ? `<button class="btn sm add-space" data-company="${escapeHtml(company.id)}">افزودن رنج</button>` : ""}</div></div>
       ${spaces.map((space) => `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small></button>${canWrite() ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`).join("") || `<div class="empty-state">هنوز رنج اصلی تعریف نشده است.</div>`}
     </article>`;
   }).join("");
-  page.innerHTML = `<div class="headline"><div><div class="crumb">نمای سازمانی</div><h2>شرکت‌ها و رنج‌های اصلی</h2><div class="subtitle">هر شرکت می‌تواند چند فضای آدرس مستقل و حتی رنج‌های هم‌نام داشته باشد.</div></div><div class="head-actions">${isAdmin() ? `<button id="addCompanyButton" class="btn">افزودن شرکت</button>` : ""}${canWrite() && state.currentCompanyId ? `<button id="addSpaceButton" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></div><section class="company-grid">${cards || `<div class="empty-state panel">شرکتی برای نمایش وجود ندارد.</div>`}</section>`;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">نمای سازمانی</div><h2>شرکت‌ها و رنج‌های اصلی</h2><div class="subtitle">هر شرکت می‌تواند چند فضای آدرس مستقل و حتی رنج‌های هم‌نام داشته باشد.</div></div><div class="head-actions">${isAdmin() ? `<button id="addCompanyButton" class="btn">افزودن شرکت</button>` : ""}${state.currentCompanyId && canManageCompany(state.currentCompanyId) ? `<button id="addSpaceButton" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></div><section class="company-grid">${cards || `<div class="empty-state panel">شرکتی برای نمایش وجود ندارد.</div>`}</section>`;
   $("addCompanyButton")?.addEventListener("click", () => openCompanyDialog());
   $("addSpaceButton")?.addEventListener("click", () => openSpaceDialog(state.currentCompanyId));
   page.querySelectorAll(".add-space").forEach((node) => node.addEventListener("click", () => openSpaceDialog(node.dataset.company)));
@@ -236,6 +252,28 @@ function renderCompanies() {
   page.querySelectorAll(".delete-company").forEach((node) => node.addEventListener("click", () => deleteCompany(node.dataset.company)));
   page.querySelectorAll(".edit-space").forEach((node) => node.addEventListener("click", () => openSpaceDialog(null, node.dataset.space)));
   page.querySelectorAll(".delete-space").forEach((node) => node.addEventListener("click", () => deleteSpace(node.dataset.space)));
+}
+
+function rangeBand(item, row, column, span) {
+  const title = item.name || item.cidr;
+  return `<button class="range-band edit-prefix" data-id="${escapeHtml(item.id)}" style="grid-row:${row};grid-column:${column}/span ${span};background:${escapeHtml(item.color)}" title="${escapeHtml(`${title} — ${item.cidr}`)}">${escapeHtml(title)}</button>`;
+}
+
+function overviewBands(rowStartIndex, rowTileCount, root, tileSize) {
+  const rowStart = root.start + rowStartIndex * tileSize;
+  const rowEnd = rowStart + rowTileCount * tileSize - 1;
+  const relevant = prefixesIn(rowStart, rowEnd).map((item) => ({ item, info: prefixInfo(item) })).filter(({ info }) => info.prefix <= 24);
+  const defaults = [20, 21, 22, 23, 24].filter((prefix) => prefix > root.prefix);
+  const levels = [...new Set([...defaults, ...relevant.map(({ info }) => info.prefix)])].sort((a, b) => a - b);
+  let html = `<div class="band-stack">${levels.map((prefix, index) => `<i class="band-guide" style="grid-row:${index + 1}" data-label="/${prefix}"></i>`).join("")}`;
+  for (const { item, info } of relevant) {
+    const segmentStart = Math.max(rowStart, info.start);
+    const segmentEnd = Math.min(rowEnd, info.end);
+    const column = Math.floor((segmentStart - rowStart) / tileSize) + 2;
+    const span = Math.floor((segmentEnd - segmentStart + 1) / tileSize);
+    html += rangeBand(item, levels.indexOf(info.prefix) + 1, column, Math.max(1, span));
+  }
+  return html + `</div>`;
 }
 
 function tileVisual(start) {
@@ -289,7 +327,8 @@ function attachPrefixDeleteHandlers() {
 
 function prefixButtons(minimum, maximum) {
   const items = [];
-  for (let prefix = maximum; prefix >= minimum; prefix -= 1) items.push(`<button class="paint-prefix ${state.paintPrefix === prefix ? "active" : ""}" data-prefix="${prefix}">/${prefix}</button>`);
+  const selected = state.paint ? state.paintPrefix : state.drillPrefix;
+  for (let prefix = maximum; prefix >= minimum; prefix -= 1) items.push(`<button class="paint-prefix ${selected === prefix ? "active" : ""}" data-prefix="${prefix}">/${prefix}</button>`);
   return `<div class="segmented">${items.join("")}</div>`;
 }
 
@@ -306,6 +345,7 @@ function renderOverview() {
   for (let row = 0; row < rows; row += 1) {
     const rowStartIndex = row * tilesPerRow;
     const rowCount = Math.min(tilesPerRow, tileCount - rowStartIndex);
+    grid += overviewBands(rowStartIndex, rowCount, root, 256);
     grid += `<div class="visual-row"><div class="axis row-axis">${formatNumber(rowStartIndex)}–${formatNumber(rowStartIndex + rowCount - 1)}</div>`;
     for (let col = 0; col < 16; col += 1) {
       const index = rowStartIndex + col;
@@ -325,21 +365,28 @@ function renderOverview() {
   grid += `</div>`;
   const rangeRows = [...state.data.prefixes].sort((a, b) => prefixInfo(a).start - prefixInfo(b).start || prefixInfo(a).prefix - prefixInfo(b).prefix).map((item) => {
     const info = prefixInfo(item);
-    return `<div class="range-row"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(info.size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><div class="row-actions">${info.prefix >= 21 && info.prefix <= 24 ? `<button class="btn sm open-prefix-sheet" data-cidr="${escapeHtml(item.cidr)}">نمایش</button>` : ""}${canWrite() ? `<button class="btn sm edit-prefix" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger quick-delete-prefix" data-id="${escapeHtml(item.id)}">حذف</button>` : ""}</div></div>`;
+    return `<div class="range-row"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(info.size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><div class="row-actions">${info.prefix <= 24 ? `<button class="btn sm open-prefix-sheet" data-cidr="${escapeHtml(item.cidr)}">نمایش</button>` : ""}${canWrite() ? `<button class="btn sm edit-prefix" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger quick-delete-prefix" data-id="${escapeHtml(item.id)}">حذف</button>` : ""}</div></div>`;
   }).join("");
-  const selectionMinimum = Math.max(root.prefix, 23);
+  const selectionMinimum = root.prefix;
   if (state.paintPrefix < selectionMinimum || state.paintPrefix > 24) state.paintPrefix = 24;
+  if (state.drillPrefix < selectionMinimum || state.drillPrefix > 24) state.drillPrefix = 24;
   page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر خانه یک شبکهٔ /24 است.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
-    <section class="panel"><div class="toolbar"><div class="toolgroup"><b>اندازهٔ انتخاب</b>${prefixButtons(selectionMinimum, 24)}<span class="mode-note">برای /23 روی یکی از دو خانهٔ /24 کلیک کنید؛ هر دو جدول باز می‌شوند.</span></div><div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div></div><div class="map-wrap">${grid}</div></section>
+    <section class="panel"><div class="toolbar"><div class="toolgroup"><b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت و رنگ‌کردن رنج"}</button>` : ""}<span class="mode-note">پنج خط بالای خانه‌ها جای رنج‌های بزرگ‌تر را نشان می‌دهد.</span></div><div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div></div><div class="map-wrap">${grid}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
   $("companyBack").addEventListener("click", renderCompanies);
   $("editCurrentSpace")?.addEventListener("click", () => openSpaceDialog(null, space.id));
-  page.querySelectorAll(".paint-prefix").forEach((node) => node.addEventListener("click", () => { state.paintPrefix = Number(node.dataset.prefix); renderOverview(); }));
+  $("paintToggle")?.addEventListener("click", () => { state.paint = !state.paint; renderOverview(); });
+  page.querySelectorAll(".paint-prefix").forEach((node) => node.addEventListener("click", () => {
+    if (state.paint) state.paintPrefix = Number(node.dataset.prefix);
+    else state.drillPrefix = Number(node.dataset.prefix);
+    renderOverview();
+  }));
   page.querySelectorAll(".open-tile").forEach((node) => node.addEventListener("click", () => {
     const tile = parseCidr(node.dataset.cidr);
-    const target = networkAt(tile.start, state.paintPrefix);
-    state.view = "sheet"; state.sheetCidr = target.cidr; state.paint = false; renderSheet(); window.scrollTo(0, 0);
+    const target = networkAt(tile.start, state.paint ? state.paintPrefix : state.drillPrefix);
+    if (state.paint) openPrefixDialog(target.cidr);
+    else { state.view = "sheet"; state.sheetCidr = target.cidr; renderSheet(); window.scrollTo(0, 0); }
   }));
   page.querySelectorAll(".open-prefix-sheet").forEach((node) => node.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -377,27 +424,62 @@ function renderIpGrid(sheet) {
   return grid + `</div>`;
 }
 
-function renderSubnetMap(sheet) {
+function renderVerticalTable(sheet) {
   const exactPrefixes = new Map(state.data.prefixes.map((item) => [item.cidr, item]));
   const hosts = hostMap();
-  let html = `<div class="subnet-map" dir="ltr">`;
-  const ipCells = Array.from({ length: 256 }, (_, last) => {
+  const pings = pingMap();
+  let html = `<div class="vertical-table-wrap"><table class="vertical-subnet-table"><thead><tr><th>IP و نام کوتاه</th><th>وضعیت</th>${[30,29,28,27,26,25,24].map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
+  for (let last = 0; last < 256; last += 1) {
     const ip = intToIpv4(sheet.start + last);
     const host = hosts.get(ip);
-    return `<button class="map-cell map-ip-cell ${host ? "recorded" : ""}" data-ip="${ip}" style="grid-column:${last + 2}" title="${escapeHtml(host?.name || ip)}"><b>${last}</b>${host?.name ? `<small>${escapeHtml(host.name)}</small>` : ""}</button>`;
-  }).join("");
-  html += `<div class="subnet-map-row"><strong>/32</strong>${ipCells}</div>`;
-  for (const prefix of [30, 29, 28, 27, 26, 25, 24]) {
-    const size = 2 ** (32 - prefix);
-    let cells = "";
-    for (let offset = 0; offset < 256; offset += size) {
-      const cidr = `${intToIpv4(sheet.start + offset)}/${prefix}`;
+    const system = last === 0 || last === 255;
+    const ping = pings.get(ip);
+    const status = system ? (last === 0 ? "Network" : "Broadcast") : host ? (STATUS_LABELS[host.status] || host.status) : "آزاد";
+    html += `<tr class="${host ? "recorded" : ""} ${system ? "system" : ""}"><td><button class="ip-line map-ip-cell" data-ip="${ip}"><span class="mono ltr">${escapeHtml(ip)}</span>${host?.name ? `<b>[${escapeHtml(host.name)}]</b>` : ""}</button></td><td><span class="table-status"><i class="${ping ? (ping.online ? "online" : "offline") : "unknown"}"></i>${escapeHtml(status)}</span></td>`;
+    for (const prefix of [30, 29, 28, 27, 26, 25, 24]) {
+      const size = 2 ** (32 - prefix);
+      if (last % size !== 0) continue;
+      const cidr = `${intToIpv4(sheet.start + last)}/${prefix}`;
       const item = exactPrefixes.get(cidr);
-      cells += `<button class="map-cell map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" style="grid-column:${offset + 2}/span ${size};--range-color:${item?.color || "#f2f4f8"}" title="${escapeHtml(item?.name || cidr)}"><b>${offset}${size > 1 ? `–${offset + size - 1}` : ""}</b>${item?.name ? `<small>${escapeHtml(item.name)}</small>` : ""}</button>`;
+      html += `<td rowspan="${size}" class="subnet-span" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><button class="table-prefix map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml(item?.name || cidr)}"><span>${last}–${last + size - 1}</span>${item?.name ? `<b>${escapeHtml(item.name)}</b>` : `<small>آزاد</small>`}</button></td>`;
     }
-    html += `<div class="subnet-map-row"><strong>/${prefix}</strong>${cells}</div>`;
+    html += `</tr>`;
   }
-  return html + `</div>`;
+  return html + `</tbody></table></div>`;
+}
+
+function renderSubnetSelector(selected) {
+  const hosts = hostMap();
+  const count = selected.size / 256;
+  const tiles = Array.from({ length: count }, (_, index) => {
+    const start = selected.start + index * 256;
+    const cidr = `${intToIpv4(start)}/24`;
+    const exact = state.data.prefixes.find((item) => item.cidr === cidr);
+    const hostCount = [...hosts.keys()].filter((ip) => { const value = ipv4ToInt(ip); return value >= start && value <= start + 255; }).length;
+    return `<button class="drill-tile open-drill-tile" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${cidr}</b>${exact?.name ? `<span>${escapeHtml(exact.name)}</span>` : `<span>بدون نام</span>`}<small>${formatNumber(hostCount)} IP ثبت‌شده</small></button>`;
+  }).join("");
+  return `<div class="subnet-selector">${tiles}</div>`;
+}
+
+function treeBranch(info, remaining) {
+  const exact = state.data.prefixes.find((item) => item.cidr === info.cidr);
+  const isHost = info.prefix === 32;
+  const name = isHost ? hostMap().get(intToIpv4(info.start))?.name : exact?.name;
+  let html = `<li><div class="tree-node-wrap"><button class="tree-node" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 30 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
+  if (remaining > 0 && info.prefix < 32) {
+    const childPrefix = info.prefix + 1;
+    const half = info.size / 2;
+    html += `<ul>${treeBranch(networkAt(info.start, childPrefix), remaining - 1)}${treeBranch(networkAt(info.start + half, childPrefix), remaining - 1)}</ul>`;
+  }
+  return html + `</li>`;
+}
+
+function renderTreeView(selected) {
+  const focus = parseCidr(state.treeFocusCidr || selected.cidr);
+  const safeFocus = focus && contains(selected, focus) ? focus : selected;
+  state.treeFocusCidr = safeFocus.cidr;
+  const depth = Math.min(4, 32 - safeFocus.prefix);
+  return `<div class="tree-toolbar"><div><span>محدوده فعلی</span><b class="mono ltr">${escapeHtml(safeFocus.cidr)}</b></div><div>${safeFocus.prefix > selected.prefix ? `<button class="btn sm tree-up" data-cidr="${escapeHtml(networkAt(safeFocus.start, safeFocus.prefix - 1).cidr)}">یک سطح بالاتر</button>` : ""}${canWrite() && safeFocus.prefix <= 30 ? `<button class="btn sm primary tree-edit-prefix" data-cidr="${escapeHtml(safeFocus.cidr)}">ثبت مشخصات این رنج</button>` : ""}</div></div><div class="tree-scroll"><ul class="subnet-tree">${treeBranch(safeFocus, depth)}</ul></div><p class="mode-note tree-note">با کلیک روی هر شاخه، همان بخش بزرگ‌تر می‌شود. در /32 فرم اطلاعات IP باز خواهد شد.</p>`;
 }
 
 function renderSheet() {
@@ -411,11 +493,15 @@ function renderSheet() {
   const relevant = prefixesIn(selected.start, selected.end);
   const hostCount = [...hosts.keys()].filter((ip) => contains(selected, ip)).length;
   const onlineCount = [...pings.values()].filter((item) => contains(selected, item.ip) && item.online).length;
-  const blocks = Array.from({ length: blockCount }, (_, index) => {
-    const sheet = parseCidr(`${intToIpv4(selected.start + index * 256)}/24`);
-    const content = state.displayMode === "map" ? renderSubnetMap(sheet) : renderIpGrid(sheet);
-    return `<section class="panel detail-block"><div class="section-title"><div><h3 class="ltr mono">${escapeHtml(sheet.cidr)}</h3><span class="subtitle">IP 0–255</span></div>${canWrite() ? `<button class="btn sm edit-exact-prefix" data-cidr="${escapeHtml(sheet.cidr)}">ثبت / ویرایش مشخصات /24</button>` : ""}</div><div class="ip-wrap">${content}</div></section>`;
-  }).join("");
+  const blocks = state.displayMode === "tree"
+    ? `<section class="panel detail-block"><div class="ip-wrap">${renderTreeView(selected)}</div></section>`
+    : selected.prefix < 23
+      ? `<section class="panel detail-block"><div class="section-title"><div><h3>زیرشبکه‌های /24</h3><span class="subtitle">برای مشاهده IPها یک شبکه را باز کنید.</span></div></div><div class="ip-wrap">${renderSubnetSelector(selected)}</div></section>`
+      : Array.from({ length: blockCount }, (_, index) => {
+        const sheet = parseCidr(`${intToIpv4(selected.start + index * 256)}/24`);
+        const content = state.displayMode === "table" ? renderVerticalTable(sheet) : renderIpGrid(sheet);
+        return `<section class="panel detail-block"><div class="section-title"><div><h3 class="ltr mono">${escapeHtml(sheet.cidr)}</h3><span class="subtitle">IP 0–255</span></div>${canWrite() ? `<button class="btn sm edit-exact-prefix" data-cidr="${escapeHtml(sheet.cidr)}">ثبت / ویرایش مشخصات /24</button>` : ""}</div><div class="ip-wrap">${content}</div></section>`;
+      }).join("");
   const selectionIndex = Math.floor((selected.start - root.start) / selected.size);
   const selectionCount = Math.floor(root.size / selected.size);
   const options = Array.from({ length: selectionCount }, (_, index) => {
@@ -426,7 +512,7 @@ function renderSheet() {
   const sheetColor = relevant[0]?.color || space.color;
   const usable = blockCount * 254;
   page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
-    <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "grid" ? "active" : ""}" data-mode="grid">IP Grid</button><button class="display-mode ${state.displayMode === "map" ? "active" : ""}" data-mode="map">Subnet Map</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در Subnet Map هر خانه مستقیماً قابل انتخاب است؛ /30 شامل ۴ IP است.</span></div></section>
+    <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span></div></section>
     <div class="detail-stack">${blocks}</div>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
   $("overviewBack").addEventListener("click", () => { state.view = "overview"; state.paint = false; renderOverview(); });
@@ -434,13 +520,21 @@ function renderSheet() {
   $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("sheetSelect").addEventListener("change", (event) => { state.sheetCidr = event.target.value; renderSheet(); });
   $("scanButton")?.addEventListener("click", runPing);
-  page.querySelectorAll(".display-mode").forEach((node) => node.addEventListener("click", () => { state.displayMode = node.dataset.mode; renderSheet(); }));
+  page.querySelectorAll(".display-mode").forEach((node) => node.addEventListener("click", () => { state.displayMode = node.dataset.mode; state.treeFocusCidr = selected.cidr; localStorage.setItem("ems-display-mode", state.displayMode); renderSheet(); }));
   page.querySelectorAll(".ip-cell").forEach((node) => node.addEventListener("click", (event) => {
     if (event.target.closest(".ping-dot")) return;
     openHostDialog(node.dataset.ip);
   }));
   page.querySelectorAll(".map-ip-cell").forEach((node) => node.addEventListener("click", () => openHostDialog(node.dataset.ip)));
   page.querySelectorAll(".map-prefix-cell,.edit-exact-prefix").forEach((node) => node.addEventListener("click", () => openPrefixDialog(node.dataset.cidr)));
+  page.querySelectorAll(".open-drill-tile").forEach((node) => node.addEventListener("click", () => { state.sheetCidr = node.dataset.cidr; state.treeFocusCidr = null; renderSheet(); window.scrollTo(0, 0); }));
+  page.querySelectorAll(".tree-node").forEach((node) => node.addEventListener("click", () => {
+    const info = parseCidr(node.dataset.cidr);
+    if (info.prefix === 32) openHostDialog(intToIpv4(info.start));
+    else { state.treeFocusCidr = info.cidr; renderSheet(); }
+  }));
+  page.querySelectorAll(".tree-edit-prefix").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openPrefixDialog(node.dataset.cidr); }));
+  page.querySelector(".tree-up")?.addEventListener("click", (event) => { state.treeFocusCidr = event.currentTarget.dataset.cidr; renderSheet(); });
   page.querySelectorAll(".ping-dot:not(.system)").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
   attachPrefixEditHandlers();
   attachPrefixDeleteHandlers();
@@ -526,24 +620,68 @@ function renderHostPorts(host = {}) {
   }).join("");
 }
 
+function renderDevicePorts(items = []) {
+  $("devicePortsList").innerHTML = items.map((item) => `<div class="device-port-row" data-id="${escapeHtml(item.id || "")}"><input class="device-port-name ltr" value="${escapeHtml(item.name || "")}" placeholder="ether1 / Gi1/0/1"><input class="device-port-description" value="${escapeHtml(item.description || "")}" placeholder="توضیح پورت"><select class="device-port-type"><option value="ethernet" ${item.portType === "ethernet" ? "selected" : ""}>Ethernet</option><option value="fiber" ${item.portType === "fiber" ? "selected" : ""}>Fiber</option><option value="wireless" ${item.portType === "wireless" ? "selected" : ""}>Wireless</option><option value="virtual" ${item.portType === "virtual" ? "selected" : ""}>Virtual</option></select><input class="device-port-speed ltr" value="${escapeHtml(item.speed || "")}" placeholder="1G"><input class="device-port-vlan ltr" value="${escapeHtml(item.vlan || "")}" placeholder="VLAN / Trunk"><button class="btn sm danger remove-device-port" type="button">حذف</button></div>`).join("");
+  $("devicePortsList").querySelectorAll(".remove-device-port").forEach((node) => node.addEventListener("click", () => node.closest(".device-port-row").remove()));
+}
+
+function appendDevicePort(item = {}) {
+  const current = collectDevicePorts();
+  current.push(item);
+  renderDevicePorts(current);
+}
+
+function collectDevicePorts() {
+  return [...$("devicePortsList").querySelectorAll(".device-port-row")].map((row) => ({
+    id: row.dataset.id || undefined,
+    name: row.querySelector(".device-port-name").value,
+    description: row.querySelector(".device-port-description").value,
+    portType: row.querySelector(".device-port-type").value,
+    speed: row.querySelector(".device-port-speed").value,
+    vlan: row.querySelector(".device-port-vlan").value,
+    enabled: true,
+  })).filter((item) => item.name.trim());
+}
+
+async function ensureInventory(force = false) {
+  if (!force && state.inventory.length) return state.inventory;
+  const result = await request("/api/inventory");
+  state.inventory = result.items || [];
+  return state.inventory;
+}
+
+function updateRadioFields(selectedParent = "") {
+  const mode = $("hostRadioMode").value;
+  $("radioParentField").classList.toggle("hidden", mode !== "station");
+  const aps = state.inventory.filter((item) => item.radioMode === "ap" && item.id !== $("hostId").value);
+  $("hostRadioParent").innerHTML = `<option value="">انتخاب نشده</option>${aps.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selectedParent ? "selected" : ""}>${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ssid || "بدون SSID")} — ${escapeHtml(item.ip)}</option>`).join("")}`;
+  $("ssidSuggestions").innerHTML = aps.filter((item) => item.ssid).map((item) => `<option value="${escapeHtml(item.ssid)}">${escapeHtml(item.name || item.ip)}</option>`).join("");
+  if (mode === "station") {
+    const parent = aps.find((item) => item.id === $("hostRadioParent").value);
+    if (parent?.ssid && !$("hostSsid").value) $("hostSsid").value = parent.ssid;
+  }
+}
+
 function openHostDialog(ip) {
   const item = state.data.hosts.find((entry) => entry.ip === ip) || null;
-  const value = item || { id: "", ip, name: "", status: "active", type: "", os: "", mac: "", vlan: "", username: "", owner: "", location: "", secretRef: "", notes: "", ports: {} };
+  const value = item || { id: "", ip, name: "", status: "active", type: "", os: "", mac: "", vlan: "", username: "", owner: "", location: "", secretRef: "", notes: "", ports: {}, devicePorts: [] };
   $("hostIpTitle").textContent = ip;
-  for (const [key, field] of [["id", "hostId"], ["ip", "hostIp"], ["name", "hostName"], ["status", "hostStatus"], ["type", "hostType"], ["os", "hostOs"], ["mac", "hostMac"], ["vlan", "hostVlan"], ["username", "hostUsername"], ["owner", "hostOwner"], ["location", "hostLocation"], ["secretRef", "hostSecretRef"], ["notes", "hostNotes"]]) $(field).value = value[key] || "";
+  for (const [key, field] of [["id", "hostId"], ["ip", "hostIp"], ["name", "hostName"], ["status", "hostStatus"], ["type", "hostType"], ["os", "hostOs"], ["mac", "hostMac"], ["vlan", "hostVlan"], ["username", "hostUsername"], ["owner", "hostOwner"], ["location", "hostLocation"], ["vendor", "hostVendor"], ["model", "hostModel"], ["serial", "hostSerial"], ["firmware", "hostFirmware"], ["radioMode", "hostRadioMode"], ["ssid", "hostSsid"], ["frequency", "hostFrequency"], ["channel", "hostChannel"], ["signal", "hostSignal"], ["secretRef", "hostSecretRef"], ["notes", "hostNotes"]]) $(field).value = value[key] || "";
   $("hostPassword").value = "";
   $("hostPassword").type = "password";
   $("clearHostPassword").checked = false;
   $("revealHostPassword").classList.toggle("hidden", !item?.hasPassword || !canWrite());
   $("clearHostPasswordWrap").classList.toggle("hidden", !item?.hasPassword || !canWrite());
   renderHostPorts(value);
+  renderDevicePorts(value.devicePorts || []);
+  ensureInventory().then(() => updateRadioFields(value.radioParentHostId || "")).catch(() => updateRadioFields(value.radioParentHostId || ""));
   $("deleteHostButton").classList.toggle("hidden", !item || !canWrite());
   setFormWritable($("hostForm"), canWrite());
   $("hostDialog").showModal();
 }
 
 function openToolMenu(event, ip) {
-  const host = state.data.hosts.find((item) => item.ip === ip) || { ports: {} };
+  const host = state.data?.hosts?.find((item) => item.ip === ip) || state.inventory.find((item) => item.ip === ip) || { ports: {} };
   const menu = $("toolMenu");
   menu.innerHTML = `<div class="tool-menu-title">${escapeHtml(ip)} — انتخاب ابزار</div><div class="tool-buttons">${state.bootstrap.tools.map((tool) => {
     const port = Object.prototype.hasOwnProperty.call(host.ports || {}, tool.tool) ? host.ports[tool.tool] : tool.defaultPort;
@@ -553,6 +691,13 @@ function openToolMenu(event, ip) {
   menu.style.top = `${Math.min(event.clientY + 10, window.innerHeight - 90)}px`;
   menu.classList.remove("hidden");
   menu.querySelectorAll(".tool-square").forEach((node) => node.addEventListener("click", () => {
+    if (node.dataset.tool === "HTTP" || node.dataset.tool === "HTTPS") {
+      const scheme = node.dataset.tool.toLowerCase();
+      const port = node.dataset.port && !(["80", "443"].includes(node.dataset.port)) ? `:${node.dataset.port}` : "";
+      window.open(`${scheme}://${ip}${port}`, "_blank", "noopener");
+      menu.classList.add("hidden");
+      return;
+    }
     const url = new URL("emsipam://open");
     url.searchParams.set("tool", node.dataset.tool);
     url.searchParams.set("host", ip);
@@ -564,25 +709,33 @@ function openToolMenu(event, ip) {
 
 function doSearch(query) {
   const resultsNode = $("searchResults");
-  const value = String(query || "").trim().toLowerCase();
-  if (!value || !state.data) { resultsNode.classList.add("hidden"); return; }
-  const results = [];
-  for (const host of state.data.hosts) {
-    const text = [host.ip, host.name, host.mac, host.username, host.owner, host.location, host.os, host.type].join(" ").toLowerCase();
-    if (text.includes(value)) results.push({ type: "host", id: host.ip, title: host.name || host.ip, detail: host.ip });
-  }
-  for (const prefix of state.data.prefixes) {
-    const text = [prefix.cidr, prefix.name, prefix.role, prefix.vlan, prefix.description].join(" ").toLowerCase();
-    if (text.includes(value)) results.push({ type: "prefix", id: prefix.id, title: prefix.name || prefix.cidr, detail: prefix.cidr });
-  }
-  resultsNode.innerHTML = results.slice(0, 20).map((item) => `<div class="search-item" data-type="${item.type}" data-id="${escapeHtml(item.id)}"><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.detail)}</small></div>`).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
+  const value = String(query || "").trim();
+  clearTimeout(state.searchTimer);
+  if (!value) { resultsNode.classList.add("hidden"); return; }
+  resultsNode.innerHTML = `<div class="search-loading">در حال جست‌وجو…</div>`;
   resultsNode.classList.remove("hidden");
-  resultsNode.querySelectorAll(".search-item").forEach((node) => node.addEventListener("click", () => {
-    resultsNode.classList.add("hidden");
-    if (node.dataset.type === "host") {
-      const address = ipv4ToInt(node.dataset.id); state.view = "sheet"; state.sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`; renderSheet(); openHostDialog(node.dataset.id);
-    } else openPrefixDialog(null, node.dataset.id);
-  }));
+  state.searchTimer = setTimeout(async () => {
+    try {
+      const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
+      const items = result.items || [];
+      resultsNode.innerHTML = items.map((item, index) => {
+        const title = item.kind === "prefix" ? (item.name || item.cidr) : (item.name || item.ip);
+        const detail = item.kind === "prefix" ? item.cidr : item.ip;
+        const badge = item.kind === "free-ip" ? "IP ثبت‌نشده" : item.kind === "prefix" ? "رنج" : "IP";
+        return `<button class="search-item" data-index="${index}"><span><b>${escapeHtml(title)}</b><em>${escapeHtml(badge)}</em></span><small>${escapeHtml(detail)} — ${escapeHtml(item.spaceName || "")}</small></button>`;
+      }).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
+      resultsNode.querySelectorAll(".search-item").forEach((node) => node.addEventListener("click", async () => {
+        const item = items[Number(node.dataset.index)];
+        resultsNode.classList.add("hidden");
+        if (!item) return;
+        const address = item.ip ? ipv4ToInt(item.ip) : parseCidr(item.cidr)?.start;
+        const sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`;
+        await loadSpace(item.spaceId, { sheetCidr });
+        if (item.kind === "prefix") openPrefixDialog(item.cidr, item.id);
+        else openHostDialog(item.ip);
+      }));
+    } catch (error) { resultsNode.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
+  }, 220);
 }
 
 async function openUsersDialog() {
@@ -592,9 +745,24 @@ async function openUsersDialog() {
   await refreshUsers();
 }
 
-function renderCompanyAccess(selected = []) {
-  $("companyAccessList").innerHTML = state.bootstrap.companies.map((company) => `<label><input type="checkbox" value="${escapeHtml(company.id)}" ${selected.includes(company.id) ? "checked" : ""}>${escapeHtml(company.name)}</label>`).join("");
-  $("companyAccessField").classList.toggle("hidden", $("userRole").value === "admin");
+function renderCompanyAccess(selectedCompanies = [], selectedSpaces = []) {
+  const isGlobal = $("userRole").value === "admin";
+  $("companyAccessList").innerHTML = state.bootstrap.companies.map((company) => `<label><input class="company-access-check" type="checkbox" value="${escapeHtml(company.id)}" ${selectedCompanies.includes(company.id) ? "checked" : ""}>${escapeHtml(company.name)} <small>همه شبکه‌ها</small></label>`).join("");
+  $("spaceAccessList").innerHTML = state.bootstrap.companies.map((company) => {
+    const spaces = state.bootstrap.spaces.filter((space) => space.companyId === company.id);
+    return `<div class="space-access-group"><b>${escapeHtml(company.name)}</b>${spaces.map((space) => `<label><input class="space-access-check" data-company="${escapeHtml(company.id)}" type="checkbox" value="${escapeHtml(space.id)}" ${selectedSpaces.includes(space.id) ? "checked" : ""}> <span class="ltr mono">${escapeHtml(space.cidr)}</span> — ${escapeHtml(space.name)}</label>`).join("") || `<small>شبکه‌ای وجود ندارد.</small>`}</div>`;
+  }).join("");
+  $("companyAccessField").classList.toggle("hidden", isGlobal);
+  $("spaceAccessField").classList.toggle("hidden", isGlobal);
+  const sync = () => {
+    const fullCompanies = new Set([...$("companyAccessList").querySelectorAll("input:checked")].map((node) => node.value));
+    $("spaceAccessList").querySelectorAll(".space-access-check").forEach((node) => {
+      node.disabled = fullCompanies.has(node.dataset.company);
+      if (node.disabled) node.checked = false;
+    });
+  };
+  $("companyAccessList").querySelectorAll("input").forEach((node) => node.addEventListener("change", sync));
+  sync();
 }
 
 async function refreshUsers() {
@@ -610,11 +778,194 @@ async function refreshUsers() {
 }
 
 function resetUserForm() {
-  $("userForm").reset(); $("userId").value = ""; $("userUsername").disabled = false; $("userFormTitle").textContent = "کاربر جدید"; $("passwordHint").textContent = "حداقل ۸ کاراکتر"; $("userActiveWrap").classList.add("hidden"); $("cancelUserEdit").classList.add("hidden"); renderCompanyAccess();
+  $("userForm").reset(); $("userId").value = ""; $("userUsername").disabled = false; $("userFormTitle").textContent = "کاربر جدید"; $("passwordHint").textContent = "حداقل ۸ کاراکتر"; $("userActiveWrap").classList.add("hidden"); $("cancelUserEdit").classList.add("hidden"); renderCompanyAccess([], []);
 }
 
 function editUser(user) {
-  $("userId").value = user.id; $("userUsername").value = user.username; $("userUsername").disabled = true; $("userDisplayName").value = user.displayName || ""; $("userPassword").value = ""; $("userRole").value = user.role; $("userActive").checked = user.active; $("userFormTitle").textContent = "ویرایش کاربر"; $("passwordHint").textContent = "برای حفظ رمز فعلی خالی بماند"; $("userActiveWrap").classList.remove("hidden"); $("cancelUserEdit").classList.remove("hidden"); renderCompanyAccess(user.companyIds || []);
+  $("userId").value = user.id; $("userUsername").value = user.username; $("userUsername").disabled = true; $("userDisplayName").value = user.displayName || ""; $("userPassword").value = ""; $("userRole").value = user.role; $("userActive").checked = user.active; $("userFormTitle").textContent = "ویرایش کاربر"; $("passwordHint").textContent = "برای حفظ رمز فعلی خالی بماند"; $("userActiveWrap").classList.remove("hidden"); $("cancelUserEdit").classList.remove("hidden"); renderCompanyAccess(user.companyIds || [], user.spaceIds || []);
+}
+
+async function openInventoryItem(item) {
+  if (!item) return;
+  const address = ipv4ToInt(item.ip);
+  await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(address & 0xffffff00)}/24` });
+  openHostDialog(item.ip);
+}
+
+async function quickOpenIp(ip) {
+  const value = String(ip || "").trim();
+  if (ipv4ToInt(value) === null) return toast("یک IP معتبر وارد کنید.");
+  try {
+    const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
+    const item = (result.items || []).find((entry) => entry.ip === value);
+    if (!item) return toast("این IP داخل شبکه‌های قابل دسترسی نیست.");
+    await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(ipv4ToInt(value) & 0xffffff00)}/24` });
+    openHostDialog(value);
+  } catch (error) { toast(error.message); }
+}
+
+async function openRadiosPage(force = true) {
+  try {
+    await ensureInventory(force);
+    state.view = "radios";
+    state.currentSpaceId = null;
+    state.data = null;
+    updateSelectors();
+    renderRadios();
+  } catch (error) { toast(error.message); }
+}
+
+function renderRadios() {
+  const radios = state.inventory.filter((item) => item.radioMode === "ap" || item.radioMode === "station");
+  const aps = radios.filter((item) => item.radioMode === "ap");
+  const stations = radios.filter((item) => item.radioMode === "station");
+  const stationCard = (item) => `<button class="radio-station open-inventory-host" data-id="${escapeHtml(item.id)}"><span class="status-dot ${item.status === "active" ? "online" : "unknown"}"></span><div><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small></div><span>${escapeHtml(item.signal || "بدون سیگنال")}</span></button>`;
+  const apCards = aps.map((ap) => {
+    const children = stations.filter((item) => item.radioParentHostId === ap.id);
+    return `<article class="radio-ap-card"><div class="radio-ap-head"><button class="open-inventory-host radio-title" data-id="${escapeHtml(ap.id)}"><span class="radio-icon">AP</span><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><p><span class="mono ltr">${escapeHtml(ap.ip)}</span> — ${escapeHtml(ap.ssid || "SSID تعریف نشده")}</p></div></button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button></div><div class="radio-meta"><span>فرکانس: <b>${escapeHtml(ap.frequency || "—")}</b></span><span>کانال: <b>${escapeHtml(ap.channel || "—")}</b></span><span>کلاینت: <b>${formatNumber(children.length)}</b></span></div><div class="radio-children">${children.map(stationCard).join("") || `<div class="empty-state compact-empty">Station متصل ثبت نشده است.</div>`}</div></article>`;
+  }).join("");
+  const orphans = stations.filter((item) => !aps.some((ap) => ap.id === item.radioParentHostId));
+  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تجهیزات</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">اطلاعات هر رادیو همان رکورد IP است و دوباره ثبت نمی‌شود.</div></div><div class="head-actions"><div class="quick-ip"><input id="radioQuickIp" class="ltr mono" placeholder="192.168.1.11"><button id="radioQuickOpen" class="btn primary">ثبت یا نمایش سریع IP</button></div></div></div><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(aps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(stations.length)}</div></div><div class="stat"><div class="label">بدون AP مشخص</div><div class="value">${formatNumber(orphans.length)}</div></div></section><section class="radio-grid">${apCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>${orphans.length ? `<section class="panel orphan-panel"><div class="section-title"><h3>Stationهای بدون AP مشخص</h3></div><div class="radio-children orphan-list">${orphans.map(stationCard).join("")}</div></section>` : ""}`;
+  $("radioQuickOpen").addEventListener("click", () => quickOpenIp($("radioQuickIp").value));
+  $("radioQuickIp").addEventListener("keydown", (event) => { if (event.key === "Enter") quickOpenIp(event.currentTarget.value); });
+  page.querySelectorAll(".open-inventory-host").forEach((node) => node.addEventListener("click", () => openInventoryItem(state.inventory.find((item) => item.id === node.dataset.id))));
+  page.querySelectorAll(".radio-tools").forEach((node) => node.addEventListener("click", (event) => {
+    const item = state.inventory.find((entry) => entry.id === node.dataset.id);
+    if (item) openToolMenu(event, item.ip);
+  }));
+}
+
+async function openTopologyPage(force = false) {
+  try {
+    const [mapsResult] = await Promise.all([request("/api/maps"), ensureInventory(force)]);
+    state.maps = mapsResult.items || [];
+    if (!state.maps.some((item) => item.id === state.currentMapId)) state.currentMapId = state.maps[0]?.id || null;
+    state.mapData = state.currentMapId ? await request(`/api/maps/${encodeURIComponent(state.currentMapId)}/data`) : null;
+    state.view = "topology";
+    state.currentSpaceId = null;
+    state.data = null;
+    state.linkSelection = [];
+    updateSelectors();
+    renderTopology();
+  } catch (error) { toast(error.message); }
+}
+
+function topologyIcon(type, radioMode) {
+  if (radioMode === "ap") return "AP";
+  if (radioMode === "station") return "ST";
+  if (type === "روتر") return "R";
+  if (type === "سوئیچ") return "SW";
+  if (type === "فایروال") return "FW";
+  if (type === "سرور" || type === "ماشین مجازی") return "SRV";
+  return "IP";
+}
+
+function renderTopology() {
+  const map = state.mapData?.map;
+  const canEditMap = Boolean(map && canManageCompany(map.companyId));
+  const nodes = state.mapData?.nodes || [];
+  const links = state.mapData?.links || [];
+  const nodeMap = new Map(nodes.map((item) => [item.id, item]));
+  const lines = links.map((link) => {
+    const from = nodeMap.get(link.fromNodeId); const to = nodeMap.get(link.toNodeId);
+    if (!from || !to) return "";
+    const x1 = from.x + from.width / 2; const y1 = from.y + from.height / 2; const x2 = to.x + to.width / 2; const y2 = to.y + to.height / 2;
+    const label = link.label || [link.fromPortName, link.toPortName].filter(Boolean).join(" ↔ ") || link.speed || link.medium;
+    return `<g class="topology-link-group" data-id="${escapeHtml(link.id)}"><line class="topology-link" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeHtml(link.color)}"></line><text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 7}">${escapeHtml(label)}</text></g>`;
+  }).join("");
+  const cards = nodes.map((node) => `<article class="topology-node" data-id="${escapeHtml(node.id)}" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><button class="node-drag" type="button" title="جابه‌جایی">⠿</button><button class="node-main node-open" data-id="${escapeHtml(node.id)}"><span class="node-icon">${topologyIcon(node.type, node.radioMode)}</span><span><b>${escapeHtml(node.name || node.ip)}</b><small class="mono ltr">${escapeHtml(node.ip)}</small></span></button><div class="node-actions"><button class="node-connect" data-id="${escapeHtml(node.id)}" title="اتصال">↗</button>${canEditMap ? `<button class="node-link" data-id="${escapeHtml(node.id)}" title="ساخت لینک">⌁</button><button class="node-remove" data-id="${escapeHtml(node.id)}" title="حذف از نقشه">×</button>` : ""}</div></article>`).join("");
+  const mapOptions = state.maps.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === state.currentMapId ? "selected" : ""}>${escapeHtml(item.name)} — ${escapeHtml(item.companyName || "")}</option>`).join("");
+  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تصویری شبکه</div><h2>نقشه اتصال تجهیزات و پورت‌ها</h2><div class="subtitle">هر گره به همان IP و دستگاه ثبت‌شده در سامانه متصل است.</div></div><div class="head-actions">${state.maps.length ? `<select id="mapSelect" class="map-select">${mapOptions}</select>` : ""}${(state.bootstrap.fullCompanyIds || []).length ? `<button id="addMapButton" class="btn">نقشه جدید</button>` : ""}${canEditMap ? `<button id="editMapButton" class="btn">ویرایش نقشه</button><button id="addMapNodeButton" class="btn primary">افزودن تجهیز</button><button id="deleteMapButton" class="btn danger">حذف نقشه</button>` : ""}</div></div>${map ? `<section class="panel topology-panel"><div class="topology-toolbar"><div><b>${escapeHtml(map.name)}</b><span>${escapeHtml(map.description || map.companyName || "")}</span></div><div class="legend"><span><i class="dot used"></i>برای اتصال، دکمه زنجیر دو تجهیز را بزنید.</span></div></div><div class="topology-scroll"><div class="topology-canvas"><svg class="topology-svg" width="1800" height="900">${lines}</svg>${cards}</div></div></section>` : `<section class="panel empty-state">هنوز نقشه‌ای ساخته نشده است.${(state.bootstrap.fullCompanyIds || []).length ? " با دکمه «نقشه جدید» شروع کنید." : ""}</section>`}`;
+  $("mapSelect")?.addEventListener("change", async (event) => { state.currentMapId = event.target.value; state.mapData = await request(`/api/maps/${encodeURIComponent(state.currentMapId)}/data`); renderTopology(); });
+  $("addMapButton")?.addEventListener("click", () => openMapDialog());
+  $("editMapButton")?.addEventListener("click", () => openMapDialog(map));
+  $("addMapNodeButton")?.addEventListener("click", openMapNodeDialog);
+  $("deleteMapButton")?.addEventListener("click", async () => {
+    if (!confirm(`نقشه «${map.name}» حذف شود؟ اطلاعات IP و تجهیزات حذف نمی‌شود.`)) return;
+    try { await request(`/api/maps/${encodeURIComponent(map.id)}`, { method: "DELETE" }); state.currentMapId = null; await openTopologyPage(true); toast("نقشه حذف شد."); } catch (error) { toast(error.message); }
+  });
+  page.querySelectorAll(".node-open").forEach((button) => button.addEventListener("click", () => {
+    const node = nodeMap.get(button.dataset.id); openInventoryItem(state.inventory.find((item) => item.id === node?.hostId));
+  }));
+  page.querySelectorAll(".node-connect").forEach((button) => button.addEventListener("click", (event) => {
+    const node = nodeMap.get(button.dataset.id); if (node) openToolMenu(event, node.ip);
+  }));
+  page.querySelectorAll(".node-link").forEach((button) => button.addEventListener("click", () => {
+    if (!state.linkSelection.includes(button.dataset.id)) state.linkSelection.push(button.dataset.id);
+    button.closest(".topology-node").classList.add("link-selected");
+    if (state.linkSelection.length === 2) openMapLinkDialog();
+    else toast("حالا دکمه اتصال تجهیز دوم را انتخاب کنید.");
+  }));
+  page.querySelectorAll(".node-remove").forEach((button) => button.addEventListener("click", async () => {
+    if (!confirm("این تجهیز از نقشه حذف شود؟ رکورد IP باقی می‌ماند.")) return;
+    try { await request(`/api/maps/${encodeURIComponent(map.id)}/nodes/${encodeURIComponent(button.dataset.id)}`, { method: "DELETE" }); await openTopologyPage(true); } catch (error) { toast(error.message); }
+  }));
+  page.querySelectorAll(".topology-link-group").forEach((group) => group.addEventListener("click", () => {
+    if (!canEditMap) return;
+    openMapLinkDialog(links.find((item) => item.id === group.dataset.id));
+  }));
+  enableTopologyDrag(map);
+}
+
+function enableTopologyDrag(map) {
+  if (!map || !canManageCompany(map.companyId)) return;
+  page.querySelectorAll(".topology-node").forEach((node) => {
+    const handle = node.querySelector(".node-drag");
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      const startX = event.clientX; const startY = event.clientY; const originX = parseInt(node.style.left, 10); const originY = parseInt(node.style.top, 10);
+      handle.setPointerCapture(event.pointerId); node.classList.add("dragging");
+      const move = (moveEvent) => { node.style.left = `${Math.max(0, originX + moveEvent.clientX - startX)}px`; node.style.top = `${Math.max(0, originY + moveEvent.clientY - startY)}px`; };
+      const up = async () => {
+        handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); node.classList.remove("dragging");
+        try { await request(`/api/maps/${encodeURIComponent(map.id)}/nodes/${encodeURIComponent(node.dataset.id)}`, { method: "PUT", body: { x: parseInt(node.style.left, 10), y: parseInt(node.style.top, 10) } }); state.mapData = await request(`/api/maps/${encodeURIComponent(map.id)}/data`); renderTopology(); } catch (error) { toast(error.message); }
+      };
+      handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
+    });
+  });
+}
+
+function openMapDialog(item = null) {
+  $("mapForm").reset(); $("mapId").value = item?.id || "";
+  const allowed = new Set(state.bootstrap.fullCompanyIds || []);
+  $("mapCompany").innerHTML = state.bootstrap.companies.filter((company) => allowed.has(company.id)).map((company) => `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`).join("");
+  $("mapCompany").value = item?.companyId || state.currentCompanyId || state.bootstrap.companies[0]?.id || "";
+  $("mapCompany").disabled = Boolean(item); $("mapName").value = item?.name || ""; $("mapDescription").value = item?.description || ""; $("mapDialog").showModal();
+}
+
+function openMapNodeDialog() {
+  if (!state.mapData?.map) return;
+  const existing = new Set(state.mapData.nodes.map((item) => item.hostId));
+  const items = state.inventory.filter((item) => item.companyId === state.mapData.map.companyId && !existing.has(item.id));
+  $("mapNodeHost").innerHTML = items.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ip)} — ${escapeHtml(item.type || "تجهیز")}</option>`).join("");
+  if (!items.length) return toast("همه تجهیزات این شرکت روی نقشه قرار گرفته‌اند یا هنوز تجهیزی ثبت نشده است.");
+  $("mapNodeDialog").showModal();
+}
+
+function openMapLinkDialog(existing = null) {
+  if (existing) state.linkSelection = [existing.fromNodeId, existing.toNodeId];
+  const [fromNode, toNode] = state.linkSelection.map((id) => state.mapData.nodes.find((item) => item.id === id));
+  if (!fromNode || !toNode) { state.linkSelection = []; return; }
+  const fromHost = state.inventory.find((item) => item.id === fromNode.hostId); const toHost = state.inventory.find((item) => item.id === toNode.hostId);
+  const options = (ports) => `<option value="">بدون انتخاب</option>${(ports || []).map((port) => `<option value="${escapeHtml(port.id)}">${escapeHtml(port.name)}${port.description ? ` — ${escapeHtml(port.description)}` : ""}</option>`).join("")}`;
+  $("mapLinkTitle").textContent = `${fromNode.name || fromNode.ip} ↔ ${toNode.name || toNode.ip}`;
+  $("mapFromPort").innerHTML = options(fromHost?.devicePorts); $("mapToPort").innerHTML = options(toHost?.devicePorts);
+  $("mapLinkForm").reset(); $("mapLinkId").value = existing?.id || ""; $("mapFromPort").value = existing?.fromPortId || ""; $("mapToPort").value = existing?.toPortId || ""; $("mapLinkMedium").value = existing?.medium || "ethernet"; $("mapLinkSpeed").value = existing?.speed || ""; $("mapLinkVlan").value = existing?.vlan || ""; $("mapLinkLabel").value = existing?.label || ""; $("mapLinkColor").value = existing?.color || "#64748b"; $("deleteMapLink").classList.toggle("hidden", !existing); $("mapLinkDialog").showModal();
+}
+
+async function refreshBackups() {
+  const result = await request("/api/backups");
+  $("backupPath").textContent = result.path;
+  $("backupsList").innerHTML = (result.items || []).map((item) => `<div class="backup-row"><div><b class="ltr mono">${escapeHtml(item.name)}</b><small>${new Date(item.createdAt).toLocaleString("fa-IR")} — ${formatNumber(Math.ceil(item.size / 1024))} KB</small></div><div class="row-actions"><a class="btn sm" href="/api/backups/${encodeURIComponent(item.name)}/download">دانلود</a><button class="btn sm danger delete-backup" data-name="${escapeHtml(item.name)}">حذف</button></div></div>`).join("") || `<div class="empty-state">هنوز فایل پشتیبانی وجود ندارد.</div>`;
+  $("backupsList").querySelectorAll(".delete-backup").forEach((node) => node.addEventListener("click", async () => {
+    if (!confirm("این فایل پشتیبان حذف شود؟")) return;
+    try { await request(`/api/backups/${encodeURIComponent(node.dataset.name)}`, { method: "DELETE" }); await refreshBackups(); } catch (error) { toast(error.message); }
+  }));
+}
+
+async function openBackupsDialog() {
+  $("backupsDialog").showModal();
+  try { await refreshBackups(); } catch (error) { toast(error.message); }
 }
 
 function openSettingsDialog() {
@@ -639,6 +990,9 @@ $("loginForm").addEventListener("submit", async (event) => {
 
 $("logoutButton").addEventListener("click", async () => { await request("/api/auth/logout", { method: "POST" }); state.events?.close(); state.bootstrap = null; state.data = null; setLoginVisible(true); });
 $("homeButton").addEventListener("click", renderCompanies);
+$("radiosButton").addEventListener("click", () => openRadiosPage(true));
+$("topologyButton").addEventListener("click", () => openTopologyPage(true));
+$("backupsButton").addEventListener("click", openBackupsDialog);
 $("companySelect").addEventListener("change", (event) => { state.currentCompanyId = event.target.value; localStorage.setItem("ems-company", state.currentCompanyId); renderCompanies(); });
 $("spaceSelect").addEventListener("change", (event) => event.target.value ? loadSpace(event.target.value) : renderCompanies());
 $("searchInput").addEventListener("input", (event) => doSearch(event.target.value));
@@ -676,7 +1030,14 @@ $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const ports = {};
   $("hostPorts").querySelectorAll(".host-port").forEach((node) => { if (node.value !== "") ports[node.dataset.tool] = Number(node.value); });
-  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, password: $("hostPassword").value, clearPassword: $("clearHostPassword").checked, owner: $("hostOwner").value, location: $("hostLocation").value, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, ports } }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, password: $("hostPassword").value, clearPassword: $("clearHostPassword").checked, owner: $("hostOwner").value, location: $("hostLocation").value, vendor: $("hostVendor").value, model: $("hostModel").value, serial: $("hostSerial").value, firmware: $("hostFirmware").value, radioMode: $("hostRadioMode").value, ssid: $("hostSsid").value, frequency: $("hostFrequency").value, channel: $("hostChannel").value, signal: $("hostSignal").value, radioParentHostId: $("hostRadioParent").value || null, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, ports, devicePorts: collectDevicePorts() } }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
+});
+
+$("addDevicePort").addEventListener("click", () => appendDevicePort());
+$("hostRadioMode").addEventListener("change", () => updateRadioFields($("hostRadioParent").value));
+$("hostRadioParent").addEventListener("change", () => {
+  const parent = state.inventory.find((item) => item.id === $("hostRadioParent").value);
+  if (parent?.ssid) $("hostSsid").value = parent.ssid;
 });
 
 $("revealHostPassword").addEventListener("click", async () => {
@@ -692,11 +1053,11 @@ $("deleteHostButton").addEventListener("click", async () => {
   try { await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}`, { method: "DELETE" }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP حذف شد."); } catch (error) { toast(error.message); }
 });
 
-$("userRole").addEventListener("change", () => renderCompanyAccess([...$("companyAccessList").querySelectorAll("input:checked")].map((node) => node.value)));
+$("userRole").addEventListener("change", () => renderCompanyAccess([...$("companyAccessList").querySelectorAll("input:checked")].map((node) => node.value), [...$("spaceAccessList").querySelectorAll("input:checked")].map((node) => node.value)));
 $("cancelUserEdit").addEventListener("click", resetUserForm);
 $("userForm").addEventListener("submit", async (event) => {
-  event.preventDefault(); const id = $("userId").value; const companyIds = [...$("companyAccessList").querySelectorAll("input:checked")].map((node) => node.value);
-  const body = { username: $("userUsername").value, displayName: $("userDisplayName").value, password: $("userPassword").value, role: $("userRole").value, active: $("userActive").checked, companyIds };
+  event.preventDefault(); const id = $("userId").value; const companyIds = [...$("companyAccessList").querySelectorAll("input:checked")].map((node) => node.value); const spaceIds = [...$("spaceAccessList").querySelectorAll("input:checked:not(:disabled)")].map((node) => node.value);
+  const body = { username: $("userUsername").value, displayName: $("userDisplayName").value, password: $("userPassword").value, role: $("userRole").value, active: $("userActive").checked, companyIds, spaceIds };
   try { await request(id ? `/api/users/${encodeURIComponent(id)}` : "/api/users", { method: id ? "PUT" : "POST", body }); resetUserForm(); await refreshUsers(); toast("کاربر ذخیره شد."); } catch (error) { toast(error.message); }
 });
 
@@ -705,6 +1066,46 @@ $("settingsForm").addEventListener("submit", async (event) => {
   const tools = [...$("toolsSettings").querySelectorAll(".tool-setting")].map((node) => ({ tool: node.dataset.tool, label: node.querySelector(".tool-label").value, defaultPort: Number(node.querySelector(".tool-port").value), color: node.querySelector(".tool-color").value }));
   try { await request("/api/tools", { method: "PUT", body: { tools } }); $("settingsDialog").close(); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارها ذخیره شد."); } catch (error) { toast(error.message); }
 });
+
+$("createBackupButton").addEventListener("click", async () => {
+  const button = $("createBackupButton"); button.disabled = true; button.textContent = "در حال ساخت…";
+  try { await request("/api/backups", { method: "POST" }); await refreshBackups(); toast("فایل پشتیبان ساخته شد."); }
+  catch (error) { toast(error.message); }
+  finally { button.disabled = false; button.textContent = "ساخت پشتیبان جدید"; }
+});
+
+$("mapForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); const id = $("mapId").value;
+  try {
+    const result = await request(id ? `/api/maps/${encodeURIComponent(id)}` : "/api/maps", { method: id ? "PUT" : "POST", body: { companyId: $("mapCompany").value, name: $("mapName").value, description: $("mapDescription").value } });
+    $("mapDialog").close(); state.currentMapId = id || result.id; await openTopologyPage(true); toast("نقشه ذخیره شد.");
+  } catch (error) { toast(error.message); }
+});
+
+$("mapNodeForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const offset = state.mapData.nodes.length * 35;
+    await request(`/api/maps/${encodeURIComponent(state.currentMapId)}/nodes`, { method: "POST", body: { hostId: $("mapNodeHost").value, x: 80 + (offset % 900), y: 90 + (offset % 500) } });
+    $("mapNodeDialog").close(); await openTopologyPage(true); toast("تجهیز به نقشه اضافه شد.");
+  } catch (error) { toast(error.message); }
+});
+
+$("mapLinkForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); const [fromNodeId, toNodeId] = state.linkSelection; const id = $("mapLinkId").value;
+  try {
+    await request(id ? `/api/maps/${encodeURIComponent(state.currentMapId)}/links/${encodeURIComponent(id)}` : `/api/maps/${encodeURIComponent(state.currentMapId)}/links`, { method: id ? "PUT" : "POST", body: { fromNodeId, toNodeId, fromPortId: $("mapFromPort").value || null, toPortId: $("mapToPort").value || null, medium: $("mapLinkMedium").value, speed: $("mapLinkSpeed").value, vlan: $("mapLinkVlan").value, color: $("mapLinkColor").value, label: $("mapLinkLabel").value } });
+    $("mapLinkDialog").close(); state.linkSelection = []; await openTopologyPage(true); toast("اتصال ثبت شد.");
+  } catch (error) { toast(error.message); }
+});
+
+$("deleteMapLink").addEventListener("click", async () => {
+  const id = $("mapLinkId").value;
+  if (!id || !confirm("این اتصال از نقشه حذف شود؟")) return;
+  try { await request(`/api/maps/${encodeURIComponent(state.currentMapId)}/links/${encodeURIComponent(id)}`, { method: "DELETE" }); $("mapLinkDialog").close(); state.linkSelection = []; await openTopologyPage(true); toast("اتصال حذف شد."); } catch (error) { toast(error.message); }
+});
+
+$("mapLinkDialog").addEventListener("close", () => { if (!$("mapLinkDialog").open) state.linkSelection = []; });
 
 boot();
 

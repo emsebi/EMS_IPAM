@@ -38,9 +38,11 @@ export function createDatabase(connectionString) {
 
     const tools = [
       ["VNC", "VNC", 5800, "#d94b5b"],
-      ["MIK", "Winbox", 9191, "#3478d4"],
-      ["RDP", "Remote Desktop", 3388, "#2fa36f"],
-      ["SSH", "PuTTY", 0, "#e48a2d"],
+      ["MIK", "WinBox", 8291, "#3478d4"],
+      ["RDP", "Remote Desktop", 3389, "#2fa36f"],
+      ["SSH", "SSH Terminal", 22, "#e48a2d"],
+      ["HTTP", "Web HTTP", 80, "#64748b"],
+      ["HTTPS", "Web HTTPS", 443, "#2b9ca8"],
     ];
     for (const tool of tools) {
       await pool.query(

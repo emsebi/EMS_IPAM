@@ -15,5 +15,5 @@ $commandKey = Join-Path $root 'shell\open\command'
 New-Item -Path $commandKey -Force | Out-Null
 Set-Item -Path $commandKey -Value $command
 
-Write-Host 'EMS Client Pack نصب شد.' -ForegroundColor Green
+Write-Host 'EMS Client Pack installed successfully.' -ForegroundColor Green
 Write-Host "تنظیم مسیر ابزارها: $(Join-Path $target 'ems-client.json')"

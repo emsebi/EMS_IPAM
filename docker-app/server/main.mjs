@@ -1,7 +1,10 @@
 import http from "node:http";
 import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { createDatabase } from "./db.mjs";
 import {
@@ -31,10 +34,17 @@ const ADMIN_USERNAME = process.env.EMS_ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
-const APP_VERSION = "0.2.0";
+const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
+const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
+const APP_VERSION = "0.3.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
+const execFileAsync = promisify(execFile);
+
+function cleanTextEnvironment(value) {
+  return String(value ?? "").trim().slice(0, 500);
+}
 
 if (!DATABASE_URL && !process.env.PGHOST) throw new Error("تنظیمات اتصال PostgreSQL تعریف نشده است.");
 if (ADMIN_PASSWORD.length < 12) throw new Error("EMS_ADMIN_PASSWORD باید حداقل ۱۲ کاراکتر باشد.");
@@ -42,6 +52,7 @@ const secretBox = createSecretBox(SECRET_KEY);
 
 const database = createDatabase(DATABASE_URL);
 await database.initialize({ adminUsername: ADMIN_USERNAME, adminPassword: ADMIN_PASSWORD });
+await fs.mkdir(BACKUP_DIR, { recursive: true });
 const { pool } = database;
 const eventClients = new Set();
 const loginAttempts = new Map();
@@ -94,11 +105,36 @@ function safeRole(value) {
 function normalizePorts(value) {
   const result = {};
   const input = value && typeof value === "object" ? value : {};
-  for (const tool of ["VNC", "MIK", "RDP", "SSH"]) {
+  for (const tool of ["VNC", "MIK", "RDP", "SSH", "HTTP", "HTTPS"]) {
     const port = validatePort(input[tool]);
     if (port !== null) result[tool] = port;
   }
   return result;
+}
+
+function normalizeConnections(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((item) => ({
+    type: cleanText(item?.type, 20).toUpperCase(),
+    label: cleanText(item?.label, 80),
+    port: validatePort(item?.port),
+    url: cleanText(item?.url, 500),
+  })).filter((item) => ["SSH", "WINBOX", "HTTP", "HTTPS", "RDP", "VNC", "TELNET"].includes(item.type));
+}
+
+function normalizeDevicePorts(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.slice(0, 256).map((item) => ({
+    id: cleanText(item?.id, 80) || crypto.randomUUID(),
+    name: cleanText(item?.name, 80),
+    description: cleanText(item?.description, 240),
+    portType: cleanText(item?.portType, 40) || "ethernet",
+    speed: cleanText(item?.speed, 40),
+    vlanMode: cleanText(item?.vlanMode, 40),
+    vlan: cleanText(item?.vlan, 80),
+    enabled: item?.enabled !== false,
+  })).filter((item) => item.name && !seen.has(item.name) && seen.add(item.name));
 }
 
 function requesterIp(req) {
@@ -134,8 +170,32 @@ function requireAdmin(user) {
 async function canAccessCompany(user, companyId) {
   if (user.role === "admin") return true;
   const found = await pool.query(
+    `SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2
+     UNION ALL
+     SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
+      WHERE usa.user_id=$1 AND s.company_id=$2 LIMIT 1`,
+    [user.id, companyId],
+  );
+  return found.rowCount > 0;
+}
+
+async function canManageCompany(user, companyId) {
+  if (user.role === "admin") return true;
+  const found = await pool.query(
     "SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2",
     [user.id, companyId],
+  );
+  return found.rowCount > 0;
+}
+
+async function canAccessSpace(user, spaceId) {
+  if (user.role === "admin") return true;
+  const found = await pool.query(
+    `SELECT 1 FROM address_spaces s
+      LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
+      LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
+     WHERE s.id=$2 AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)`,
+    [user.id, spaceId],
   );
   return found.rowCount > 0;
 }
@@ -148,7 +208,7 @@ async function getSpaceForUser(user, spaceId) {
     [spaceId],
   );
   const space = found.rows[0];
-  if (!space || !(await canAccessCompany(user, space.companyId))) {
+  if (!space || !(await canAccessSpace(user, space.id))) {
     throw Object.assign(new Error("فضای آدرس پیدا نشد یا دسترسی ندارید."), { status: 404 });
   }
   return space;
@@ -184,35 +244,52 @@ function broadcast(event) {
 async function listBootstrap(user) {
   const companyWhere = user.role === "admin"
     ? { sql: "", params: [] }
-    : { sql: "JOIN user_company_access a ON a.company_id=c.id AND a.user_id=$1", params: [user.id] };
+    : { sql: `WHERE EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
+                    OR EXISTS (SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
+                                WHERE s.company_id=c.id AND usa.user_id=$1)`, params: [user.id] };
   const companies = await pool.query(
     `SELECT DISTINCT c.id,c.name,c.description FROM companies c ${companyWhere.sql} ORDER BY c.name`,
     companyWhere.params,
   );
   const ids = companies.rows.map((item) => item.id);
   const spaces = ids.length
-    ? await pool.query(
-      `SELECT id,company_id AS "companyId",name,cidr,color,description
-         FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY company_id,cidr`,
-      [ids],
-    )
+    ? user.role === "admin"
+      ? await pool.query(
+        `SELECT id,company_id AS "companyId",name,cidr,color,description
+           FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY company_id,cidr`,
+        [ids],
+      )
+      : await pool.query(
+        `SELECT DISTINCT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description
+           FROM address_spaces s
+           LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
+           LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
+          WHERE s.company_id=ANY($2::text[]) AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)
+          ORDER BY s.company_id,s.cidr`,
+        [user.id, ids],
+      )
     : { rows: [] };
   const tools = await pool.query(
     `SELECT tool,label,default_port AS "defaultPort",color FROM tool_defaults ORDER BY tool`,
   );
-  return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows };
+  const fullCompanyIds = user.role === "admin"
+    ? ids
+    : (await pool.query("SELECT company_id AS id FROM user_company_access WHERE user_id=$1", [user.id])).rows.map((item) => item.id);
+  return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds };
 }
 
 async function spaceData(user, spaceId) {
   const space = await getSpaceForUser(user, spaceId);
-  const [prefixes, hosts, pings] = await Promise.all([
+  const [prefixes, hosts, pings, devicePorts] = await Promise.all([
     pool.query(
       `SELECT id,cidr,name,status,role,vlan,gateway,color,description,
               updated_at AS "updatedAt" FROM prefixes WHERE space_id=$1 ORDER BY cidr`,
       [spaceId],
     ),
     pool.query(
-      `SELECT id,ip,name,status,type,os,mac,vlan,username,owner,location,
+      `SELECT id,ip,name,status,type,os,mac,vlan,username,owner,location,vendor,model,serial,firmware,
+              radio_mode AS "radioMode",ssid,frequency,channel,signal,
+              radio_parent_host_id AS "radioParentHostId",connection_methods AS "connectionMethods",
               secret_ref AS "secretRef",(secret_ciphertext <> '') AS "hasPassword",
               notes,ports,updated_at AS "updatedAt"
          FROM hosts WHERE space_id=$1 ORDER BY ip`,
@@ -223,8 +300,19 @@ async function spaceData(user, spaceId) {
          FROM ping_results WHERE space_id=$1`,
       [spaceId],
     ),
+    pool.query(
+      `SELECT p.id,p.host_id AS "hostId",p.name,p.description,p.port_type AS "portType",p.speed,
+              p.vlan_mode AS "vlanMode",p.vlan,p.enabled
+         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.space_id=$1 ORDER BY p.name`,
+      [spaceId],
+    ),
   ]);
-  return { ok: true, space, prefixes: prefixes.rows, hosts: hosts.rows, pings: pings.rows };
+  const portsByHost = new Map();
+  for (const item of devicePorts.rows) {
+    if (!portsByHost.has(item.hostId)) portsByHost.set(item.hostId, []);
+    portsByHost.get(item.hostId).push(item);
+  }
+  return { ok: true, space, prefixes: prefixes.rows, hosts: hosts.rows.map((item) => ({ ...item, devicePorts: portsByHost.get(item.id) || [] })), pings: pings.rows };
 }
 
 async function storePingResults(spaceId, results) {
@@ -245,6 +333,138 @@ async function storePingResults(spaceId, results) {
        last_seen_at=CASE WHEN excluded.online THEN excluded.checked_at ELSE ping_results.last_seen_at END`,
     params,
   );
+}
+
+async function accessibleSpaceIds(user) {
+  if (user.role === "admin") return (await pool.query("SELECT id FROM address_spaces")).rows.map((item) => item.id);
+  return (await pool.query(
+    `SELECT DISTINCT s.id FROM address_spaces s
+      LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
+      LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
+     WHERE uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL`,
+    [user.id],
+  )).rows.map((item) => item.id);
+}
+
+async function inventoryData(user) {
+  const spaceIds = await accessibleSpaceIds(user);
+  if (!spaceIds.length) return [];
+  const [hosts, ports] = await Promise.all([
+    pool.query(
+      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.status,h.type,h.os,h.mac,h.vlan,h.username,h.owner,h.location,
+              h.vendor,h.model,h.serial,h.firmware,h.radio_mode AS "radioMode",h.ssid,h.frequency,h.channel,h.signal,
+              h.radio_parent_host_id AS "radioParentHostId",h.connection_methods AS "connectionMethods",
+              (h.secret_ciphertext <> '') AS "hasPassword",s.name AS "spaceName",s.cidr AS "spaceCidr",
+              c.id AS "companyId",c.name AS "companyName"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+        WHERE h.space_id=ANY($1::text[]) ORDER BY c.name,s.cidr,h.ip`,
+      [spaceIds],
+    ),
+    pool.query(
+      `SELECT p.id,p.host_id AS "hostId",p.name,p.description,p.port_type AS "portType",p.speed,
+              p.vlan_mode AS "vlanMode",p.vlan,p.enabled
+         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.space_id=ANY($1::text[]) ORDER BY p.name`,
+      [spaceIds],
+    ),
+  ]);
+  const portsByHost = new Map();
+  for (const item of ports.rows) {
+    if (!portsByHost.has(item.hostId)) portsByHost.set(item.hostId, []);
+    portsByHost.get(item.hostId).push(item);
+  }
+  return hosts.rows.map((item) => ({ ...item, devicePorts: portsByHost.get(item.id) || [] }));
+}
+
+async function searchData(user, query) {
+  const q = cleanText(query, 160);
+  if (!q) return [];
+  const spaces = (await listBootstrap(user)).spaces;
+  const spaceIds = spaces.map((item) => item.id);
+  if (!spaceIds.length) return [];
+  const items = [];
+  const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
+  const [hosts, prefixes] = await Promise.all([
+    pool.query(
+      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id
+        WHERE h.space_id=ANY($1::text[]) AND (h.ip ILIKE $2 OR h.name ILIKE $2 OR h.mac ILIKE $2 OR h.owner ILIKE $2 OR h.notes ILIKE $2)
+        ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip LIMIT 30`,
+      [spaceIds, `%${q}%`, exactIp || ""],
+    ),
+    pool.query(
+      `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
+         FROM prefixes p JOIN address_spaces s ON s.id=p.space_id
+        WHERE p.space_id=ANY($1::text[]) AND (p.cidr ILIKE $2 OR p.name ILIKE $2 OR p.role ILIKE $2 OR p.description ILIKE $2)
+        ORDER BY p.cidr LIMIT 20`,
+      [spaceIds, `%${q}%`],
+    ),
+  ]);
+  items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
+  items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
+  if (exactIp && !hosts.rows.some((item) => item.ip === exactIp)) {
+    const address = parseCidr(`${exactIp}/32`);
+    const containing = spaces.map((item) => ({ item, info: parseCidr(item.cidr) }))
+      .filter(({ info }) => info && address && contains(info, address))
+      .sort((a, b) => b.info.prefix - a.info.prefix)[0]?.item;
+    if (containing) items.unshift({ kind: "free-ip", ip: exactIp, spaceId: containing.id, spaceName: containing.name, spaceCidr: containing.cidr });
+  }
+  return items.slice(0, 40);
+}
+
+async function getMapForUser(user, mapId, { write = false } = {}) {
+  const result = await pool.query(
+    `SELECT m.id,m.company_id AS "companyId",m.name,m.description,c.name AS "companyName"
+       FROM topology_maps m LEFT JOIN companies c ON c.id=m.company_id WHERE m.id=$1`,
+    [mapId],
+  );
+  const map = result.rows[0];
+  const allowed = map && (map.companyId ? (write ? await canManageCompany(user, map.companyId) : await canAccessCompany(user, map.companyId)) : user.role === "admin");
+  if (!allowed) throw Object.assign(new Error("نقشه پیدا نشد یا دسترسی ندارید."), { status: 404 });
+  return map;
+}
+
+function backupFilename() {
+  return `ems-ipam-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}.tar.gz`;
+}
+
+function validBackupFilename(value) {
+  const name = path.basename(cleanText(value, 180));
+  if (!/^ems-ipam-[A-Za-z0-9TZ-]+\.tar\.gz$/.test(name)) throw Object.assign(new Error("نام فایل پشتیبان معتبر نیست."), { status: 400 });
+  return name;
+}
+
+async function createBackupFile() {
+  const filename = backupFilename();
+  const workDir = path.join(BACKUP_DIR, `.work-${crypto.randomUUID()}`);
+  const archivePath = path.join(BACKUP_DIR, filename);
+  await fs.mkdir(workDir, { recursive: true });
+  try {
+    await execFileAsync("pg_dump", ["--format=custom", "--file", path.join(workDir, "database.dump")], { env: process.env, timeout: 300_000 });
+    const metadata = [
+      `EMS_BACKUP_VERSION='1'`,
+      `EMS_APP_VERSION='${APP_VERSION}'`,
+      `EMS_CREATED_AT='${new Date().toISOString()}'`,
+      `EMS_SECRET_KEY='${SECRET_KEY}'`,
+      "",
+    ].join("\n");
+    await fs.writeFile(path.join(workDir, "metadata.env"), metadata, { mode: 0o600 });
+    await execFileAsync("tar", ["-czf", archivePath, "-C", workDir, "database.dump", "metadata.env"], { timeout: 300_000 });
+    await fs.chmod(archivePath, 0o600);
+    return filename;
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+}
+
+async function listBackupFiles() {
+  const entries = await fs.readdir(BACKUP_DIR, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^ems-ipam-.*\.tar\.gz$/.test(entry.name)) continue;
+    const stat = await fs.stat(path.join(BACKUP_DIR, entry.name));
+    files.push({ name: entry.name, size: stat.size, createdAt: stat.mtime.toISOString() });
+  }
+  return files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 async function api(req, res, url, user) {
@@ -284,6 +504,241 @@ async function api(req, res, url, user) {
   }
 
   if (req.method === "GET" && pathname === "/api/bootstrap") return json(res, 200, await listBootstrap(user));
+
+  if (req.method === "GET" && pathname === "/api/search") {
+    return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
+  }
+
+  if (req.method === "GET" && pathname === "/api/inventory") {
+    return json(res, 200, { ok: true, items: await inventoryData(user) });
+  }
+
+  if (req.method === "GET" && pathname === "/api/backups") {
+    requireAdmin(user);
+    return json(res, 200, { ok: true, path: BACKUP_DISPLAY_PATH, items: await listBackupFiles() });
+  }
+
+  if (req.method === "POST" && pathname === "/api/backups") {
+    requireAdmin(user);
+    const filename = await createBackupFile();
+    await audit(user, "create", "backup", filename);
+    return json(res, 201, { ok: true, filename });
+  }
+
+  const backupDownload = pathname.match(/^\/api\/backups\/([^/]+)\/download$/);
+  if (req.method === "GET" && backupDownload) {
+    requireAdmin(user);
+    const filename = validBackupFilename(decodeURIComponent(backupDownload[1]));
+    const filePath = path.join(BACKUP_DIR, filename);
+    const stat = await fs.stat(filePath).catch(() => null);
+    if (!stat?.isFile()) throw Object.assign(new Error("فایل پشتیبان پیدا نشد."), { status: 404 });
+    res.writeHead(200, {
+      "Content-Type": "application/gzip",
+      "Content-Length": stat.size,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    return createReadStream(filePath).pipe(res);
+  }
+
+  const backupDelete = pathname.match(/^\/api\/backups\/([^/]+)$/);
+  if (req.method === "DELETE" && backupDelete) {
+    requireAdmin(user);
+    const filename = validBackupFilename(decodeURIComponent(backupDelete[1]));
+    await fs.unlink(path.join(BACKUP_DIR, filename)).catch((error) => {
+      if (error.code === "ENOENT") throw Object.assign(new Error("فایل پشتیبان پیدا نشد."), { status: 404 });
+      throw error;
+    });
+    await audit(user, "delete", "backup", filename);
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "GET" && pathname === "/api/maps") {
+    const companyIds = (await listBootstrap(user)).companies.map((item) => item.id);
+    const maps = user.role === "admin"
+      ? await pool.query(`SELECT m.id,m.company_id AS "companyId",m.name,m.description,c.name AS "companyName"
+                            FROM topology_maps m LEFT JOIN companies c ON c.id=m.company_id ORDER BY m.name`)
+      : companyIds.length
+        ? await pool.query(`SELECT m.id,m.company_id AS "companyId",m.name,m.description,c.name AS "companyName"
+                              FROM topology_maps m LEFT JOIN companies c ON c.id=m.company_id
+                             WHERE m.company_id=ANY($1::text[]) ORDER BY m.name`, [companyIds])
+        : { rows: [] };
+    return json(res, 200, { ok: true, items: maps.rows });
+  }
+
+  if (req.method === "POST" && pathname === "/api/maps") {
+    requireWriter(user);
+    const body = await readBody(req);
+    const companyId = cleanText(body.companyId, 80);
+    if (!companyId || !(await canManageCompany(user, companyId))) throw Object.assign(new Error("برای ایجاد نقشه باید به کل شرکت دسترسی داشته باشید."), { status: 403 });
+    const name = cleanText(body.name, 120);
+    if (!name) throw new Error("نام نقشه الزامی است.");
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO topology_maps(id,company_id,name,description,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$5)`,
+      [id, companyId, name, cleanText(body.description, 1000), user.id],
+    );
+    await audit(user, "create", "topology_map", id, { companyId, detail: { name } });
+    broadcast({ type: "topology", companyId, entityId: id });
+    return json(res, 201, { ok: true, id });
+  }
+
+  const mapMutation = pathname.match(/^\/api\/maps\/([^/]+)$/);
+  if (mapMutation && req.method === "PUT") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapMutation[1], { write: true });
+    const body = await readBody(req);
+    const name = cleanText(body.name, 120);
+    if (!name) throw new Error("نام نقشه الزامی است.");
+    await pool.query("UPDATE topology_maps SET name=$1,description=$2,updated_by=$3,updated_at=now() WHERE id=$4", [name, cleanText(body.description, 1000), user.id, map.id]);
+    await audit(user, "update", "topology_map", map.id, { companyId: map.companyId, detail: { name } });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
+
+  if (mapMutation && req.method === "DELETE") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapMutation[1], { write: true });
+    await pool.query("DELETE FROM topology_maps WHERE id=$1", [map.id]);
+    await audit(user, "delete", "topology_map", map.id, { companyId: map.companyId, detail: { name: map.name } });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
+
+  const mapDataMatch = pathname.match(/^\/api\/maps\/([^/]+)\/data$/);
+  if (req.method === "GET" && mapDataMatch) {
+    const map = await getMapForUser(user, mapDataMatch[1]);
+    const spaceIds = await accessibleSpaceIds(user);
+    const nodes = spaceIds.length ? await pool.query(
+      `SELECT n.id,n.host_id AS "hostId",n.x,n.y,n.width,n.height,h.ip,h.name,h.type,h.status,h.vendor,h.model,
+              h.radio_mode AS "radioMode",h.ssid,s.id AS "spaceId",s.name AS "spaceName",s.cidr AS "spaceCidr"
+         FROM topology_nodes n JOIN hosts h ON h.id=n.host_id JOIN address_spaces s ON s.id=h.space_id
+        WHERE n.map_id=$1 AND h.space_id=ANY($2::text[]) ORDER BY h.name,h.ip`,
+      [map.id, spaceIds],
+    ) : { rows: [] };
+    const nodeIds = nodes.rows.map((item) => item.id);
+    const links = nodeIds.length ? await pool.query(
+      `SELECT l.id,l.from_node_id AS "fromNodeId",l.to_node_id AS "toNodeId",
+              l.from_port_id AS "fromPortId",l.to_port_id AS "toPortId",fp.name AS "fromPortName",tp.name AS "toPortName",
+              l.label,l.medium,l.speed,l.vlan,l.color,l.status,l.discovered_by AS "discoveredBy",l.confirmed
+         FROM topology_links l
+         LEFT JOIN device_ports fp ON fp.id=l.from_port_id LEFT JOIN device_ports tp ON tp.id=l.to_port_id
+        WHERE l.map_id=$1 AND l.from_node_id=ANY($2::text[]) AND l.to_node_id=ANY($2::text[]) ORDER BY l.created_at`,
+      [map.id, nodeIds],
+    ) : { rows: [] };
+    return json(res, 200, { ok: true, map, nodes: nodes.rows, links: links.rows });
+  }
+
+  const mapNodes = pathname.match(/^\/api\/maps\/([^/]+)\/nodes$/);
+  if (req.method === "POST" && mapNodes) {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapNodes[1], { write: true });
+    const body = await readBody(req);
+    const host = (await pool.query(
+      `SELECT h.id,h.space_id AS "spaceId",s.company_id AS "companyId" FROM hosts h JOIN address_spaces s ON s.id=h.space_id WHERE h.id=$1`,
+      [cleanText(body.hostId, 80)],
+    )).rows[0];
+    if (!host || host.companyId !== map.companyId || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("تجهیز انتخاب‌شده معتبر نیست."), { status: 404 });
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO topology_nodes(id,map_id,host_id,x,y) VALUES($1,$2,$3,$4,$5)`,
+      [id, map.id, host.id, Math.round(Number(body.x) || 80), Math.round(Number(body.y) || 80)],
+    );
+    await audit(user, "create", "topology_node", id, { companyId: map.companyId, spaceId: host.spaceId, detail: { hostId: host.id } });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 201, { ok: true, id });
+  }
+
+  const mapNodeMutation = pathname.match(/^\/api\/maps\/([^/]+)\/nodes\/([^/]+)$/);
+  if (mapNodeMutation && req.method === "PUT") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapNodeMutation[1], { write: true });
+    const body = await readBody(req);
+    const updated = await pool.query(
+      `UPDATE topology_nodes SET x=$1,y=$2,updated_at=now() WHERE id=$3 AND map_id=$4 RETURNING id`,
+      [Math.max(0, Math.round(Number(body.x) || 0)), Math.max(0, Math.round(Number(body.y) || 0)), mapNodeMutation[2], map.id],
+    );
+    if (!updated.rowCount) throw Object.assign(new Error("گره نقشه پیدا نشد."), { status: 404 });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
+
+  if (mapNodeMutation && req.method === "DELETE") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapNodeMutation[1], { write: true });
+    const removed = await pool.query("DELETE FROM topology_nodes WHERE id=$1 AND map_id=$2 RETURNING id", [mapNodeMutation[2], map.id]);
+    if (!removed.rowCount) throw Object.assign(new Error("گره نقشه پیدا نشد."), { status: 404 });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
+
+  const mapLinks = pathname.match(/^\/api\/maps\/([^/]+)\/links$/);
+  if (req.method === "POST" && mapLinks) {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapLinks[1], { write: true });
+    const body = await readBody(req);
+    const fromNodeId = cleanText(body.fromNodeId, 80);
+    const toNodeId = cleanText(body.toNodeId, 80);
+    if (!fromNodeId || !toNodeId || fromNodeId === toNodeId) throw new Error("دو تجهیز متفاوت را برای اتصال انتخاب کنید.");
+    const nodes = await pool.query("SELECT id,host_id AS \"hostId\" FROM topology_nodes WHERE map_id=$1 AND id=ANY($2::text[])", [map.id, [fromNodeId, toNodeId]]);
+    if (nodes.rowCount !== 2) throw Object.assign(new Error("گره‌های اتصال معتبر نیستند."), { status: 404 });
+    const nodeHosts = new Map(nodes.rows.map((item) => [item.id, item.hostId]));
+    const fromPortId = cleanText(body.fromPortId, 80) || null;
+    const toPortId = cleanText(body.toPortId, 80) || null;
+    for (const [portId, nodeId] of [[fromPortId, fromNodeId], [toPortId, toNodeId]]) {
+      if (!portId) continue;
+      const port = await pool.query("SELECT 1 FROM device_ports WHERE id=$1 AND host_id=$2", [portId, nodeHosts.get(nodeId)]);
+      if (!port.rowCount) throw new Error("پورت انتخاب‌شده متعلق به تجهیز نیست.");
+    }
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO topology_links(id,map_id,from_node_id,to_node_id,from_port_id,to_port_id,label,medium,speed,vlan,color,status,discovered_by,confirmed)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'manual',true)`,
+      [id, map.id, fromNodeId, toNodeId, fromPortId, toPortId, cleanText(body.label, 160), cleanText(body.medium, 40) || "ethernet", cleanText(body.speed, 40), cleanText(body.vlan, 80), validColor(body.color, "#64748b"), cleanText(body.status, 40) || "unknown"],
+    );
+    await audit(user, "create", "topology_link", id, { companyId: map.companyId, detail: { fromNodeId, toNodeId } });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 201, { ok: true, id });
+  }
+
+  const mapLinkMutation = pathname.match(/^\/api\/maps\/([^/]+)\/links\/([^/]+)$/);
+  if (mapLinkMutation && req.method === "PUT") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapLinkMutation[1], { write: true });
+    const body = await readBody(req);
+    const current = (await pool.query(
+      `SELECT l.id,fn.host_id AS "fromHostId",tn.host_id AS "toHostId"
+         FROM topology_links l JOIN topology_nodes fn ON fn.id=l.from_node_id JOIN topology_nodes tn ON tn.id=l.to_node_id
+        WHERE l.id=$1 AND l.map_id=$2`,
+      [mapLinkMutation[2], map.id],
+    )).rows[0];
+    if (!current) throw Object.assign(new Error("اتصال نقشه پیدا نشد."), { status: 404 });
+    const fromPortId = cleanText(body.fromPortId, 80) || null;
+    const toPortId = cleanText(body.toPortId, 80) || null;
+    for (const [portId, hostId] of [[fromPortId, current.fromHostId], [toPortId, current.toHostId]]) {
+      if (!portId) continue;
+      const port = await pool.query("SELECT 1 FROM device_ports WHERE id=$1 AND host_id=$2", [portId, hostId]);
+      if (!port.rowCount) throw new Error("پورت انتخاب‌شده متعلق به تجهیز نیست.");
+    }
+    await pool.query(
+      `UPDATE topology_links SET from_port_id=$1,to_port_id=$2,label=$3,medium=$4,speed=$5,vlan=$6,color=$7,status=$8,updated_at=now()
+        WHERE id=$9 AND map_id=$10`,
+      [fromPortId, toPortId, cleanText(body.label, 160), cleanText(body.medium, 40) || "ethernet", cleanText(body.speed, 40), cleanText(body.vlan, 80), validColor(body.color, "#64748b"), cleanText(body.status, 40) || "unknown", current.id, map.id],
+    );
+    await audit(user, "update", "topology_link", current.id, { companyId: map.companyId });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
+
+  if (mapLinkMutation && req.method === "DELETE") {
+    requireWriter(user);
+    const map = await getMapForUser(user, mapLinkMutation[1], { write: true });
+    const removed = await pool.query("DELETE FROM topology_links WHERE id=$1 AND map_id=$2 RETURNING id", [mapLinkMutation[2], map.id]);
+    if (!removed.rowCount) throw Object.assign(new Error("اتصال نقشه پیدا نشد."), { status: 404 });
+    broadcast({ type: "topology", companyId: map.companyId, entityId: map.id });
+    return json(res, 200, { ok: true });
+  }
 
   if (req.method === "GET" && pathname === "/api/events") {
     res.writeHead(200, {
@@ -356,7 +811,7 @@ async function api(req, res, url, user) {
   if (req.method === "POST" && pathname === "/api/spaces") {
     requireWriter(user);
     const body = await readBody(req);
-    if (!(await canAccessCompany(user, body.companyId))) throw Object.assign(new Error("به این شرکت دسترسی ندارید."), { status: 403 });
+    if (!(await canManageCompany(user, body.companyId))) throw Object.assign(new Error("برای ایجاد شبکه باید به کل شرکت دسترسی داشته باشید."), { status: 403 });
     const cidr = validateRootCidr(body.cidr).cidr;
     const name = cleanText(body.name, 120) || cidr;
     const id = crypto.randomUUID();
@@ -406,21 +861,32 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const space = await getSpaceForUser(user, body.spaceId);
     const cidr = validateChildCidr(body.cidr, space.cidr).cidr;
-    const id = cleanText(body.id, 80) || crypto.randomUUID();
+    const requestedId = cleanText(body.id, 80);
+    const id = requestedId || crypto.randomUUID();
     const values = [
       id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
       cleanText(body.gateway, 80), validColor(body.color), cleanText(body.description, 2000), user.id,
     ];
-    await pool.query(
-      `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
-       ON CONFLICT(id) DO UPDATE SET cidr=excluded.cidr,name=excluded.name,status=excluded.status,
-         role=excluded.role,vlan=excluded.vlan,gateway=excluded.gateway,color=excluded.color,
-         description=excluded.description,updated_by=excluded.updated_by,updated_at=now()`,
-      values,
-    );
-    await audit(user, body.id ? "update" : "create", "prefix", id, { companyId: space.companyId, spaceId: space.id, detail: { cidr } });
+    if (requestedId) {
+      const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1", [requestedId]);
+      if (!current.rowCount || current.rows[0].spaceId !== space.id) {
+        throw Object.assign(new Error("رنج پیدا نشد یا به این شبکه تعلق ندارد."), { status: 404 });
+      }
+      await pool.query(
+        `UPDATE prefixes SET cidr=$3,name=$4,status=$5,role=$6,vlan=$7,gateway=$8,color=$9,
+             description=$10,updated_by=$11,updated_at=now()
+          WHERE id=$1 AND space_id=$2`,
+        values,
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+        values,
+      );
+    }
+    await audit(user, requestedId ? "update" : "create", "prefix", id, { companyId: space.companyId, spaceId: space.id, detail: { cidr } });
     broadcast({ type: "prefix", companyId: space.companyId, spaceId: space.id, entityId: id });
     return json(res, 200, { ok: true, id });
   }
@@ -433,7 +899,7 @@ async function api(req, res, url, user) {
       [prefixDelete[1]],
     );
     const item = found.rows[0];
-    if (!item || !(await canAccessCompany(user, item.companyId))) throw Object.assign(new Error("رنج پیدا نشد."), { status: 404 });
+    if (!item || !(await canAccessSpace(user, item.spaceId))) throw Object.assign(new Error("رنج پیدا نشد."), { status: 404 });
     await pool.query("DELETE FROM prefixes WHERE id=$1", [item.id]);
     await audit(user, "delete", "prefix", item.id, { companyId: item.companyId, spaceId: item.spaceId, detail: { cidr: item.cidr } });
     broadcast({ type: "prefix", companyId: item.companyId, spaceId: item.spaceId, entityId: item.id });
@@ -445,30 +911,85 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const space = await getSpaceForUser(user, body.spaceId);
     const ip = validateHostIp(body.ip, space.cidr);
-    const id = cleanText(body.id, 80) || crypto.randomUUID();
-    const existing = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2", [space.id, ip]);
-    let secretCiphertext = existing.rows[0]?.secret || "";
+    const requestedId = cleanText(body.id, 80);
+    let current = null;
+    if (requestedId) {
+      current = (await pool.query(
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret FROM hosts WHERE id=$1",
+        [requestedId],
+      )).rows[0] || null;
+      if (!current || !(await canAccessSpace(user, current.spaceId))) {
+        throw Object.assign(new Error("اطلاعات IP پیدا نشد یا دسترسی ندارید."), { status: 404 });
+      }
+    } else {
+      current = (await pool.query(
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2",
+        [space.id, ip],
+      )).rows[0] || null;
+    }
+    const id = current?.id || crypto.randomUUID();
+    let secretCiphertext = current?.secret || "";
     if (body.clearPassword === true) secretCiphertext = "";
     else if (String(body.password || "")) secretCiphertext = secretBox.encrypt(String(body.password));
+    const radioMode = ["", "ap", "station"].includes(String(body.radioMode || "").toLowerCase()) ? String(body.radioMode || "").toLowerCase() : "";
+    let radioParentHostId = cleanText(body.radioParentHostId, 80) || null;
+    if (radioParentHostId) {
+      const parent = await pool.query(
+        `SELECT h.id,s.id AS "spaceId" FROM hosts h JOIN address_spaces s ON s.id=h.space_id
+          WHERE h.id=$1 AND h.radio_mode='ap'`,
+        [radioParentHostId],
+      );
+      if (!parent.rowCount || !(await canAccessSpace(user, parent.rows[0].spaceId))) throw Object.assign(new Error("رادیوی AP انتخاب‌شده پیدا نشد یا دسترسی ندارید."), { status: 404 });
+      if (parent.rows[0].id === id) throw new Error("یک رادیو نمی‌تواند والد خودش باشد.");
+    }
+    if (radioMode !== "station") radioParentHostId = null;
     const values = [
       id, space.id, ip, cleanText(body.name, 160), cleanText(body.status, 40) || "active",
       cleanText(body.type, 100), cleanText(body.os, 160), cleanText(body.mac, 32), cleanText(body.vlan, 40),
       cleanText(body.username, 120), cleanText(body.owner, 160), cleanText(body.location, 200),
       cleanText(body.secretRef, 500), secretCiphertext, cleanText(body.notes, 3000), JSON.stringify(normalizePorts(body.ports)), user.id,
+      cleanText(body.vendor, 100), cleanText(body.model, 120), cleanText(body.serial, 120), cleanText(body.firmware, 120),
+      radioMode, cleanText(body.ssid, 160), cleanText(body.frequency, 80), cleanText(body.channel, 80),
+      cleanText(body.signal, 40), radioParentHostId, JSON.stringify(normalizeConnections(body.connectionMethods)),
     ];
-    await pool.query(
-      `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17)
-       ON CONFLICT(space_id,ip) DO UPDATE SET name=excluded.name,status=excluded.status,type=excluded.type,
-         os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
-         location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
-         notes=excluded.notes,ports=excluded.ports,
-         updated_by=excluded.updated_by,updated_at=now()`,
-      values,
-    );
-    await audit(user, body.id ? "update" : "create", "host", id, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
-    broadcast({ type: "host", companyId: space.companyId, spaceId: space.id, entityId: id });
-    return json(res, 200, { ok: true, id });
+    const client = await pool.connect();
+    let savedId = id;
+    try {
+      await client.query("BEGIN");
+      const saved = await client.query(
+        `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by,
+                           vendor,model,serial,firmware,radio_mode,ssid,frequency,channel,signal,radio_parent_host_id,connection_methods)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb)
+         ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id,ip=excluded.ip,name=excluded.name,status=excluded.status,type=excluded.type,
+           os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
+           location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
+           notes=excluded.notes,ports=excluded.ports,vendor=excluded.vendor,model=excluded.model,serial=excluded.serial,
+           firmware=excluded.firmware,radio_mode=excluded.radio_mode,ssid=excluded.ssid,frequency=excluded.frequency,
+           channel=excluded.channel,signal=excluded.signal,radio_parent_host_id=excluded.radio_parent_host_id,
+           connection_methods=excluded.connection_methods,updated_by=excluded.updated_by,updated_at=now()
+         RETURNING id`,
+        values,
+      );
+      savedId = saved.rows[0].id;
+      if (Array.isArray(body.devicePorts)) {
+        const ports = normalizeDevicePorts(body.devicePorts);
+        await client.query("DELETE FROM device_ports WHERE host_id=$1", [savedId]);
+        for (const item of ports) {
+          await client.query(
+            `INSERT INTO device_ports(id,host_id,name,description,port_type,speed,vlan_mode,vlan,enabled)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [item.id, savedId, item.name, item.description, item.portType, item.speed, item.vlanMode, item.vlan, item.enabled],
+          );
+        }
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+    await audit(user, current ? "update" : "create", "host", savedId, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
+    broadcast({ type: "host", companyId: space.companyId, spaceId: space.id, entityId: savedId });
+    return json(res, 200, { ok: true, id: savedId });
   }
 
   const hostSecret = pathname.match(/^\/api\/hosts\/([^/]+)\/([^/]+)\/secret$/);
@@ -513,9 +1034,9 @@ async function api(req, res, url, user) {
     requireAdmin(user);
     const users = await pool.query(
       `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,
-              COALESCE(json_agg(a.company_id) FILTER (WHERE a.company_id IS NOT NULL),'[]') AS "companyIds"
-         FROM users u LEFT JOIN user_company_access a ON a.user_id=u.id
-        GROUP BY u.id ORDER BY u.username`,
+              COALESCE((SELECT json_agg(a.company_id) FROM user_company_access a WHERE a.user_id=u.id),'[]') AS "companyIds",
+              COALESCE((SELECT json_agg(a.space_id) FROM user_space_access a WHERE a.user_id=u.id),'[]') AS "spaceIds"
+         FROM users u ORDER BY u.username`,
     );
     return json(res, 200, { ok: true, users: users.rows });
   }
@@ -537,8 +1058,12 @@ async function api(req, res, url, user) {
       );
       if (role !== "admin") {
         const companyIds = Array.isArray(body.companyIds) ? [...new Set(body.companyIds.map(String))] : [];
+        const spaceIds = Array.isArray(body.spaceIds) ? [...new Set(body.spaceIds.map(String))] : [];
         for (const companyId of companyIds) {
           await client.query("INSERT INTO user_company_access(user_id,company_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [id, companyId]);
+        }
+        for (const spaceId of spaceIds) {
+          await client.query("INSERT INTO user_space_access(user_id,space_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [id, spaceId]);
         }
       }
       await client.query("COMMIT");
@@ -568,9 +1093,12 @@ async function api(req, res, url, user) {
         await client.query("UPDATE users SET password_hash=$1 WHERE id=$2", [await hashPassword(String(body.password)), userUpdate[1]]);
       }
       await client.query("DELETE FROM user_company_access WHERE user_id=$1", [userUpdate[1]]);
+      await client.query("DELETE FROM user_space_access WHERE user_id=$1", [userUpdate[1]]);
       if (role !== "admin") {
         const companyIds = Array.isArray(body.companyIds) ? [...new Set(body.companyIds.map(String))] : [];
+        const spaceIds = Array.isArray(body.spaceIds) ? [...new Set(body.spaceIds.map(String))] : [];
         for (const companyId of companyIds) await client.query("INSERT INTO user_company_access(user_id,company_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [userUpdate[1], companyId]);
+        for (const spaceId of spaceIds) await client.query("INSERT INTO user_space_access(user_id,space_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [userUpdate[1], spaceId]);
       }
       await client.query("COMMIT");
     } catch (error) {
@@ -606,7 +1134,7 @@ async function api(req, res, url, user) {
     const tools = Array.isArray(body.tools) ? body.tools : [];
     for (const item of tools) {
       const tool = cleanText(item.tool, 8).toUpperCase();
-      if (!["VNC", "MIK", "RDP", "SSH"].includes(tool)) continue;
+      if (!["VNC", "MIK", "RDP", "SSH", "HTTP", "HTTPS"].includes(tool)) continue;
       await pool.query(
         "UPDATE tool_defaults SET label=$1,default_port=$2,color=$3 WHERE tool=$4",
         [cleanText(item.label, 80) || tool, validatePort(item.defaultPort), validColor(item.color), tool],

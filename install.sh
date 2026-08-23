@@ -145,6 +145,7 @@ install_app() {
     fail "Port $EMS_HTTP_PORT is already in use. No containers were created. Run setup again and choose another port."
   fi
   EMS_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  EMS_BACKUP_PATH="$INSTALL_DIR/backups"
   log "Downloading project files"
   download_source
   umask 077
@@ -155,7 +156,11 @@ install_app() {
     printf "EMS_SECRET_KEY='%s'\n" "$EMS_SECRET_KEY"
     printf "EMS_HTTP_PORT='%s'\n" "$EMS_HTTP_PORT"
     printf "COOKIE_SECURE='%s'\n" "$COOKIE_SECURE"
+    printf "EMS_BACKUP_PATH='%s'\n" "$EMS_BACKUP_PATH"
   } > "$SOURCE_DIR/.env"
+  mkdir -p "$SOURCE_DIR/backups"
+  chmod 700 "$SOURCE_DIR/backups"
+  chown 1000:1000 "$SOURCE_DIR/backups"
   mkdir -p "$(dirname "$INSTALL_DIR")"
   mv "$SOURCE_DIR" "$INSTALL_DIR"
   chmod 600 "$INSTALL_DIR/.env"
@@ -170,10 +175,18 @@ update_app() {
     umask 077
     printf "EMS_SECRET_KEY='%s'\n" "$EMS_SECRET_KEY" >> "$INSTALL_DIR/.env"
   fi
+  if [[ -z "${EMS_BACKUP_PATH:-}" ]]; then
+    EMS_BACKUP_PATH="$INSTALL_DIR/backups"
+    printf "EMS_BACKUP_PATH='%s'\n" "$EMS_BACKUP_PATH" >> "$INSTALL_DIR/.env"
+  fi
+  backup_database
+  load_installation
   log "Downloading the latest project files"
   download_source
   cp -a "$INSTALL_DIR/.env" "$SOURCE_DIR/.env"
   if [[ -d "$INSTALL_DIR/backups" ]]; then cp -a "$INSTALL_DIR/backups" "$SOURCE_DIR/backups"; fi
+  mkdir -p "$SOURCE_DIR/backups"
+  chown -R 1000:1000 "$SOURCE_DIR/backups"
   local previous_dir="${INSTALL_DIR}.previous.$$"
   "${compose[@]}" down --remove-orphans
   mv "$INSTALL_DIR" "$previous_dir"
@@ -195,24 +208,75 @@ update_app() {
 
 backup_database() {
   load_installation
-  local backup_dir="$INSTALL_DIR/backups" timestamp backup_file key_file
+  local backup_dir="$INSTALL_DIR/backups" timestamp backup_file work_dir
   mkdir -p "$backup_dir"
-  timestamp="$(date +%Y%m%d-%H%M%S)"
-  backup_file="$backup_dir/ems-ipam-$timestamp.dump"
-  key_file="$backup_dir/ems-ipam-$timestamp.env"
+  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_file="$backup_dir/ems-ipam-$timestamp.tar.gz"
+  work_dir="$(mktemp -d "$backup_dir/.backup.XXXXXX")"
+  "${compose[@]}" up -d db
+  for (( attempt=1; attempt<=30; attempt+=1 )); do
+    if "${compose[@]}" exec -T db pg_isready -U ems_ipam -d ems_ipam >/dev/null 2>&1; then break; fi
+    (( attempt == 30 )) && fail "Database did not become ready for backup."
+    sleep 2
+  done
   log "Creating PostgreSQL backup"
-  "${compose[@]}" exec -T db pg_dump -U ems_ipam -d ems_ipam -Fc > "$backup_file"
-  cp -a "$INSTALL_DIR/.env" "$key_file"
-  chmod 600 "$backup_file" "$key_file"
+  "${compose[@]}" exec -T db pg_dump -U ems_ipam -d ems_ipam -Fc > "$work_dir/database.dump"
+  {
+    printf "EMS_BACKUP_VERSION='1'\n"
+    printf "EMS_APP_VERSION='%s'\n" "$(tr -d '\r\n' < "$INSTALL_DIR/VERSION" 2>/dev/null || printf unknown)"
+    printf "EMS_CREATED_AT='%s'\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf "EMS_SECRET_KEY='%s'\n" "${EMS_SECRET_KEY:-}"
+  } > "$work_dir/metadata.env"
+  tar -czf "$backup_file" -C "$work_dir" database.dump metadata.env
+  rm -rf -- "$work_dir"
+  chmod 600 "$backup_file"
+  chown 1000:1000 "$backup_file"
   printf '\nDatabase backup created: %s\n' "$backup_file"
-  printf 'Encryption settings backup created: %s\n' "$key_file"
+  printf 'The same backup is downloadable from the admin panel.\n'
+}
+
+restore_database() {
+  load_installation
+  local backup_file="${2:-}" work_dir restored_key="" updated_env=""
+  if [[ -z "$backup_file" ]]; then
+    read -r -p "Backup file path: " backup_file <"$TTY_DEVICE" || fail "Unable to read the backup path."
+  fi
+  [[ -f "$backup_file" ]] || fail "Backup file was not found: $backup_file"
+  tar -tzf "$backup_file" >/dev/null 2>&1 || fail "Backup archive is invalid."
+  work_dir="$(mktemp -d /tmp/ems-ipam-restore.XXXXXX)"
+  tar -xzf "$backup_file" -C "$work_dir"
+  [[ -s "$work_dir/database.dump" && -f "$work_dir/metadata.env" ]] || fail "Backup archive does not contain the required files."
+  restored_key="$(awk -F= '/^EMS_SECRET_KEY=/{sub(/^EMS_SECRET_KEY=/,""); gsub(/^'"'"'|'"'"'$/,""); print; exit}' "$work_dir/metadata.env")"
+  [[ "$restored_key" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Backup encryption key is missing or invalid."
+  printf '\nWARNING: Restore replaces the current EMS IPAM database.\n'
+  local confirmation=""
+  read -r -p "Type RESTORE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
+  [[ "$confirmation" == "RESTORE" ]] || fail "Restore cancelled."
+  backup_database
+  load_installation
+  log "Stopping the application"
+  "${compose[@]}" stop app
+  log "Restoring PostgreSQL database"
+  if ! "${compose[@]}" exec -T db pg_restore -U ems_ipam -d ems_ipam --clean --if-exists --no-owner --no-privileges < "$work_dir/database.dump"; then
+    "${compose[@]}" up -d app || true
+    rm -rf -- "$work_dir"
+    fail "Database restore failed. A safety backup was created before restore."
+  fi
+  updated_env="$(mktemp /tmp/ems-ipam-env.XXXXXX)"
+  awk -v key="$restored_key" 'BEGIN{done=0} /^EMS_SECRET_KEY=/{print "EMS_SECRET_KEY=\047" key "\047"; done=1; next} {print} END{if(!done) print "EMS_SECRET_KEY=\047" key "\047"}' "$INSTALL_DIR/.env" > "$updated_env"
+  install -m 600 "$updated_env" "$INSTALL_DIR/.env"
+  rm -f -- "$updated_env"
+  rm -rf -- "$work_dir"
+  load_installation
+  start_and_check || fail "Database was restored, but the application did not become healthy."
+  printf 'Database and encrypted device credentials were restored successfully.\n'
 }
 
 uninstall_app() {
   load_installation
   log "Stopping and removing application containers"
   "${compose[@]}" down --remove-orphans
-  docker image rm ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   printf '\nApplication containers were removed.\n'
   printf 'Database volume, configuration, encryption key and backups were kept.\n'
   printf 'Use Update to install the application again.\n'
@@ -225,7 +289,7 @@ uninstall_all() {
   read -r -p "Type DELETE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
   [[ "$confirmation" == "DELETE" ]] || fail "Full uninstall cancelled."
   "${compose[@]}" down --volumes --remove-orphans
-  docker image rm ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   [[ "$INSTALL_DIR" == /opt/* && "$INSTALL_DIR" != "/opt" ]] || fail "Unsafe installation directory. Files were not removed."
   rm -rf -- "$INSTALL_DIR"
   printf '\nEMS IPAM and its database were permanently removed.\n'
@@ -236,14 +300,15 @@ show_menu() {
   printf '1) Install\n'
   printf '2) Update\n'
   printf '3) Backup Database\n'
-  printf '4) Uninstall App (Keep Database)\n'
-  printf '5) Uninstall App + Database\n'
-  read -r -p "Select an option [1-5]: " ACTION <"$TTY_DEVICE" || fail "Unable to read menu selection."
+  printf '4) Restore Database\n'
+  printf '5) Uninstall App (Keep Database)\n'
+  printf '6) Uninstall App + Database\n'
+  read -r -p "Select an option [1-6]: " ACTION <"$TTY_DEVICE" || fail "Unable to read menu selection."
 }
 
 if (( EUID != 0 )); then fail "Run this setup script with sudo."; fi
 [[ -r "$TTY_DEVICE" ]] || fail "This setup script must run in an interactive terminal."
-for command_name in docker curl tar ss awk grep od tr; do need_command "$command_name"; done
+for command_name in docker curl tar ss awk grep od tr install; do need_command "$command_name"; done
 docker info >/dev/null 2>&1 || fail "Docker is not running or is not accessible."
 docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is not installed."
 
@@ -253,7 +318,8 @@ case "${ACTION,,}" in
   1|install) install_app ;;
   2|update) update_app ;;
   3|backup|backup-database) backup_database ;;
-  4|uninstall|uninstall-app) uninstall_app ;;
-  5|purge|uninstall-all) uninstall_all ;;
-  *) fail "Invalid option. Select a number from 1 to 5." ;;
+  4|restore|restore-database) restore_database "$@" ;;
+  5|uninstall|uninstall-app) uninstall_app ;;
+  6|purge|uninstall-all) uninstall_all ;;
+  *) fail "Invalid option. Select a number from 1 to 6." ;;
 esac

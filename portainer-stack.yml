@@ -18,7 +18,9 @@ services:
       - ems_internal
 
   app:
-    image: ems-ipam:0.2.0
+    build:
+      context: ./docker-app
+    image: ems-ipam:0.3.0
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -29,6 +31,8 @@ services:
       EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
       EMS_SECRET_KEY: ${EMS_SECRET_KEY}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      BACKUP_DIR: /backups
+      BACKUP_DISPLAY_PATH: ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}
       PORT: 8080
       TZ: Asia/Tehran
     ports:
@@ -45,6 +49,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
+    volumes:
+      - ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}:/backups
     restart: unless-stopped
     networks:
       - ems_internal

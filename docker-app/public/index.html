@@ -39,7 +39,10 @@
       </div>
       <div class="top-actions">
         <span id="liveBadge" class="live-badge"><i></i><span>اتصال زنده</span></span>
+        <button id="radiosButton" class="iconbtn" title="مدیریت رادیوها" aria-label="رادیوها">◉</button>
+        <button id="topologyButton" class="iconbtn" title="نقشه شبکه" aria-label="نقشه شبکه">⌘</button>
         <button id="exportButton" class="iconbtn" title="خروجی JSON" aria-label="خروجی JSON">⇩</button>
+        <button id="backupsButton" class="iconbtn admin-only" title="پشتیبان‌گیری" aria-label="پشتیبان‌گیری">⛁</button>
         <button id="usersButton" class="iconbtn admin-only" title="کاربران" aria-label="کاربران">♙</button>
         <button id="settingsButton" class="iconbtn admin-only" title="تنظیمات ابزارها" aria-label="تنظیمات ابزارها">⚙</button>
         <button id="logoutButton" class="iconbtn" title="خروج" aria-label="خروج">↪</button>
@@ -52,6 +55,7 @@
     <form id="companyForm">
       <div class="modal-head"><div><h3 id="companyDialogTitle">افزودن شرکت</h3><p>گروه اصلی برای رنج‌ها و کاربران</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
+        <input id="mapLinkId" type="hidden">
         <input id="companyId" type="hidden">
         <label class="field">نام شرکت<input id="companyName" required placeholder="مثلاً شرکت ۱"></label>
         <label class="field full">توضیحات<textarea id="companyDescription"></textarea></label>
@@ -101,7 +105,7 @@
         <div class="form-grid">
           <label class="field">نام سیستم / Hostname<input id="hostName" placeholder="مثلاً ESXi-01"></label>
           <label class="field">وضعیت<select id="hostStatus"><option value="active">فعال</option><option value="reserved">رزرو</option><option value="offline">خاموش</option><option value="fault">نیازمند بررسی</option><option value="free">آزاد</option></select></label>
-          <label class="field">نوع تجهیز<select id="hostType"><option value=""></option><option>سرور</option><option>ماشین مجازی</option><option>رایانه</option><option>روتر</option><option>سوئیچ</option><option>دوربین</option><option>اکسس‌پوینت</option><option>پرینتر</option><option>سایر</option></select></label>
+          <label class="field">نوع تجهیز<select id="hostType"><option value=""></option><option>سرور</option><option>ماشین مجازی</option><option>رایانه</option><option>روتر</option><option>سوئیچ</option><option>فایروال</option><option>رادیو</option><option>دوربین</option><option>اکسس‌پوینت</option><option>پرینتر</option><option>سایر</option></select></label>
           <label class="field">سیستم‌عامل<input id="hostOs"></label>
           <label class="field">MAC Address<input id="hostMac" class="ltr mono"></label>
           <label class="field">VLAN<input id="hostVlan" class="ltr"></label>
@@ -109,11 +113,33 @@
           <label class="field">رمز تجهیز<input id="hostPassword" type="password" autocomplete="new-password" placeholder="برای حفظ رمز فعلی خالی بماند"><span class="inline-actions"><button id="revealHostPassword" class="btn sm hidden" type="button">نمایش رمز فعلی</button><span id="clearHostPasswordWrap" class="check-field hidden"><input id="clearHostPassword" type="checkbox"> حذف رمز ذخیره‌شده</span></span></label>
           <label class="field">مسئول / مالک<input id="hostOwner"></label>
           <label class="field">موقعیت<input id="hostLocation"></label>
+          <label class="field">سازنده<input id="hostVendor" placeholder="MikroTik, Cisco, HPE…"></label>
+          <label class="field">مدل<input id="hostModel"></label>
+          <label class="field">شماره سریال<input id="hostSerial"></label>
+          <label class="field">نسخه سیستم‌عامل / Firmware<input id="hostFirmware"></label>
           <label class="field">مرجع رمز در Password Manager<input id="hostSecretRef" placeholder="مثلاً Bitwarden/Network/Router-01"></label>
+          <fieldset class="field full ports-fieldset">
+            <legend>اطلاعات رادیو</legend>
+            <div class="form-grid compact-grid">
+              <label class="field">حالت رادیو<select id="hostRadioMode"><option value="">رادیو نیست</option><option value="ap">AP</option><option value="station">Station</option></select></label>
+              <label class="field">SSID<input id="hostSsid" list="ssidSuggestions"></label>
+              <datalist id="ssidSuggestions"></datalist>
+              <label id="radioParentField" class="field hidden">اتصال به AP<select id="hostRadioParent"></select></label>
+              <label class="field">فرکانس<input id="hostFrequency"></label>
+              <label class="field">کانال<input id="hostChannel"></label>
+              <label class="field">سیگنال<input id="hostSignal" placeholder="مثلاً -58 dBm"></label>
+            </div>
+          </fieldset>
           <fieldset class="field full ports-fieldset">
             <legend>پورت اختصاصی ابزارها</legend>
             <p>خالی بماند، پورت پیش‌فرض استفاده می‌شود.</p>
             <div id="hostPorts" class="port-grid"></div>
+          </fieldset>
+          <fieldset class="field full ports-fieldset">
+            <legend>پورت‌های فیزیکی تجهیز</legend>
+            <p>برای نمایش اتصال دقیق در نقشه شبکه استفاده می‌شود.</p>
+            <div id="devicePortsList" class="device-port-list"></div>
+            <button id="addDevicePort" class="btn sm" type="button">افزودن پورت</button>
           </fieldset>
           <label class="field full">توضیحات<textarea id="hostNotes"></textarea></label>
         </div>
@@ -134,6 +160,7 @@
         <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="editor">ویرایشگر</option><option value="admin">مدیر کل</option></select></label>
         <label id="userActiveWrap" class="check-field hidden"><input id="userActive" type="checkbox" checked> کاربر فعال باشد</label>
         <fieldset id="companyAccessField" class="company-access"><legend>شرکت‌های قابل دسترسی</legend><div id="companyAccessList"></div></fieldset>
+        <fieldset id="spaceAccessField" class="company-access"><legend>شبکه‌های قابل دسترسی</legend><div id="spaceAccessList"></div></fieldset>
         <button class="btn primary" type="submit">ذخیره کاربر</button>
         <button id="cancelUserEdit" class="btn hidden" type="button">انصراف از ویرایش</button>
       </form>
@@ -146,6 +173,51 @@
       <div class="modal-head"><div><h3>پورت‌های پیش‌فرض</h3><p>هر IP می‌تواند این مقادیر را جداگانه تغییر دهد.</p></div><button class="close" type="button" data-close>×</button></div>
       <div id="toolsSettings" class="modal-body tool-settings"></div>
       <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره تنظیمات</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="backupsDialog" class="wide-dialog">
+    <div class="modal-head"><div><h3>پشتیبان‌های دیتابیس</h3><p id="backupPath" class="ltr mono"></p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="toolbar compact-toolbar"><span class="subtitle">فایل شامل دیتابیس و کلید رمزگشایی تجهیزات است.</span><button id="createBackupButton" class="btn primary" type="button">ساخت پشتیبان جدید</button></div>
+      <div id="backupsList" class="table-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="mapDialog">
+    <form id="mapForm">
+      <div class="modal-head"><div><h3>نقشه شبکه</h3><p>نقشه مستقل برای هر شرکت یا سایت</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <input id="mapId" type="hidden">
+        <label class="field">شرکت<select id="mapCompany" required></select></label>
+        <label class="field">نام نقشه<input id="mapName" required placeholder="مثلاً شبکه ساختمان مرکزی"></label>
+        <label class="field full">توضیحات<textarea id="mapDescription"></textarea></label>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="mapNodeDialog">
+    <form id="mapNodeForm">
+      <div class="modal-head"><div><h3>افزودن تجهیز به نقشه</h3><p>همان رکورد موجود در مدیریت IP استفاده می‌شود.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body"><label class="field">تجهیز<select id="mapNodeHost" required></select></label></div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">افزودن</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="mapLinkDialog">
+    <form id="mapLinkForm">
+      <div class="modal-head"><div><h3>اتصال دو تجهیز</h3><p id="mapLinkTitle"></p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <label class="field">پورت تجهیز اول<select id="mapFromPort"></select></label>
+        <label class="field">پورت تجهیز دوم<select id="mapToPort"></select></label>
+        <label class="field">نوع کابل<select id="mapLinkMedium"><option value="ethernet">Ethernet</option><option value="fiber">Fiber</option><option value="wireless">Wireless</option><option value="virtual">Virtual</option></select></label>
+        <label class="field">سرعت<input id="mapLinkSpeed" placeholder="1G / 10G / 25G"></label>
+        <label class="field">VLAN / Trunk<input id="mapLinkVlan"></label>
+        <label class="field">رنگ<input id="mapLinkColor" type="color" value="#64748b"></label>
+        <label class="field full">عنوان اتصال<input id="mapLinkLabel"></label>
+      </div>
+      <div class="modal-foot split"><button id="deleteMapLink" class="btn danger hidden" type="button">حذف اتصال</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ثبت اتصال</button></div>
     </form>
   </dialog>
 

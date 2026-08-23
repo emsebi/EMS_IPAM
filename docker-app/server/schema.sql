@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS user_company_access (
   PRIMARY KEY(user_id, company_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_space_access (
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  space_id text NOT NULL REFERENCES address_spaces(id) ON DELETE CASCADE,
+  PRIMARY KEY(user_id, space_id)
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -119,3 +125,80 @@ CREATE INDEX IF NOT EXISTS audit_space_created_idx ON audit_log(space_id, create
 CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
 
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS secret_ciphertext text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS vendor text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS serial text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS firmware text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS radio_mode text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS ssid text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS frequency text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS channel text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS signal text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS radio_parent_host_id text REFERENCES hosts(id) ON DELETE SET NULL;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS connection_methods jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS device_ports (
+  id text PRIMARY KEY,
+  host_id text NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  port_type text NOT NULL DEFAULT 'ethernet',
+  speed text NOT NULL DEFAULT '',
+  vlan_mode text NOT NULL DEFAULT '',
+  vlan text NOT NULL DEFAULT '',
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(host_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS topology_maps (
+  id text PRIMARY KEY,
+  company_id text REFERENCES companies(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  created_by text REFERENCES users(id) ON DELETE SET NULL,
+  updated_by text REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS topology_nodes (
+  id text PRIMARY KEY,
+  map_id text NOT NULL REFERENCES topology_maps(id) ON DELETE CASCADE,
+  host_id text NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+  x integer NOT NULL DEFAULT 80,
+  y integer NOT NULL DEFAULT 80,
+  width integer NOT NULL DEFAULT 170,
+  height integer NOT NULL DEFAULT 76,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(map_id, host_id)
+);
+
+CREATE TABLE IF NOT EXISTS topology_links (
+  id text PRIMARY KEY,
+  map_id text NOT NULL REFERENCES topology_maps(id) ON DELETE CASCADE,
+  from_node_id text NOT NULL REFERENCES topology_nodes(id) ON DELETE CASCADE,
+  to_node_id text NOT NULL REFERENCES topology_nodes(id) ON DELETE CASCADE,
+  from_port_id text REFERENCES device_ports(id) ON DELETE SET NULL,
+  to_port_id text REFERENCES device_ports(id) ON DELETE SET NULL,
+  label text NOT NULL DEFAULT '',
+  medium text NOT NULL DEFAULT 'ethernet',
+  speed text NOT NULL DEFAULT '',
+  vlan text NOT NULL DEFAULT '',
+  color text NOT NULL DEFAULT '#64748b',
+  status text NOT NULL DEFAULT 'unknown',
+  discovered_by text NOT NULL DEFAULT 'manual',
+  confirmed boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (from_node_id <> to_node_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_space_access_user_idx ON user_space_access(user_id);
+CREATE INDEX IF NOT EXISTS hosts_radio_parent_idx ON hosts(radio_parent_host_id);
+CREATE INDEX IF NOT EXISTS device_ports_host_idx ON device_ports(host_id);
+CREATE INDEX IF NOT EXISTS topology_maps_company_idx ON topology_maps(company_id);
+CREATE INDEX IF NOT EXISTS topology_nodes_map_idx ON topology_nodes(map_id);
+CREATE INDEX IF NOT EXISTS topology_links_map_idx ON topology_links(map_id);
