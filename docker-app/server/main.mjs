@@ -36,7 +36,7 @@ const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.4.0";
+const APP_VERSION = "0.4.1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
@@ -1161,6 +1161,7 @@ const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".zip": "application/zip",

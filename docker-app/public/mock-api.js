@@ -4,7 +4,7 @@
   const spaceId = "space-demo";
   const bootstrap = {
     ok: true,
-    version: "0.4.0",
+    version: "0.4.1",
     user: { id: "admin-demo", username: "admin", displayName: "مدیر سیستم", role: "admin", active: true },
     companies: [{ id: companyId, name: "شرکت ۱", description: "ساختار نمونه برای بررسی رابط" }],
     spaces: [
