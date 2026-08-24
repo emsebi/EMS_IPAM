@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="950" viewBox="0 0 1600 950">
+  <defs>
+    <filter id="shadow"><feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#17223a" flood-opacity=".10"/></filter>
+    <linearGradient id="brand" x2="1" y2="1"><stop stop-color="#87a0f8"/><stop offset="1" stop-color="#3157d5"/></linearGradient>
+    <style>text{font-family:Tahoma,"Segoe UI",Arial,sans-serif;fill:#17223a}.muted{fill:#697386}.white{fill:#fff}.mono{font-family:Consolas,monospace}.xs{font-size:10px}.sm{font-size:12px}.label{font-size:13px;font-weight:700}.title{font-size:24px;font-weight:900}</style>
+  </defs>
+  <rect width="1600" height="950" fill="#f4f7fb"/>
+  <rect width="1600" height="74" fill="#17223a"/>
+  <rect x="1532" y="16" width="45" height="45" rx="12" fill="url(#brand)"/><text x="1554" y="45" text-anchor="middle" class="white" font-size="17" font-weight="900">IP</text>
+  <text x="1517" y="35" text-anchor="end" class="white" font-size="16" font-weight="900">EMS IPAM</text><text x="1517" y="54" text-anchor="end" fill="#bac6da" class="xs">مدیریت تصویری شبکه</text>
+  <rect x="1140" y="16" width="280" height="43" rx="9" fill="#202d47" stroke="#3b4963"/><text x="1400" y="43" text-anchor="end" class="white sm">شبکه اصلی — 192.168.0.0/16</text>
+  <rect x="670" y="16" width="450" height="43" rx="9" fill="#202d47" stroke="#3b4963"/><text x="1098" y="43" text-anchor="end" fill="#bac6da" class="sm">جست‌وجوی سریع IP، نام، MAC یا رنج…</text>
+  <g fill="#202d47" stroke="#3b4963"><rect x="612" y="17" width="42" height="42" rx="9"/><rect x="558" y="17" width="42" height="42" rx="9"/><rect x="504" y="17" width="42" height="42" rx="9"/><rect x="450" y="17" width="42" height="42" rx="9"/></g><g class="white" text-anchor="middle" font-size="15"><text x="633" y="44">◉</text><text x="579" y="44">⌘</text><text x="525" y="44">⛁</text><text x="471" y="44">⚙</text></g>
+
+  <text x="1555" y="112" text-anchor="end" class="muted sm">شرکت ۱ ← رنج اصلی</text><text x="1555" y="145" text-anchor="end" class="title mono">192.168.0.0/16</text><text x="1555" y="170" text-anchor="end" class="muted sm">هر ردیف یک شبکه /24 است؛ ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</text>
+  <g transform="translate(44 98)"><rect width="235" height="80" rx="13" fill="#fff" stroke="#d9e0ea" filter="url(#shadow)"/><text x="18" y="26" class="muted sm">IP دارای اطلاعات</text><text x="18" y="58" font-size="24" font-weight="900">8</text></g>
+  <g transform="translate(294 98)"><rect width="235" height="80" rx="13" fill="#fff" stroke="#d9e0ea"/><text x="18" y="26" class="muted sm">فضای ثبت‌نشده</text><text x="18" y="58" font-size="24" font-weight="900">65,504</text></g>
+  <g transform="translate(544 98)"><rect width="235" height="80" rx="13" fill="#fff" stroke="#d9e0ea"/><text x="18" y="26" class="muted sm">فضای تخصیص‌یافته</text><text x="18" y="58" font-size="24" font-weight="900">32</text><rect x="100" y="52" width="112" height="6" rx="3" fill="#edf0f5"/><rect x="100" y="52" width="27" height="6" rx="3" fill="#3157d5"/></g>
+
+  <rect x="44" y="199" width="1512" height="62" rx="13" fill="#fff" stroke="#d9e0ea"/>
+  <text x="1530" y="237" text-anchor="end" class="label">اندازه نمایش</text>
+  <g><rect x="1320" y="214" width="58" height="34" fill="#fff" stroke="#d9e0ea"/><text x="1349" y="236" text-anchor="middle" class="sm">/24</text><rect x="1262" y="214" width="58" height="34" fill="#fff" stroke="#d9e0ea"/><text x="1291" y="236" text-anchor="middle" class="sm">/23</text><rect x="1204" y="214" width="58" height="34" fill="#e9eeff" stroke="#b9c7f3"/><text x="1233" y="236" text-anchor="middle" fill="#3157d5" class="label">/21</text><rect x="1146" y="214" width="58" height="34" fill="#fff" stroke="#d9e0ea"/><text x="1175" y="236" text-anchor="middle" class="sm">/18</text><rect x="1088" y="214" width="58" height="34" fill="#fff" stroke="#d9e0ea"/><text x="1117" y="236" text-anchor="middle" class="sm">/16</text></g>
+  <rect x="882" y="214" width="184" height="34" rx="8" fill="#fff" stroke="#d9e0ea"/><text x="974" y="236" text-anchor="middle" class="sm">ثبت و رنگ‌کردن رنج</text>
+  <rect x="44" y="214" width="125" height="34" rx="8" fill="#e9eeff" stroke="#b9c7f3"/><text x="106" y="236" text-anchor="middle" fill="#3157d5" class="label">جدول عمودی</text><rect x="177" y="214" width="105" height="34" rx="8" fill="#fff" stroke="#d9e0ea"/><text x="229" y="236" text-anchor="middle" class="sm">نمای کارت‌ها</text>
+
+  <rect x="44" y="282" width="1512" height="635" rx="14" fill="#fff" stroke="#bec8d7" stroke-width="2" filter="url(#shadow)"/>
+  <path d="M58 282h1484a14 14 0 0 1 14 14v39H44v-39a14 14 0 0 1 14-14z" fill="#17223a"/>
+  <g class="label" text-anchor="middle"><text class="white" x="174" y="316">شبکه /24</text><text class="white" x="380" y="316">/23</text><text class="white" x="548" y="316">/22</text><text class="white" x="716" y="316">/21</text><text class="white" x="884" y="316">/20</text><text class="white" x="1052" y="316">/19</text><text class="white" x="1220" y="316">/18</text><text class="white" x="1388" y="316">/17</text><text class="white" x="1510" y="316">/16</text></g>
+  <g stroke="#cfd7e3"><path d="M304 282v635M456 282v635M624 282v635M792 282v635M960 282v635M1128 282v635M1296 282v635M1464 282v635"/><path d="M44 383h1512M44 431h1512M44 479h1512M44 527h1512M44 575h1512M44 623h1512M44 671h1512M44 719h1512M44 767h1512M44 815h1512M44 863h1512"/></g>
+  <g>
+    <rect x="46" y="336" width="257" height="46" fill="#eaf0ff"/><rect x="46" y="384" width="257" height="46" fill="#f8fafc"/><rect x="46" y="432" width="257" height="46" fill="#f1eafd"/><rect x="46" y="480" width="257" height="46" fill="#f1eafd"/><rect x="46" y="528" width="257" height="46" fill="#f8fafc"/><rect x="46" y="576" width="257" height="46" fill="#f8fafc"/><rect x="46" y="624" width="257" height="46" fill="#f8fafc"/><rect x="46" y="672" width="257" height="46" fill="#f8fafc"/><rect x="46" y="720" width="257" height="46" fill="#f8fafc"/><rect x="46" y="768" width="257" height="46" fill="#f8fafc"/><rect x="46" y="816" width="257" height="46" fill="#f8fafc"/><rect x="46" y="864" width="257" height="46" fill="#f8fafc"/>
+    <g class="mono sm" font-weight="700"><text x="65" y="358">192.168.0.0/24</text><text x="65" y="406">192.168.1.0/24</text><text x="65" y="454">192.168.2.0/24</text><text x="65" y="502">192.168.3.0/24</text><text x="65" y="550">192.168.4.0/24</text><text x="65" y="598">192.168.5.0/24</text><text x="65" y="646">192.168.6.0/24</text><text x="65" y="694">192.168.7.0/24</text><text x="65" y="742">192.168.8.0/24</text><text x="65" y="790">192.168.9.0/24</text><text x="65" y="838">192.168.10.0/24</text><text x="65" y="886">192.168.11.0/24</text></g>
+    <g class="muted xs"><text x="65" y="375">دفتر مرکزی — 2 IP</text><text x="65" y="423">بدون نام — 0 IP</text><text x="65" y="471">زیرساخت — 2 IP</text><text x="65" y="519">کاربران وایرلس — 4 IP</text></g>
+  </g>
+  <g>
+    <rect x="309" y="337" width="142" height="94" rx="7" fill="#dff3e9" stroke="#8ecbad"/><text x="380" y="374" text-anchor="middle" class="mono xs">192.168.0.0/23</text><text x="380" y="394" text-anchor="middle" class="label">دفتر مرکزی</text>
+    <rect x="309" y="433" width="142" height="94" rx="7" fill="#eadff8" stroke="#a98ad1"/><text x="380" y="470" text-anchor="middle" class="mono xs">192.168.2.0/23</text><text x="380" y="490" text-anchor="middle" class="label">زیرساخت</text>
+    <rect x="461" y="337" width="158" height="190" rx="7" fill="#edf6f1" stroke="#a8caba"/><text x="540" y="424" text-anchor="middle" class="mono xs">192.168.0.0/22</text><text x="540" y="445" text-anchor="middle" class="sm muted">0–3</text>
+    <rect x="629" y="337" width="158" height="382" rx="7" fill="#dff3e9" stroke="#8ecbad"/><text x="708" y="510" text-anchor="middle" class="mono xs">192.168.0.0/21</text><text x="708" y="534" text-anchor="middle" class="label">دفتر مرکزی</text><text x="708" y="555" text-anchor="middle" class="sm muted">0–7</text>
+    <rect x="797" y="337" width="158" height="574" rx="7" fill="#eef2f7" stroke="#c0c9d6"/><text x="876" y="610" text-anchor="middle" class="mono xs">192.168.0.0/20</text><text x="876" y="634" text-anchor="middle" class="sm muted">0–15</text>
+    <rect x="965" y="337" width="158" height="574" rx="7" fill="#f3f5f8" stroke="#c9d1dc"/><text x="1044" y="610" text-anchor="middle" class="mono xs">192.168.0.0/19</text><text x="1044" y="634" text-anchor="middle" class="sm muted">0–31</text>
+    <rect x="1133" y="337" width="158" height="574" rx="7" fill="#f3f5f8" stroke="#c9d1dc"/><text x="1212" y="610" text-anchor="middle" class="mono xs">192.168.0.0/18</text><text x="1212" y="634" text-anchor="middle" class="sm muted">0–63</text>
+    <rect x="1301" y="337" width="158" height="574" rx="7" fill="#f3f5f8" stroke="#c9d1dc"/><text x="1380" y="610" text-anchor="middle" class="mono xs">192.168.0.0/17</text><text x="1380" y="634" text-anchor="middle" class="sm muted">0–127</text>
+    <rect x="1469" y="337" width="82" height="574" rx="7" fill="#dfe7ff" stroke="#8fa5ec"/><text x="1510" y="603" text-anchor="middle" class="mono xs" transform="rotate(-90 1510 603)">192.168.0.0/16 — شبکه اصلی</text>
+  </g>
+  <rect x="1538" y="344" width="7" height="310" rx="4" fill="#c8d0dc"/><rect x="1538" y="346" width="7" height="92" rx="4" fill="#7f8ba0"/>
+</svg>

@@ -23,3 +23,16 @@ test("server exposes inventory, global search, topology and downloadable backups
   assert.match(server, /canAccessSpace\(user, item\.spaceId\)/);
   assert.match(server, /ON CONFLICT\(id\) DO UPDATE SET space_id=excluded\.space_id,ip=excluded\.ip/);
 });
+
+test("destructive and scoped workflows keep their safety guards", async () => {
+  const server = await fs.readFile(new URL("../server/main.mjs", import.meta.url), "utf8");
+  assert.match(server, /async function protectLastAdmin/);
+  assert.match(server, /protectLastAdmin\(client, userUpdate\[1\], role, body\.active !== false\)/);
+  assert.match(server, /protectLastAdmin\(client, userUpdate\[1\], null, false\)/);
+  assert.match(server, /حداقل یک مدیر فعال باید در سامانه باقی بماند/);
+  assert.match(server, /radioParentHostId/);
+  assert.match(server, /h\.radio_mode='ap'/);
+  assert.match(server, /canAccessSpace\(user, item\.spaceId\)/);
+  assert.match(server, /pg_dump/);
+  assert.match(server, /EMS_SECRET_KEY/);
+});

@@ -1,3 +1,5 @@
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs";
+
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
 const HOST_COLORS = { active: "#3157d5", reserved: "#805ad5", offline: "#64748b", fault: "#d94b5b", free: "#b8c0cc" };
@@ -9,7 +11,9 @@ const state = {
   currentSpaceId: null,
   view: "companies",
   sheetCidr: null,
-  displayMode: localStorage.getItem("ems-display-mode") || "classic",
+  displayMode: localStorage.getItem("ems-display-mode") || "table",
+  overviewMode: localStorage.getItem("ems-overview-mode") || "table",
+  radioViewMode: localStorage.getItem("ems-radio-view-mode") || "tree",
   drillPrefix: 24,
   paint: false,
   paintPrefix: 24,
@@ -24,6 +28,8 @@ const state = {
   mapData: null,
   linkSelection: [],
   treeFocusCidr: null,
+  tableScopeCidr: null,
+  tableVisibleBlocks: 8,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -284,6 +290,42 @@ function tileVisual(start) {
   return { color: prefix?.color || "#eef1f6", stripe, has: samples.some((color) => color !== "#eef1f6") };
 }
 
+function renderRootVerticalTable(root, hosts) {
+  const space = state.data.space;
+  const rowCount = 2 ** (24 - root.prefix);
+  const levels = rootVerticalLevels(root.prefix);
+  const exactPrefixes = new Map(state.data.prefixes.map((item) => [item.cidr, item]));
+  const hostCounts = new Map();
+  for (const ip of hosts.keys()) {
+    const address = ipv4ToInt(ip);
+    if (address === null || !contains(root, address)) continue;
+    const index = Math.floor((address - root.start) / 256);
+    hostCounts.set(index, (hostCounts.get(index) || 0) + 1);
+  }
+  let html = `<div class="root-vertical-wrap"><table class="root-range-table"><thead><tr><th>شبکه /24</th>${levels.map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
+  for (let row = 0; row < rowCount; row += 1) {
+    const start = root.start + row * 256;
+    const cidr = `${intToIpv4(start)}/24`;
+    const exact = exactPrefixes.get(cidr);
+    const visual = tileVisual(start);
+    html += `<tr><td class="root-network-cell"><button class="root-row-open" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || visual.color)}"><span class="root-octet">${(start >>> 8) & 255}</span><span><b class="mono ltr">${cidr}</b><small>${escapeHtml(exact?.name || "بدون نام")} — ${formatNumber(hostCounts.get(row) || 0)} IP</small></span></button></td>`;
+    for (const prefix of levels) {
+      const span = 2 ** (24 - prefix);
+      if (row % span !== 0) continue;
+      const info = networkAt(start, prefix);
+      const item = exactPrefixes.get(info.cidr);
+      const isRoot = info.cidr === root.cidr;
+      const color = item?.color || (isRoot ? space.color : "#eef2f7");
+      const label = item?.name || (isRoot ? space.name : "آزاد");
+      const first = (start >>> 8) & 255;
+      const last = ((start + span * 256 - 1) >>> 8) & 255;
+      html += `<td rowspan="${span}" class="root-prefix-span" style="--range-color:${escapeHtml(color)}"><button class="root-prefix-open ${item || isRoot ? "named" : ""}" data-cidr="${escapeHtml(info.cidr)}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><span>${first}–${last}</span><small>${escapeHtml(label)}</small></button></td>`;
+    }
+    html += `</tr>`;
+  }
+  return html + `</tbody></table></div>`;
+}
+
 function usedIntervals() {
   const intervals = [];
   for (const item of state.data?.prefixes || []) {
@@ -370,13 +412,19 @@ function renderOverview() {
   const selectionMinimum = root.prefix;
   if (state.paintPrefix < selectionMinimum || state.paintPrefix > 24) state.paintPrefix = 24;
   if (state.drillPrefix < selectionMinimum || state.drillPrefix > 24) state.drillPrefix = 24;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر خانه یک شبکهٔ /24 است.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
+  const overviewContent = state.overviewMode === "table" ? renderRootVerticalTable(root, hosts) : grid;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر ردیف یک شبکهٔ /24 است و ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
-    <section class="panel"><div class="toolbar"><div class="toolgroup"><b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت و رنگ‌کردن رنج"}</button>` : ""}<span class="mode-note">پنج خط بالای خانه‌ها جای رنج‌های بزرگ‌تر را نشان می‌دهد.</span></div><div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div></div><div class="map-wrap">${grid}</div></section>
+    <section class="panel"><div class="toolbar"><div class="toolgroup"><b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت و رنگ‌کردن رنج"}</button>` : ""}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کارت‌ها</button></div><span class="mode-note">در جدول، روی ستون /21 یا /23 مستقیماً کلیک کنید؛ نمای کارت‌ها پنج خط رنج را نگه می‌دارد.</span></div><div class="legend"><span><i class="dot used"></i>رنج</span><span><i class="dot record"></i>IP ثبت‌شده</span><span><i class="dot free"></i>ثبت‌نشده</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
   $("companyBack").addEventListener("click", renderCompanies);
   $("editCurrentSpace")?.addEventListener("click", () => openSpaceDialog(null, space.id));
   $("paintToggle")?.addEventListener("click", () => { state.paint = !state.paint; renderOverview(); });
+  page.querySelectorAll(".overview-mode").forEach((node) => node.addEventListener("click", () => {
+    state.overviewMode = node.dataset.mode;
+    localStorage.setItem("ems-overview-mode", state.overviewMode);
+    renderOverview();
+  }));
   page.querySelectorAll(".paint-prefix").forEach((node) => node.addEventListener("click", () => {
     if (state.paint) state.paintPrefix = Number(node.dataset.prefix);
     else state.drillPrefix = Number(node.dataset.prefix);
@@ -387,6 +435,19 @@ function renderOverview() {
     const target = networkAt(tile.start, state.paint ? state.paintPrefix : state.drillPrefix);
     if (state.paint) openPrefixDialog(target.cidr);
     else { state.view = "sheet"; state.sheetCidr = target.cidr; renderSheet(); window.scrollTo(0, 0); }
+  }));
+  page.querySelectorAll(".root-row-open").forEach((node) => node.addEventListener("click", () => {
+    const tile = parseCidr(node.dataset.cidr);
+    const target = networkAt(tile.start, state.paint ? state.paintPrefix : state.drillPrefix);
+    if (state.paint) openPrefixDialog(target.cidr);
+    else { state.view = "sheet"; state.sheetCidr = target.cidr; state.treeFocusCidr = null; renderSheet(); window.scrollTo(0, 0); }
+  }));
+  page.querySelectorAll(".root-prefix-open").forEach((node) => node.addEventListener("click", () => {
+    if (state.paint) {
+      const clicked = parseCidr(node.dataset.cidr);
+      openPrefixDialog(networkAt(clicked.start, state.paintPrefix).cidr);
+    }
+    else { state.view = "sheet"; state.sheetCidr = node.dataset.cidr; state.treeFocusCidr = null; renderSheet(); window.scrollTo(0, 0); }
   }));
   page.querySelectorAll(".open-prefix-sheet").forEach((node) => node.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -428,7 +489,7 @@ function renderVerticalTable(sheet) {
   const exactPrefixes = new Map(state.data.prefixes.map((item) => [item.cidr, item]));
   const hosts = hostMap();
   const pings = pingMap();
-  let html = `<div class="vertical-table-wrap"><table class="vertical-subnet-table"><thead><tr><th>IP و نام کوتاه</th><th>وضعیت</th>${[30,29,28,27,26,25,24].map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
+  let html = `<div class="vertical-table-wrap"><table class="vertical-subnet-table"><thead><tr><th>IP و نام کوتاه</th><th>وضعیت</th>${DETAIL_PREFIXES.map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
   for (let last = 0; last < 256; last += 1) {
     const ip = intToIpv4(sheet.start + last);
     const host = hosts.get(ip);
@@ -436,12 +497,12 @@ function renderVerticalTable(sheet) {
     const ping = pings.get(ip);
     const status = system ? (last === 0 ? "Network" : "Broadcast") : host ? (STATUS_LABELS[host.status] || host.status) : "آزاد";
     html += `<tr class="${host ? "recorded" : ""} ${system ? "system" : ""}"><td><button class="ip-line map-ip-cell" data-ip="${ip}"><span class="mono ltr">${escapeHtml(ip)}</span>${host?.name ? `<b>[${escapeHtml(host.name)}]</b>` : ""}</button></td><td><span class="table-status"><i class="${ping ? (ping.online ? "online" : "offline") : "unknown"}"></i>${escapeHtml(status)}</span></td>`;
-    for (const prefix of [30, 29, 28, 27, 26, 25, 24]) {
-      const size = 2 ** (32 - prefix);
+    for (const prefix of DETAIL_PREFIXES) {
+      const size = detailGroupSize(prefix);
       if (last % size !== 0) continue;
       const cidr = `${intToIpv4(sheet.start + last)}/${prefix}`;
       const item = exactPrefixes.get(cidr);
-      html += `<td rowspan="${size}" class="subnet-span" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><button class="table-prefix map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml(item?.name || cidr)}"><span>${last}–${last + size - 1}</span>${item?.name ? `<b>${escapeHtml(item.name)}</b>` : `<small>آزاد</small>`}</button></td>`;
+      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><button class="table-prefix map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml(item?.name || cidr)}"><span>${last}–${last + size - 1}</span>${item?.name ? `<b>${escapeHtml(item.name)}</b>` : `<small>آزاد</small>`}</button></td>`;
     }
     html += `</tr>`;
   }
@@ -465,7 +526,7 @@ function treeBranch(info, remaining) {
   const exact = state.data.prefixes.find((item) => item.cidr === info.cidr);
   const isHost = info.prefix === 32;
   const name = isHost ? hostMap().get(intToIpv4(info.start))?.name : exact?.name;
-  let html = `<li><div class="tree-node-wrap"><button class="tree-node" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 30 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
+  let html = `<li><div class="tree-node-wrap"><button class="tree-node ${isHost ? "host-node" : ""}" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 31 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
   if (remaining > 0 && info.prefix < 32) {
     const childPrefix = info.prefix + 1;
     const half = info.size / 2;
@@ -478,8 +539,11 @@ function renderTreeView(selected) {
   const focus = parseCidr(state.treeFocusCidr || selected.cidr);
   const safeFocus = focus && contains(selected, focus) ? focus : selected;
   state.treeFocusCidr = safeFocus.cidr;
-  const depth = Math.min(4, 32 - safeFocus.prefix);
-  return `<div class="tree-toolbar"><div><span>محدوده فعلی</span><b class="mono ltr">${escapeHtml(safeFocus.cidr)}</b></div><div>${safeFocus.prefix > selected.prefix ? `<button class="btn sm tree-up" data-cidr="${escapeHtml(networkAt(safeFocus.start, safeFocus.prefix - 1).cidr)}">یک سطح بالاتر</button>` : ""}${canWrite() && safeFocus.prefix <= 30 ? `<button class="btn sm primary tree-edit-prefix" data-cidr="${escapeHtml(safeFocus.cidr)}">ثبت مشخصات این رنج</button>` : ""}</div></div><div class="tree-scroll"><ul class="subnet-tree">${treeBranch(safeFocus, depth)}</ul></div><p class="mode-note tree-note">با کلیک روی هر شاخه، همان بخش بزرگ‌تر می‌شود. در /32 فرم اطلاعات IP باز خواهد شد.</p>`;
+  const depth = treeDepth(safeFocus.prefix);
+  const endPrefix = safeFocus.prefix + depth;
+  const trail = [];
+  for (let prefix = selected.prefix; prefix <= safeFocus.prefix; prefix += 1) trail.push(networkAt(safeFocus.start, prefix).cidr);
+  return `<div class="tree-toolbar"><div class="tree-current"><span>مسیر انتخاب</span><span class="tree-breadcrumbs">${trail.map((cidr, index) => `<button class="tree-jump" data-cidr="${escapeHtml(cidr)}">${index ? "← " : ""}${escapeHtml(cidr)}</button>`).join("")}</span><small>نمایش فعلی تا /${endPrefix}</small></div><div>${safeFocus.prefix > selected.prefix ? `<button class="btn sm tree-up" data-cidr="${escapeHtml(networkAt(safeFocus.start, safeFocus.prefix - 1).cidr)}">یک سطح بالاتر</button>` : ""}${canWrite() && safeFocus.prefix <= 31 ? `<button class="btn sm primary tree-edit-prefix" data-cidr="${escapeHtml(safeFocus.cidr)}">ثبت مشخصات این رنج</button>` : ""}</div></div><div class="tree-scroll" tabindex="0"><ul class="subnet-tree">${treeBranch(safeFocus, depth)}</ul></div><p class="mode-note tree-note">برای رسیدن به /30 و /32 روی شاخهٔ موردنظر کلیک کنید. کادر درخت در هر دو جهت اسکرول می‌شود و کلیک روی /32 فرم همان IP را باز می‌کند.</p>`;
 }
 
 function renderSheet() {
@@ -487,21 +551,29 @@ function renderSheet() {
   const space = state.data.space;
   const root = parseCidr(space.cidr);
   if (!selected || selected.prefix > 24 || !contains(root, selected)) { state.view = "overview"; renderOverview(); return; }
-  const blockCount = selected.size / 256;
+  const blockCount = tableBlockCount(selected.prefix);
   const hosts = hostMap();
   const pings = pingMap();
   const relevant = prefixesIn(selected.start, selected.end);
   const hostCount = [...hosts.keys()].filter((ip) => contains(selected, ip)).length;
   const onlineCount = [...pings.values()].filter((item) => contains(selected, item.ip) && item.online).length;
+  if (state.tableScopeCidr !== selected.cidr) {
+    state.tableScopeCidr = selected.cidr;
+    state.tableVisibleBlocks = visibleTableCount(blockCount, 8);
+  }
+  const visibleBlockCount = state.displayMode === "table" ? Math.min(blockCount, state.tableVisibleBlocks) : blockCount;
+  const detailTables = (mode, count = blockCount) => Array.from({ length: count }, (_, index) => {
+    const sheet = parseCidr(`${intToIpv4(selected.start + index * 256)}/24`);
+    const content = mode === "table" ? renderVerticalTable(sheet) : renderIpGrid(sheet);
+    return `<section class="panel detail-block"><div class="section-title"><div><h3 class="ltr mono">${escapeHtml(sheet.cidr)}</h3><span class="subtitle">IP 0–255 — جدول ${formatNumber(index + 1)} از ${formatNumber(blockCount)}</span></div>${canWrite() ? `<button class="btn sm edit-exact-prefix" data-cidr="${escapeHtml(sheet.cidr)}">ثبت / ویرایش مشخصات /24</button>` : ""}</div><div class="ip-wrap">${content}</div></section>`;
+  }).join("");
   const blocks = state.displayMode === "tree"
     ? `<section class="panel detail-block"><div class="ip-wrap">${renderTreeView(selected)}</div></section>`
+    : state.displayMode === "table"
+      ? `${detailTables("table", visibleBlockCount)}${visibleBlockCount < blockCount ? `<section class="panel table-load-more"><div><b>${formatNumber(visibleBlockCount)} از ${formatNumber(blockCount)} جدول /24 نمایش داده شده</b><span>جدول‌های بعدی برای جلوگیری از کندشدن مرورگر مرحله‌ای اضافه می‌شوند.</span></div><button id="loadMoreTables" class="btn primary">نمایش ${formatNumber(Math.min(8, blockCount - visibleBlockCount))} جدول بعدی</button></section>` : ""}`
     : selected.prefix < 23
       ? `<section class="panel detail-block"><div class="section-title"><div><h3>زیرشبکه‌های /24</h3><span class="subtitle">برای مشاهده IPها یک شبکه را باز کنید.</span></div></div><div class="ip-wrap">${renderSubnetSelector(selected)}</div></section>`
-      : Array.from({ length: blockCount }, (_, index) => {
-        const sheet = parseCidr(`${intToIpv4(selected.start + index * 256)}/24`);
-        const content = state.displayMode === "table" ? renderVerticalTable(sheet) : renderIpGrid(sheet);
-        return `<section class="panel detail-block"><div class="section-title"><div><h3 class="ltr mono">${escapeHtml(sheet.cidr)}</h3><span class="subtitle">IP 0–255</span></div>${canWrite() ? `<button class="btn sm edit-exact-prefix" data-cidr="${escapeHtml(sheet.cidr)}">ثبت / ویرایش مشخصات /24</button>` : ""}</div><div class="ip-wrap">${content}</div></section>`;
-      }).join("");
+      : detailTables("classic");
   const selectionIndex = Math.floor((selected.start - root.start) / selected.size);
   const selectionCount = Math.floor(root.size / selected.size);
   const options = Array.from({ length: selectionCount }, (_, index) => {
@@ -509,9 +581,18 @@ function renderSheet() {
     return `<option value="${cidr}" ${cidr === selected.cidr ? "selected" : ""}>${cidr}</option>`;
   }).join("");
   const rangeRows = relevant.sort((a, b) => prefixInfo(a).start - prefixInfo(b).start || prefixInfo(a).prefix - prefixInfo(b).prefix).map((item) => `<div class="range-row"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><div><div class="range-name">${escapeHtml(item.name)}</div><small class="ltr mono">${escapeHtml(item.cidr)}</small></div><small>${formatNumber(prefixInfo(item).size)} آدرس</small><span class="status-pill">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span><div class="row-actions">${canWrite() ? `<button class="btn sm edit-prefix" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger quick-delete-prefix" data-id="${escapeHtml(item.id)}">حذف</button>` : ""}</div></div>`).join("");
-  const sheetColor = relevant[0]?.color || space.color;
+  const containingRanges = (state.data.prefixes || [])
+    .map((item) => ({ item, info: prefixInfo(item) }))
+    .filter(({ info }) => info && contains(info, selected))
+    .sort((a, b) => b.info.prefix - a.info.prefix);
+  const contextRange = containingRanges[0]?.item || null;
+  const contextInfo = contextRange ? prefixInfo(contextRange) : root;
+  const contextIsExact = contextInfo.cidr === selected.cidr;
+  const sheetColor = contextRange?.color || space.color;
+  const contextTitle = contextRange?.name || space.name;
+  const contextDescription = contextRange?.description || contextRange?.role || space.description || "بدون توضیح ثبت‌شده";
   const usable = blockCount * 254;
-  page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
+  page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div><div class="sheet-context"><i></i><div><span>${contextIsExact ? "مشخصات همین رنج" : `رنج ثبت‌شدهٔ والد /${contextInfo.prefix}`}</span><b>${escapeHtml(contextTitle)}</b><small class="mono ltr">${escapeHtml(contextInfo.cidr)}</small><em>${escapeHtml(contextDescription)}</em></div></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
     <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span></div></section>
     <div class="detail-stack">${blocks}</div>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
@@ -520,7 +601,13 @@ function renderSheet() {
   $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("sheetSelect").addEventListener("change", (event) => { state.sheetCidr = event.target.value; renderSheet(); });
   $("scanButton")?.addEventListener("click", runPing);
-  page.querySelectorAll(".display-mode").forEach((node) => node.addEventListener("click", () => { state.displayMode = node.dataset.mode; state.treeFocusCidr = selected.cidr; localStorage.setItem("ems-display-mode", state.displayMode); renderSheet(); }));
+  page.querySelectorAll(".display-mode").forEach((node) => node.addEventListener("click", () => { state.displayMode = node.dataset.mode; state.treeFocusCidr = selected.cidr; state.tableScopeCidr = null; localStorage.setItem("ems-display-mode", state.displayMode); renderSheet(); }));
+  $("loadMoreTables")?.addEventListener("click", () => {
+    const top = window.scrollY;
+    state.tableVisibleBlocks = Math.min(blockCount, state.tableVisibleBlocks + 8);
+    renderSheet();
+    window.scrollTo(0, top);
+  });
   page.querySelectorAll(".ip-cell").forEach((node) => node.addEventListener("click", (event) => {
     if (event.target.closest(".ping-dot")) return;
     openHostDialog(node.dataset.ip);
@@ -535,6 +622,7 @@ function renderSheet() {
   }));
   page.querySelectorAll(".tree-edit-prefix").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openPrefixDialog(node.dataset.cidr); }));
   page.querySelector(".tree-up")?.addEventListener("click", (event) => { state.treeFocusCidr = event.currentTarget.dataset.cidr; renderSheet(); });
+  page.querySelectorAll(".tree-jump").forEach((node) => node.addEventListener("click", () => { state.treeFocusCidr = node.dataset.cidr; renderSheet(); }));
   page.querySelectorAll(".ping-dot:not(.system)").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
   attachPrefixEditHandlers();
   attachPrefixDeleteHandlers();
@@ -815,19 +903,62 @@ async function openRadiosPage(force = true) {
   } catch (error) { toast(error.message); }
 }
 
+async function quickOpenRadio(ip, mode, parentId = "") {
+  const value = String(ip || "").trim();
+  if (ipv4ToInt(value) === null) return toast("یک IP معتبر برای رادیو وارد کنید.");
+  if (!['ap', 'station'].includes(mode)) return toast("حالت رادیو را انتخاب کنید.");
+  if (mode === "station" && !parentId) return toast("برای Station یک AP انتخاب کنید.");
+  try {
+    const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
+    const item = (result.items || []).find((entry) => entry.ip === value);
+    if (!item) return toast("این IP داخل شبکه‌های قابل دسترسی نیست.");
+    await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(ipv4ToInt(value) & 0xffffff00)}/24` });
+    openHostDialog(value);
+    $("hostRadioMode").value = mode;
+    updateRadioFields(parentId);
+    if (mode === "station") {
+      $("hostRadioParent").value = parentId;
+      const parent = state.inventory.find((entry) => entry.id === parentId);
+      if (parent?.ssid) $("hostSsid").value = parent.ssid;
+    }
+    if (!$("hostType").value) $("hostType").value = "رادیو";
+    $("hostName").focus();
+  } catch (error) { toast(error.message); }
+}
+
+function radioSignalClass(signal) {
+  const value = Number.parseInt(String(signal || ""), 10);
+  if (!Number.isFinite(value)) return "unknown";
+  if (value >= -60) return "excellent";
+  if (value >= -70) return "good";
+  return "weak";
+}
+
 function renderRadios() {
   const radios = state.inventory.filter((item) => item.radioMode === "ap" || item.radioMode === "station");
   const aps = radios.filter((item) => item.radioMode === "ap");
   const stations = radios.filter((item) => item.radioMode === "station");
-  const stationCard = (item) => `<button class="radio-station open-inventory-host" data-id="${escapeHtml(item.id)}"><span class="status-dot ${item.status === "active" ? "online" : "unknown"}"></span><div><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small></div><span>${escapeHtml(item.signal || "بدون سیگنال")}</span></button>`;
-  const apCards = aps.map((ap) => {
+  const stationNode = (item) => `<article class="radio-station-node ${radioSignalClass(item.signal)}"><button class="open-inventory-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid || "SSID نامشخص")}</em></span><span class="radio-signal">${escapeHtml(item.signal || "بدون سیگنال")}</span></button><button class="radio-tools radio-node-tool" data-id="${escapeHtml(item.id)}">WinBox / SSH</button></article>`;
+  const listStation = (item) => `<div class="radio-station"><span class="status-dot ${item.status === "active" ? "online" : "unknown"}"></span><button class="open-inventory-host radio-list-main" data-id="${escapeHtml(item.id)}"><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small></button><span>${escapeHtml(item.signal || "بدون سیگنال")}</span><button class="btn sm radio-tools" data-id="${escapeHtml(item.id)}">اتصال</button></div>`;
+  const treeCards = aps.map((ap) => {
     const children = stations.filter((item) => item.radioParentHostId === ap.id);
-    return `<article class="radio-ap-card"><div class="radio-ap-head"><button class="open-inventory-host radio-title" data-id="${escapeHtml(ap.id)}"><span class="radio-icon">AP</span><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><p><span class="mono ltr">${escapeHtml(ap.ip)}</span> — ${escapeHtml(ap.ssid || "SSID تعریف نشده")}</p></div></button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button></div><div class="radio-meta"><span>فرکانس: <b>${escapeHtml(ap.frequency || "—")}</b></span><span>کانال: <b>${escapeHtml(ap.channel || "—")}</b></span><span>کلاینت: <b>${formatNumber(children.length)}</b></span></div><div class="radio-children">${children.map(stationCard).join("") || `<div class="empty-state compact-empty">Station متصل ثبت نشده است.</div>`}</div></article>`;
+    return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><span class="mono ltr">${escapeHtml(ap.ip)}</span></div><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">WinBox / SSH</button></div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-inventory-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name || ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid || "SSID تعریف نشده")}</em></span><span class="radio-ap-meta">${escapeHtml(ap.frequency || "—")}<br>${escapeHtml(ap.channel || "—")}</span></button>${children.length ? `<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item) => `<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>` : `<div class="radio-empty-branch"><span>Station متصل ثبت نشده است.</span><button class="btn sm primary radio-add-station" data-id="${escapeHtml(ap.id)}">اتصال اولین Station</button></div>`}</div></div></article>`;
+  }).join("");
+  const listCards = aps.map((ap) => {
+    const children = stations.filter((item) => item.radioParentHostId === ap.id);
+    return `<article class="radio-ap-card"><div class="radio-ap-head"><button class="open-inventory-host radio-title" data-id="${escapeHtml(ap.id)}"><span class="radio-icon">AP</span><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><p><span class="mono ltr">${escapeHtml(ap.ip)}</span> — ${escapeHtml(ap.ssid || "SSID تعریف نشده")}</p></div></button><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button></div></div><div class="radio-meta"><span>فرکانس: <b>${escapeHtml(ap.frequency || "—")}</b></span><span>کانال: <b>${escapeHtml(ap.channel || "—")}</b></span><span>کلاینت: <b>${formatNumber(children.length)}</b></span></div><div class="radio-children">${children.map(listStation).join("") || `<div class="empty-state compact-empty">Station متصل ثبت نشده است.</div>`}</div></article>`;
   }).join("");
   const orphans = stations.filter((item) => !aps.some((ap) => ap.id === item.radioParentHostId));
-  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تجهیزات</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">اطلاعات هر رادیو همان رکورد IP است و دوباره ثبت نمی‌شود.</div></div><div class="head-actions"><div class="quick-ip"><input id="radioQuickIp" class="ltr mono" placeholder="192.168.1.11"><button id="radioQuickOpen" class="btn primary">ثبت یا نمایش سریع IP</button></div></div></div><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(aps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(stations.length)}</div></div><div class="stat"><div class="label">بدون AP مشخص</div><div class="value">${formatNumber(orphans.length)}</div></div></section><section class="radio-grid">${apCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>${orphans.length ? `<section class="panel orphan-panel"><div class="section-title"><h3>Stationهای بدون AP مشخص</h3></div><div class="radio-children orphan-list">${orphans.map(stationCard).join("")}</div></section>` : ""}`;
-  $("radioQuickOpen").addEventListener("click", () => quickOpenIp($("radioQuickIp").value));
-  $("radioQuickIp").addEventListener("keydown", (event) => { if (event.key === "Enter") quickOpenIp(event.currentTarget.value); });
+  const parentOptions = aps.map((ap) => `<option value="${escapeHtml(ap.id)}">${escapeHtml(ap.name || ap.ip)} — ${escapeHtml(ap.ssid || "بدون SSID")} — ${escapeHtml(ap.ip)}</option>`).join("");
+  const radioContent = state.radioViewMode === "tree" ? `<section class="radio-tree-grid">${treeCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>` : `<section class="radio-grid">${listCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>`;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تجهیزات</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">هر رادیو همان رکورد IP است؛ اتصال Station به AP از همین صفحه ثبت می‌شود.</div></div><div class="head-actions"><div class="segmented"><button class="radio-view-mode ${state.radioViewMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button><button class="radio-view-mode ${state.radioViewMode === "list" ? "active" : ""}" data-mode="list">نمای فهرست</button></div></div></div><section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو و اتصال</b><small>IP را وارد کنید؛ فرم همان IP با حالت رادیو و AP انتخاب‌شده باز می‌شود.</small></div><button id="newApShortcut" class="btn sm">ثبت AP جدید</button></div><div class="radio-register-form"><input id="radioQuickIp" class="ltr mono" placeholder="192.168.1.11"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه و تکمیل اطلاعات</button></div></section><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(aps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(stations.length)}</div></div><div class="stat"><div class="label">بدون AP مشخص</div><div class="value">${formatNumber(orphans.length)}</div></div></section>${radioContent}${orphans.length ? `<section class="panel orphan-panel"><div class="section-title"><h3>Stationهای بدون AP مشخص</h3><span class="subtitle">برای اتصال، روی رکورد کلیک کنید یا از فرم سریع بالا استفاده کنید.</span></div><div class="radio-orphan-grid">${orphans.map(stationNode).join("")}</div></section>` : ""}`;
+  const syncQuickMode = () => $("radioQuickParent").classList.toggle("hidden", $("radioQuickMode").value !== "station");
+  $("radioQuickMode").addEventListener("change", syncQuickMode);
+  $("radioQuickOpen").addEventListener("click", () => quickOpenRadio($("radioQuickIp").value, $("radioQuickMode").value, $("radioQuickParent").value));
+  $("radioQuickIp").addEventListener("keydown", (event) => { if (event.key === "Enter") quickOpenRadio(event.currentTarget.value, $("radioQuickMode").value, $("radioQuickParent").value); });
+  $("newApShortcut").addEventListener("click", () => { $("radioQuickMode").value = "ap"; syncQuickMode(); $("radioQuickIp").focus(); });
+  page.querySelectorAll(".radio-view-mode").forEach((node) => node.addEventListener("click", () => { state.radioViewMode = node.dataset.mode; localStorage.setItem("ems-radio-view-mode", state.radioViewMode); renderRadios(); }));
+  page.querySelectorAll(".radio-add-station").forEach((node) => node.addEventListener("click", () => { $("radioQuickMode").value = "station"; syncQuickMode(); $("radioQuickParent").value = node.dataset.id; $("radioQuickIp").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
   page.querySelectorAll(".open-inventory-host").forEach((node) => node.addEventListener("click", () => openInventoryItem(state.inventory.find((item) => item.id === node.dataset.id))));
   page.querySelectorAll(".radio-tools").forEach((node) => node.addEventListener("click", (event) => {
     const item = state.inventory.find((entry) => entry.id === node.dataset.id);

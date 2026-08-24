@@ -11,7 +11,7 @@ Add license: No license فعلاً
 قرار دهید؛ خود پوشه EMS_IPAM را به‌عنوان یک زیرپوشه اضافه نکنید.
 
 پوشه‌های docker-app، windows-client و docs را همراه با همه فایل‌های داخلشان
-آپلود کنید. تصویر README در مسیر docs/ems-ipam-preview-v0.3.0.png قرار دارد.
+آپلود کنید. تصویر README در مسیر docs/ems-ipam-preview-v0.4.0.png قرار دارد.
 نام تصویر نسخه‌دار است تا GitHub تصویر قدیمی را از Cache نمایش ندهد.
 
 ساختار اصلی Repository:

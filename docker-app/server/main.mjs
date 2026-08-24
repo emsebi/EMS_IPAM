@@ -36,7 +36,7 @@ const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.3.0";
+const APP_VERSION = "0.4.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
@@ -228,7 +228,7 @@ async function protectLastAdmin(client, targetId, nextRole = null, nextActive = 
   if (removesAdmin) {
     const admins = await client.query("SELECT id FROM users WHERE role='admin' AND active=true FOR UPDATE");
     if (admins.rows.filter((item) => item.id !== targetId).length === 0) {
-      throw Object.assign(new Error("At least one active administrator is required."), { status: 409 });
+      throw Object.assign(new Error("حداقل یک مدیر فعال باید در سامانه باقی بماند."), { status: 409 });
     }
   }
   return target;
