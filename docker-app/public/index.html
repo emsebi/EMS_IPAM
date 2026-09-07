@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — مدیریت تصویری شبکه</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=0.5.0">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -28,6 +28,12 @@
         <span class="brandmark">IP</span>
         <span><b>EMS IPAM</b><small>مدیریت تصویری شبکه</small></span>
       </button>
+      <nav class="primary-nav" aria-label="بخش‌های اصلی">
+        <button id="companiesButton" class="navbtn active" type="button">شرکت‌ها</button>
+        <button id="ipamButton" class="navbtn" type="button">مدیریت IP</button>
+        <button id="inventoryButton" class="navbtn" type="button">تجهیزات</button>
+        <button id="radiosButton" class="navbtn" type="button">رادیوها</button>
+      </nav>
       <div class="context-selectors">
         <select id="companySelect" aria-label="شرکت"></select>
         <select id="spaceSelect" aria-label="رنج اصلی"></select>
@@ -39,26 +45,43 @@
       </div>
       <div class="top-actions">
         <span id="liveBadge" class="live-badge"><i></i><span>اتصال زنده</span></span>
-        <button id="radiosButton" class="iconbtn" title="مدیریت رادیوها" aria-label="رادیوها">◉</button>
         <button id="topologyButton" class="iconbtn" title="نقشه شبکه" aria-label="نقشه شبکه">⌘</button>
-        <button id="exportButton" class="iconbtn" title="خروجی JSON" aria-label="خروجی JSON">⇩</button>
+        <button id="exportButton" class="iconbtn" title="خروجی قابل انتقال" aria-label="خروجی قابل انتقال">⇩</button>
+        <button id="importButton" class="iconbtn" title="ورود بسته زیرشبکه" aria-label="ورود بسته زیرشبکه">⇧</button>
         <button id="backupsButton" class="iconbtn admin-only" title="پشتیبان‌گیری" aria-label="پشتیبان‌گیری">⛁</button>
+        <button id="trashButton" class="iconbtn admin-only" title="سطل بازیافت" aria-label="سطل بازیافت">♲</button>
         <button id="usersButton" class="iconbtn admin-only" title="کاربران" aria-label="کاربران">♙</button>
         <button id="settingsButton" class="iconbtn admin-only" title="تنظیمات ابزارها" aria-label="تنظیمات ابزارها">⚙</button>
+        <button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
+        <button id="aboutButton" class="iconbtn" title="درباره سامانه" aria-label="درباره سامانه">ⓘ</button>
+        <a id="clientDownloadButton" class="iconbtn" href="/client.html" target="_blank" rel="noopener" title="دانلود کلاینت اتصال ویندوز" aria-label="دانلود کلاینت اتصال ویندوز">⊞</a>
         <button id="logoutButton" class="iconbtn" title="خروج" aria-label="خروج">↪</button>
       </div>
     </header>
     <main id="page" class="page"></main>
   </div>
 
-  <dialog id="companyDialog">
+  <dialog id="companyDialog" class="wide-dialog">
     <form id="companyForm">
-      <div class="modal-head"><div><h3 id="companyDialogTitle">افزودن شرکت</h3><p>گروه اصلی برای رنج‌ها و کاربران</p></div><button class="close" type="button" data-close>×</button></div>
-      <div class="modal-body form-grid">
-        <input id="mapLinkId" type="hidden">
+      <div class="modal-head"><div><h3 id="companyDialogTitle">افزودن شرکت</h3><p>اطلاعات شرکت، افراد تماس، ارتباط‌ها و یادداشت‌های پشتیبانی</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body company-form-body">
         <input id="companyId" type="hidden">
-        <label class="field">نام شرکت<input id="companyName" required placeholder="مثلاً شرکت ۱"></label>
-        <label class="field full">توضیحات<textarea id="companyDescription"></textarea></label>
+        <section class="form-section"><div class="section-title"><h4>مشخصات شرکت یا شعبه</h4><span>اطلاعات عمومی و موقعیت</span></div><div class="form-grid">
+          <label class="field">نام شرکت یا شعبه<input id="companyName" required placeholder="مثلاً شعبه قزوین"></label>
+          <label class="field">نوع<select id="companyKind"><option value="company">شرکت</option><option value="branch">شعبه</option><option value="customer">مشتری سرویس‌دهنده</option><option value="site">سایت</option></select></label>
+          <label class="field">شرکت مادر<select id="companyParent"><option value="">بدون شرکت مادر</option></select></label>
+          <label class="field">کد داخلی<input id="companyCode"></label>
+          <label class="field">نام مدیر<input id="companyManager"></label>
+          <label class="field">شماره تماس<input id="companyPhone" class="ltr"></label>
+          <label class="field">کد پستی<input id="companyPostalCode" class="ltr"></label>
+          <label class="field full">آدرس<textarea id="companyAddress"></textarea></label>
+          <label class="field">عرض جغرافیایی<input id="companyLatitude" class="ltr mono" inputmode="decimal"></label>
+          <label class="field">طول جغرافیایی<input id="companyLongitude" class="ltr mono" inputmode="decimal"></label>
+          <label class="field full">توضیح کوتاه<textarea id="companyDescription"></textarea></label>
+        </div></section>
+        <section class="form-section"><div class="section-title split"><div><h4>افراد و راه‌های تماس</h4><span>امکان ثبت چند مدیر یا کارشناس</span></div><button id="addCompanyContact" class="btn sm" type="button">افزودن شخص</button></div><div id="companyContacts" class="repeat-list"></div></section>
+        <section class="form-section"><div class="section-title split"><div><h4>IPهای معتبر و ارتباط‌های اصلی</h4><span>روش و پورت را مانند WINBOX:8291 یا SSH:22 وارد کنید.</span></div><button id="addCompanyConnection" class="btn sm" type="button">افزودن ارتباط</button></div><div id="companyConnections" class="repeat-list"></div></section>
+        <section class="form-section"><div class="section-title"><h4>یادداشت‌های شرکت</h4><span>پنل‌ها، روش اتصال، ساعات پاسخ‌گویی و نکات خاص</span></div><label class="field"><textarea id="companyNotes" class="large-notes"></textarea></label></section>
       </div>
       <div class="modal-foot split"><button id="deleteCompanyButton" class="btn danger hidden" type="button">حذف شرکت</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
     </form>
@@ -93,7 +116,7 @@
           <label class="field full">توضیحات<textarea id="prefixDescription"></textarea></label>
         </div>
       </div>
-      <div class="modal-foot split"><button id="deletePrefixButton" class="btn danger hidden" type="button">حذف رنج</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره و اعمال رنگ</button></div>
+      <div class="modal-foot split"><div><button id="deletePrefixButton" class="btn danger hidden" type="button">حذف رنج</button><button id="exportPrefixButton" class="btn hidden" type="button">خروجی قابل انتقال</button></div><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره و اعمال رنگ</button></div>
     </form>
   </dialog>
 
@@ -129,6 +152,24 @@
               <label class="field">کانال<input id="hostChannel"></label>
               <label class="field">سیگنال<input id="hostSignal" placeholder="مثلاً -58 dBm"></label>
             </div>
+          </fieldset>
+          <fieldset id="mikrotikMonitorFields" class="field full ports-fieldset hidden">
+            <legend>پایش امن میکروتیک</legend>
+            <label class="check-field"><input id="hostMonitorEnabled" type="checkbox"> دریافت خودکار وضعیت، سیگنال و Stationها از رابط امن میکروتیک</label>
+            <div class="form-grid compact-grid">
+              <label class="field">روش امن ارتباط<select id="hostMonitorDriver"><option value="mikrotik-rest">REST روی HTTPS برای RouterOS v7</option><option value="mikrotik-api-ssl">API-SSL برای RouterOS v6</option></select></label>
+              <label class="field">پورت امن ارتباط<input id="hostMonitorPort" class="ltr" type="number" min="1" max="65535" value="443"></label>
+              <label class="field">نام کاربری پایش<input id="hostMonitorUsername" autocomplete="off"></label>
+              <label class="field">رمز کاربر پایش<input id="hostMonitorPassword" type="password" autocomplete="new-password" placeholder="برای حفظ رمز فعلی خالی بماند"></label>
+              <label class="field">فاصله بررسی، ثانیه<input id="hostMonitorInterval" type="number" min="15" max="300" value="60"></label>
+              <label class="field full">گواهی CA برای اعتبارسنجی TLS<textarea id="hostMonitorCaPem" class="ltr mono" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+            </div>
+            <div class="inline-actions"><button id="testMikrotikMonitor" class="btn sm" type="button">آزمایش ارتباط</button><button id="openMikrotikScript" class="btn sm" type="button">ساخت اسکریپت تنظیم میکروتیک</button><span id="monitorStatusText" class="subtitle"></span></div>
+          </fieldset>
+          <fieldset class="field full ports-fieldset">
+            <legend>روش‌های مجاز اتصال</legend>
+            <p>فقط گزینه‌های انتخاب‌شده کنار این تجهیز نمایش داده می‌شوند.</p>
+            <div id="hostConnections" class="connection-choice-grid"></div>
           </fieldset>
           <fieldset class="field full ports-fieldset">
             <legend>پورت اختصاصی ابزارها</legend>
@@ -177,10 +218,66 @@
   </dialog>
 
   <dialog id="backupsDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>پشتیبان‌های دیتابیس</h3><p id="backupPath" class="ltr mono"></p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-head"><div><h3>پشتیبان‌های دیتابیس</h3><p>ساخت دستی و زمان‌بندی خودکار</p></div><button class="close" type="button" data-close>×</button></div>
     <div class="modal-body">
+      <form id="backupSettingsForm" class="backup-settings">
+        <label class="check-field"><input id="backupEnabled" type="checkbox"> پشتیبان‌گیری خودکار فعال باشد</label>
+        <label class="field">فاصله اجرا، روز<input id="backupIntervalDays" type="number" min="1" max="365" value="1"></label>
+        <label class="field">ساعت اجرا به وقت سرور<input id="backupHour" type="number" min="0" max="23" value="2"></label>
+        <label class="field">نگهداری، روز<input id="backupRetentionDays" type="number" min="1" max="3650" value="30"></label>
+        <button class="btn" type="submit">ذخیره برنامه پشتیبان</button>
+        <div class="backup-meta"><span>محل ذخیره:</span><b id="backupPath" class="ltr mono"></b><span>اجرای بعدی:</span><b id="backupNextRun"></b></div>
+      </form>
       <div class="toolbar compact-toolbar"><span class="subtitle">فایل شامل دیتابیس و کلید رمزگشایی تجهیزات است.</span><button id="createBackupButton" class="btn primary" type="button">ساخت پشتیبان جدید</button></div>
       <div id="backupsList" class="table-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="importDialog" class="wide-dialog">
+    <form id="importForm">
+      <div class="modal-head"><div><h3>ورود بسته زیرشبکه</h3><p>انتقال یک رنج به همین سامانه یا نصب دیگری از EMS IPAM</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body import-layout">
+        <label class="drop-file">فایل بسته را انتخاب کنید<input id="importFile" type="file" accept=".json,.emsipam.json,application/json" required><span id="importFileSummary">هنوز فایلی انتخاب نشده است.</span></label>
+        <div class="form-grid">
+          <label class="field">شرکت مقصد<select id="importCompany" required></select></label>
+          <label class="field">فضای آدرس مقصد<select id="importSpace" required></select></label>
+          <label class="field full">رفتار در تداخل<select id="importMode"><option value="skip">حفظ اطلاعات مقصد و رد موارد تکراری</option><option value="replace">به‌روزرسانی موارد تکراری با بسته</option></select></label>
+        </div>
+        <div class="notice">رمزهای تجهیزات و میکروتیک عمداً داخل بسته قابل انتقال قرار نمی‌گیرند و باید در مقصد جداگانه ثبت شوند.</div>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">بررسی و ورود اطلاعات</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="mikrotikScriptDialog" class="wide-dialog">
+    <form id="mikrotikScriptForm">
+      <div class="modal-head"><div><h3>اسکریپت اتصال امن میکروتیک</h3><p>کاربر فقط خواندنی و دسترسی محدود به IP سرور سامانه</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <label class="field">IP سرور EMS IPAM<input id="scriptServerIp" class="ltr mono" required></label>
+        <label class="field">نسخه و روش ارتباط<select id="scriptTransport"><option value="mikrotik-rest">RouterOS v7 — REST روی HTTPS</option><option value="mikrotik-api-ssl">RouterOS v6 — API-SSL</option></select></label>
+        <label class="field">نام کاربری<input id="scriptUsername" value="ems-ipam" required></label>
+        <label class="field">رمز قوی<input id="scriptPassword" type="password" minlength="12" required></label>
+        <label class="field">نام Certificate در میکروتیک<input id="scriptCertificate" required></label>
+        <label class="field">پورت امن<input id="scriptPort" type="number" min="1" max="65535" value="443"></label>
+        <label class="field full">خروجی اسکریپت<textarea id="scriptOutput" class="ltr mono script-output" readonly></textarea></label>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>بستن</button><button id="copyMikrotikScript" class="btn" type="button">کپی</button><button class="btn primary" type="submit">ساخت اسکریپت</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="trashDialog" class="wide-dialog">
+    <div class="modal-head"><div><h3>سطل بازیافت</h3><p>اطلاعات حذف‌شده تا ۳۰ روز قابل بازگردانی هستند.</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body"><div id="trashList" class="table-list"></div></div>
+  </dialog>
+
+  <dialog id="aboutDialog" class="about-dialog">
+    <div class="modal-head"><div><h3>درباره EMS IPAM</h3><p>توسعه و مدیریت IP</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body about-content">
+      <div class="about-mark">IP</div>
+      <h2>سامانه توسعه و مدیریت IP</h2>
+      <p>این سامانه با توجه به نیازهای شبکه‌های سازمانی و سرویس‌دهندگان اینترنت طراحی و توسعه داده شده است. امیدوارم در سامان‌دهی منابع IP، مستندسازی شبکه و پیشبرد اهداف سازمان‌ها مؤثر باشد.</p>
+      <dl><div><dt>طراح و توسعه‌دهنده</dt><dd>ابراهیم مامانی</dd></div><div><dt>نسخه</dt><dd id="aboutVersion" class="ltr mono"></dd></div></dl>
+      <div class="about-actions"><a class="btn primary github-star" href="https://github.com/emsebi/EMS_IPAM" target="_blank" rel="noopener noreferrer">مشاهده پروژه و ثبت Star در GitHub</a><a class="btn" href="/client.html" target="_blank" rel="noopener">دانلود کلاینت اتصال ویندوز</a></div>
     </div>
   </dialog>
 
@@ -207,6 +304,7 @@
 
   <dialog id="mapLinkDialog">
     <form id="mapLinkForm">
+      <input id="mapLinkId" type="hidden">
       <div class="modal-head"><div><h3>اتصال دو تجهیز</h3><p id="mapLinkTitle"></p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
         <label class="field">پورت تجهیز اول<select id="mapFromPort"></select></label>
@@ -224,6 +322,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=0.4.1"></script>
+  <script type="module" src="/app.js?v=0.5.0"></script>
 </body>
 </html>

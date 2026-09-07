@@ -29,4 +29,19 @@ test("setup exposes install, update, backup, restore and both uninstall modes", 
   assert.match(installer, /Type DELETE to continue/);
   assert.match(installer, /Type RESTORE to continue/);
   assert.match(installer, /backup_database/);
+  assert.match(installer, /cp -a "\$INSTALL_DIR\/backups\/\." "\$SOURCE_DIR\/backups\/"/);
+  assert.doesNotMatch(installer, /cp -a "\$INSTALL_DIR\/backups" "\$SOURCE_DIR\/backups"/);
+});
+
+test("Windows connection client auto-detects tools and passes usernames without passwords", async () => {
+  const [protocol, setup] = await Promise.all([
+    fs.readFile(new URL("../../windows-client/EMS-IPAM-Protocol.ps1", import.meta.url), "utf8"),
+    fs.readFile(new URL("../../windows-client/Install-EMS-Client.ps1", import.meta.url), "utf8"),
+  ]);
+  assert.match(protocol, /App Paths/);
+  assert.match(protocol, /Select-ToolFile/);
+  assert.match(protocol, /usernameValue/);
+  assert.match(protocol, /'\/prompt'/);
+  assert.doesNotMatch(protocol, /query\['password'\]/);
+  assert.match(setup, /not found - file selection will open on first use/);
 });

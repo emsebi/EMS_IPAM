@@ -59,7 +59,7 @@ export function validateChildCidr(value, rootCidr) {
   const root = parseCidr(rootCidr);
   if (!parsed || !parsed.canonical) throw new Error("CIDR معتبر و هم‌تراز نیست.");
   if (!root || !contains(root, parsed)) throw new Error("رنج خارج از فضای آدرس انتخاب‌شده است.");
-  if (parsed.prefix < root.prefix || parsed.prefix > 30) throw new Error("اندازهٔ رنج باید بین رنج اصلی و /30 باشد.");
+  if (parsed.prefix < root.prefix || parsed.prefix > 32) throw new Error("اندازهٔ رنج باید بین رنج اصلی و /32 باشد.");
   return parsed;
 }
 

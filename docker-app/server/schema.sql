@@ -6,6 +6,18 @@ CREATE TABLE IF NOT EXISTS companies (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS parent_company_id text REFERENCES companies(id) ON DELETE SET NULL;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'company';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS code text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS address text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS postal_code text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS phone text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS manager_name text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS longitude double precision;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS notes text NOT NULL DEFAULT '';
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS address_spaces (
   id text PRIMARY KEY,
   company_id text NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -18,6 +30,8 @@ CREATE TABLE IF NOT EXISTS address_spaces (
   UNIQUE(company_id, cidr)
 );
 
+ALTER TABLE address_spaces ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
 CREATE TABLE IF NOT EXISTS users (
   id text PRIMARY KEY,
   username text NOT NULL UNIQUE,
@@ -25,6 +39,38 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash text NOT NULL,
   role text NOT NULL CHECK (role IN ('admin','editor','viewer')),
   active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE address_spaces ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS company_contacts (
+  id text PRIMARY KEY,
+  company_id text NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  full_name text NOT NULL,
+  job_title text NOT NULL DEFAULT '',
+  phone text NOT NULL DEFAULT '',
+  mobile text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  notes text NOT NULL DEFAULT '',
+  is_primary boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS company_connections (
+  id text PRIMARY KEY,
+  company_id text NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  ip text NOT NULL,
+  provider text NOT NULL DEFAULT '',
+  link_role text NOT NULL DEFAULT 'primary',
+  device_name text NOT NULL DEFAULT '',
+  username text NOT NULL DEFAULT '',
+  connection_methods jsonb NOT NULL DEFAULT '[]'::jsonb,
+  notes text NOT NULL DEFAULT '',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -66,6 +112,9 @@ CREATE TABLE IF NOT EXISTS prefixes (
   UNIQUE(space_id, cidr)
 );
 
+ALTER TABLE prefixes ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE prefixes ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS hosts (
   id text PRIMARY KEY,
   space_id text NOT NULL REFERENCES address_spaces(id) ON DELETE CASCADE,
@@ -89,6 +138,9 @@ CREATE TABLE IF NOT EXISTS hosts (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(space_id, ip)
 );
+
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS ping_results (
   space_id text NOT NULL REFERENCES address_spaces(id) ON DELETE CASCADE,
@@ -136,6 +188,30 @@ ALTER TABLE hosts ADD COLUMN IF NOT EXISTS channel text NOT NULL DEFAULT '';
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS signal text NOT NULL DEFAULT '';
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS radio_parent_host_id text REFERENCES hosts(id) ON DELETE SET NULL;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS connection_methods jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_driver text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_port integer NOT NULL DEFAULT 443;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_username text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_secret_ciphertext text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_ca_pem text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_interval integer NOT NULL DEFAULT 60;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_state jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_checked_at timestamptz;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_last_ok_at timestamptz;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_failures integer NOT NULL DEFAULT 0;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_error text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  updated_by text REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO app_settings(key,value) VALUES
+  ('backup', '{"enabled":true,"intervalDays":1,"hour":2,"retentionDays":30,"lastRunAt":null}'::jsonb),
+  ('monitoring', '{"enabled":true,"defaultInterval":60}'::jsonb)
+ON CONFLICT(key) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS device_ports (
   id text PRIMARY KEY,
@@ -202,3 +278,11 @@ CREATE INDEX IF NOT EXISTS device_ports_host_idx ON device_ports(host_id);
 CREATE INDEX IF NOT EXISTS topology_maps_company_idx ON topology_maps(company_id);
 CREATE INDEX IF NOT EXISTS topology_nodes_map_idx ON topology_nodes(map_id);
 CREATE INDEX IF NOT EXISTS topology_links_map_idx ON topology_links(map_id);
+CREATE INDEX IF NOT EXISTS companies_parent_idx ON companies(parent_company_id);
+CREATE INDEX IF NOT EXISTS companies_deleted_idx ON companies(deleted_at);
+CREATE INDEX IF NOT EXISTS company_contacts_company_idx ON company_contacts(company_id);
+CREATE INDEX IF NOT EXISTS company_connections_company_idx ON company_connections(company_id);
+CREATE INDEX IF NOT EXISTS address_spaces_deleted_idx ON address_spaces(deleted_at);
+CREATE INDEX IF NOT EXISTS prefixes_deleted_idx ON prefixes(deleted_at);
+CREATE INDEX IF NOT EXISTS hosts_deleted_idx ON hosts(deleted_at);
+CREATE INDEX IF NOT EXISTS hosts_monitor_idx ON hosts(monitor_enabled,monitor_checked_at);

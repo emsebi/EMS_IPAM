@@ -27,6 +27,8 @@ import {
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
 import { createSecretBox } from "./secrets.mjs";
+import { buildSubnetPackage, importSubnetPackage } from "./portable.mjs";
+import { buildMikrotikScript, pollMikrotik, saveMikrotikPoll } from "./mikrotik.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATABASE_URL = process.env.DATABASE_URL || undefined;
@@ -36,7 +38,7 @@ const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.4.1";
+const APP_VERSION = "0.5.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
@@ -77,7 +79,7 @@ async function readBody(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 2 * 1024 * 1024) throw new Error("اندازهٔ درخواست بیش از حد مجاز است.");
+    if (size > 12 * 1024 * 1024) throw new Error("اندازهٔ درخواست بیش از حد مجاز است.");
     chunks.push(chunk);
   }
   if (!size) return {};
@@ -90,6 +92,10 @@ async function readBody(req) {
 
 function cleanText(value, max = 500) {
   return String(value ?? "").trim().slice(0, max);
+}
+
+function normalizePersian(value) {
+  return cleanText(value, 500).replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\u200c/g, " ").replace(/\s+/g, " ");
 }
 
 function validColor(value, fallback = COLORS[0]) {
@@ -137,6 +143,55 @@ function normalizeDevicePorts(value) {
   })).filter((item) => item.name && !seen.has(item.name) && seen.add(item.name));
 }
 
+function nullableCoordinate(value, minimum, maximum) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) throw new Error("مختصات جغرافیایی معتبر نیست.");
+  return number;
+}
+
+function normalizeContacts(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).map((item) => ({
+    id: cleanText(item?.id, 80) || crypto.randomUUID(),
+    fullName: cleanText(item?.fullName, 160),
+    jobTitle: cleanText(item?.jobTitle, 120),
+    phone: cleanText(item?.phone, 80),
+    mobile: cleanText(item?.mobile, 80),
+    email: cleanText(item?.email, 180),
+    notes: cleanText(item?.notes, 500),
+    isPrimary: item?.isPrimary === true,
+  })).filter((item) => item.fullName);
+}
+
+function normalizeCompanyConnections(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 100).map((item) => {
+    const ip = validateHostIp(item?.ip, "0.0.0.0/0");
+    return {
+      id: cleanText(item?.id, 80) || crypto.randomUUID(),
+      title: cleanText(item?.title, 120) || ip,
+      ip,
+      provider: cleanText(item?.provider, 120),
+      linkRole: ["primary", "backup", "other"].includes(item?.linkRole) ? item.linkRole : "primary",
+      deviceName: cleanText(item?.deviceName, 160),
+      username: cleanText(item?.username, 120),
+      connectionMethods: normalizeConnections(item?.connectionMethods),
+      notes: cleanText(item?.notes, 1000),
+    };
+  });
+}
+
+function normalizeBackupSettings(value, current = {}) {
+  return {
+    enabled: value?.enabled !== false,
+    intervalDays: Math.max(1, Math.min(365, Math.round(Number(value?.intervalDays ?? current.intervalDays ?? 1) || 1))),
+    hour: Math.max(0, Math.min(23, Math.round(Number(value?.hour ?? current.hour ?? 2) || 0))),
+    retentionDays: Math.max(1, Math.min(3650, Math.round(Number(value?.retentionDays ?? current.retentionDays ?? 30) || 30))),
+    lastRunAt: current.lastRunAt || null,
+  };
+}
+
 function requesterIp(req) {
   return String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
 }
@@ -168,6 +223,8 @@ function requireAdmin(user) {
 }
 
 async function canAccessCompany(user, companyId) {
+  const active = await pool.query("SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyId]);
+  if (!active.rowCount) return false;
   if (user.role === "admin") return true;
   const found = await pool.query(
     `SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2
@@ -180,6 +237,8 @@ async function canAccessCompany(user, companyId) {
 }
 
 async function canManageCompany(user, companyId) {
+  const active = await pool.query("SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyId]);
+  if (!active.rowCount) return false;
   if (user.role === "admin") return true;
   const found = await pool.query(
     "SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2",
@@ -189,12 +248,19 @@ async function canManageCompany(user, companyId) {
 }
 
 async function canAccessSpace(user, spaceId) {
-  if (user.role === "admin") return true;
+  if (user.role === "admin") {
+    const active = await pool.query(
+      "SELECT 1 FROM address_spaces s JOIN companies c ON c.id=s.company_id WHERE s.id=$1 AND s.deleted_at IS NULL AND c.deleted_at IS NULL",
+      [spaceId],
+    );
+    return active.rowCount > 0;
+  }
   const found = await pool.query(
-    `SELECT 1 FROM address_spaces s
+    `SELECT 1 FROM address_spaces s JOIN companies c ON c.id=s.company_id
       LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
       LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
-     WHERE s.id=$2 AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)`,
+     WHERE s.id=$2 AND s.deleted_at IS NULL AND c.deleted_at IS NULL
+       AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)`,
     [user.id, spaceId],
   );
   return found.rowCount > 0;
@@ -204,7 +270,8 @@ async function getSpaceForUser(user, spaceId) {
   const found = await pool.query(
     `SELECT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
             c.name AS "companyName"
-       FROM address_spaces s JOIN companies c ON c.id=s.company_id WHERE s.id=$1`,
+       FROM address_spaces s JOIN companies c ON c.id=s.company_id
+      WHERE s.id=$1 AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,
     [spaceId],
   );
   const space = found.rows[0];
@@ -243,12 +310,16 @@ function broadcast(event) {
 
 async function listBootstrap(user) {
   const companyWhere = user.role === "admin"
-    ? { sql: "", params: [] }
-    : { sql: `WHERE EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
+    ? { sql: "WHERE c.deleted_at IS NULL", params: [] }
+    : { sql: `WHERE c.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
                     OR EXISTS (SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
-                                WHERE s.company_id=c.id AND usa.user_id=$1)`, params: [user.id] };
+                                WHERE s.company_id=c.id AND s.deleted_at IS NULL AND usa.user_id=$1))`, params: [user.id] };
   const companies = await pool.query(
-    `SELECT DISTINCT c.id,c.name,c.description FROM companies c ${companyWhere.sql} ORDER BY c.name`,
+    `SELECT DISTINCT c.id,c.parent_company_id AS "parentCompanyId",c.kind,c.code,c.name,c.description,c.address,
+            c.postal_code AS "postalCode",c.phone,c.manager_name AS "managerName",c.latitude,c.longitude,c.notes,
+            (SELECT count(*)::int FROM company_contacts cc WHERE cc.company_id=c.id) AS "contactCount",
+            (SELECT count(*)::int FROM company_connections cn WHERE cn.company_id=c.id) AS "connectionCount"
+       FROM companies c ${companyWhere.sql} ORDER BY c.name`,
     companyWhere.params,
   );
   const ids = companies.rows.map((item) => item.id);
@@ -256,7 +327,7 @@ async function listBootstrap(user) {
     ? user.role === "admin"
       ? await pool.query(
         `SELECT id,company_id AS "companyId",name,cidr,color,description
-           FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY company_id,cidr`,
+           FROM address_spaces WHERE company_id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY company_id,cidr`,
         [ids],
       )
       : await pool.query(
@@ -264,7 +335,8 @@ async function listBootstrap(user) {
            FROM address_spaces s
            LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
            LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
-          WHERE s.company_id=ANY($2::text[]) AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)
+          WHERE s.company_id=ANY($2::text[]) AND s.deleted_at IS NULL
+            AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)
           ORDER BY s.company_id,s.cidr`,
         [user.id, ids],
       )
@@ -278,21 +350,86 @@ async function listBootstrap(user) {
   return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds };
 }
 
+async function companyData(user, companyId) {
+  if (!(await canAccessCompany(user, companyId))) throw Object.assign(new Error("شرکت پیدا نشد یا دسترسی ندارید."), { status: 404 });
+  const [company, contacts, connections, spaces, stats] = await Promise.all([
+    pool.query(
+      `SELECT id,parent_company_id AS "parentCompanyId",kind,code,name,description,address,postal_code AS "postalCode",
+              phone,manager_name AS "managerName",latitude,longitude,notes,updated_at AS "updatedAt"
+         FROM companies WHERE id=$1 AND deleted_at IS NULL`,
+      [companyId],
+    ),
+    pool.query(
+      `SELECT id,full_name AS "fullName",job_title AS "jobTitle",phone,mobile,email,notes,is_primary AS "isPrimary"
+         FROM company_contacts WHERE company_id=$1 ORDER BY is_primary DESC,full_name`,
+      [companyId],
+    ),
+    pool.query(
+      `SELECT id,title,ip,provider,link_role AS "linkRole",device_name AS "deviceName",username,
+              connection_methods AS "connectionMethods",notes
+         FROM company_connections WHERE company_id=$1 ORDER BY link_role,title`,
+      [companyId],
+    ),
+    pool.query(
+      `SELECT id,name,cidr,color,description FROM address_spaces
+        WHERE company_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
+      [companyId],
+    ),
+    pool.query(
+      `SELECT count(DISTINCT h.id)::int AS hosts,count(DISTINCT p.id)::int AS prefixes,
+              count(DISTINCT CASE WHEN h.radio_mode<>'' THEN h.id END)::int AS radios
+         FROM address_spaces s
+         LEFT JOIN hosts h ON h.space_id=s.id AND h.deleted_at IS NULL
+         LEFT JOIN prefixes p ON p.space_id=s.id AND p.deleted_at IS NULL
+        WHERE s.company_id=$1 AND s.deleted_at IS NULL`,
+      [companyId],
+    ),
+  ]);
+  if (!company.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+  return { ok: true, company: company.rows[0], contacts: contacts.rows, connections: connections.rows, spaces: spaces.rows, stats: stats.rows[0] };
+}
+
+async function replaceCompanyDetails(client, companyId, body) {
+  const contacts = normalizeContacts(body.contacts);
+  const connections = normalizeCompanyConnections(body.connections);
+  await client.query("DELETE FROM company_contacts WHERE company_id=$1", [companyId]);
+  for (const item of contacts) {
+    await client.query(
+      `INSERT INTO company_contacts(id,company_id,full_name,job_title,phone,mobile,email,notes,is_primary)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [item.id, companyId, item.fullName, item.jobTitle, item.phone, item.mobile, item.email, item.notes, item.isPrimary],
+    );
+  }
+  await client.query("DELETE FROM company_connections WHERE company_id=$1", [companyId]);
+  for (const item of connections) {
+    await client.query(
+      `INSERT INTO company_connections(id,company_id,title,ip,provider,link_role,device_name,username,connection_methods,notes)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
+      [item.id, companyId, item.title, item.ip, item.provider, item.linkRole, item.deviceName, item.username, JSON.stringify(item.connectionMethods), item.notes],
+    );
+  }
+}
+
 async function spaceData(user, spaceId) {
   const space = await getSpaceForUser(user, spaceId);
   const [prefixes, hosts, pings, devicePorts] = await Promise.all([
     pool.query(
       `SELECT id,cidr,name,status,role,vlan,gateway,color,description,
-              updated_at AS "updatedAt" FROM prefixes WHERE space_id=$1 ORDER BY cidr`,
+              updated_at AS "updatedAt" FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
       [spaceId],
     ),
     pool.query(
       `SELECT id,ip,name,status,type,os,mac,vlan,username,owner,location,vendor,model,serial,firmware,
               radio_mode AS "radioMode",ssid,frequency,channel,signal,
               radio_parent_host_id AS "radioParentHostId",connection_methods AS "connectionMethods",
+              monitor_enabled AS "monitorEnabled",monitor_driver AS "monitorDriver",monitor_port AS "monitorPort",
+              monitor_username AS "monitorUsername",(monitor_secret_ciphertext <> '') AS "hasMonitorPassword",
+              monitor_ca_pem AS "monitorCaPem",
+              monitor_interval AS "monitorInterval",monitor_state AS "monitorState",monitor_checked_at AS "monitorCheckedAt",
+              monitor_last_ok_at AS "monitorLastOkAt",monitor_failures AS "monitorFailures",monitor_error AS "monitorError",
               secret_ref AS "secretRef",(secret_ciphertext <> '') AS "hasPassword",
               notes,ports,updated_at AS "updatedAt"
-         FROM hosts WHERE space_id=$1 ORDER BY ip`,
+         FROM hosts WHERE space_id=$1 AND deleted_at IS NULL ORDER BY ip`,
       [spaceId],
     ),
     pool.query(
@@ -303,7 +440,7 @@ async function spaceData(user, spaceId) {
     pool.query(
       `SELECT p.id,p.host_id AS "hostId",p.name,p.description,p.port_type AS "portType",p.speed,
               p.vlan_mode AS "vlanMode",p.vlan,p.enabled
-         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.space_id=$1 ORDER BY p.name`,
+         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.space_id=$1 AND h.deleted_at IS NULL ORDER BY p.name`,
       [spaceId],
     ),
   ]);
@@ -336,12 +473,15 @@ async function storePingResults(spaceId, results) {
 }
 
 async function accessibleSpaceIds(user) {
-  if (user.role === "admin") return (await pool.query("SELECT id FROM address_spaces")).rows.map((item) => item.id);
+  if (user.role === "admin") return (await pool.query(
+    "SELECT s.id FROM address_spaces s JOIN companies c ON c.id=s.company_id WHERE s.deleted_at IS NULL AND c.deleted_at IS NULL",
+  )).rows.map((item) => item.id);
   return (await pool.query(
-    `SELECT DISTINCT s.id FROM address_spaces s
+    `SELECT DISTINCT s.id FROM address_spaces s JOIN companies c ON c.id=s.company_id
       LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
       LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
-     WHERE uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL`,
+     WHERE s.deleted_at IS NULL AND c.deleted_at IS NULL
+       AND (uca.user_id IS NOT NULL OR usa.user_id IS NOT NULL)`,
     [user.id],
   )).rows.map((item) => item.id);
 }
@@ -354,16 +494,23 @@ async function inventoryData(user) {
       `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.status,h.type,h.os,h.mac,h.vlan,h.username,h.owner,h.location,
               h.vendor,h.model,h.serial,h.firmware,h.radio_mode AS "radioMode",h.ssid,h.frequency,h.channel,h.signal,
               h.radio_parent_host_id AS "radioParentHostId",h.connection_methods AS "connectionMethods",
+              h.monitor_enabled AS "monitorEnabled",h.monitor_driver AS "monitorDriver",h.monitor_port AS "monitorPort",
+              h.monitor_username AS "monitorUsername",(h.monitor_secret_ciphertext <> '') AS "hasMonitorPassword",
+              h.monitor_ca_pem AS "monitorCaPem",
+              h.monitor_interval AS "monitorInterval",h.monitor_state AS "monitorState",h.monitor_checked_at AS "monitorCheckedAt",
+              h.monitor_last_ok_at AS "monitorLastOkAt",h.monitor_failures AS "monitorFailures",h.monitor_error AS "monitorError",
               (h.secret_ciphertext <> '') AS "hasPassword",s.name AS "spaceName",s.cidr AS "spaceCidr",
               c.id AS "companyId",c.name AS "companyName"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
-        WHERE h.space_id=ANY($1::text[]) ORDER BY c.name,s.cidr,h.ip`,
+        WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL
+        ORDER BY c.name,s.cidr,h.ip`,
       [spaceIds],
     ),
     pool.query(
       `SELECT p.id,p.host_id AS "hostId",p.name,p.description,p.port_type AS "portType",p.speed,
               p.vlan_mode AS "vlanMode",p.vlan,p.enabled
-         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.space_id=ANY($1::text[]) ORDER BY p.name`,
+         FROM device_ports p JOIN hosts h ON h.id=p.host_id
+        WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL ORDER BY p.name`,
       [spaceIds],
     ),
   ]);
@@ -376,29 +523,47 @@ async function inventoryData(user) {
 }
 
 async function searchData(user, query) {
-  const q = cleanText(query, 160);
+  const q = normalizePersian(query).slice(0, 160);
   if (!q) return [];
   const spaces = (await listBootstrap(user)).spaces;
   const spaceIds = spaces.map((item) => item.id);
   if (!spaceIds.length) return [];
   const items = [];
   const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
-  const [hosts, prefixes] = await Promise.all([
+  const companyIds = [...new Set(spaces.map((item) => item.companyId))];
+  const [hosts, prefixes, companies] = await Promise.all([
     pool.query(
       `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id
-        WHERE h.space_id=ANY($1::text[]) AND (h.ip ILIKE $2 OR h.name ILIKE $2 OR h.mac ILIKE $2 OR h.owner ILIKE $2 OR h.notes ILIKE $2)
+        WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
+          (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
+           translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2)
         ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip LIMIT 30`,
       [spaceIds, `%${q}%`, exactIp || ""],
     ),
     pool.query(
       `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
          FROM prefixes p JOIN address_spaces s ON s.id=p.space_id
-        WHERE p.space_id=ANY($1::text[]) AND (p.cidr ILIKE $2 OR p.name ILIKE $2 OR p.role ILIKE $2 OR p.description ILIKE $2)
+        WHERE p.space_id=ANY($1::text[]) AND p.deleted_at IS NULL AND
+          (p.cidr ILIKE $2 OR translate(p.name,'كيى','کیی') ILIKE $2 OR translate(p.role,'كيى','کیی') ILIKE $2 OR translate(p.description,'كيى','کیی') ILIKE $2)
         ORDER BY p.cidr LIMIT 20`,
       [spaceIds, `%${q}%`],
     ),
+    companyIds.length ? pool.query(
+      `SELECT DISTINCT c.id,c.name,c.address,c.phone,c.manager_name AS "managerName"
+         FROM companies c
+         LEFT JOIN company_contacts cc ON cc.company_id=c.id
+         LEFT JOIN company_connections cn ON cn.company_id=c.id
+        WHERE c.id=ANY($1::text[]) AND c.deleted_at IS NULL AND
+          (translate(c.name,'كيى','کیی') ILIKE $2 OR translate(c.address,'كيى','کیی') ILIKE $2 OR
+           c.phone ILIKE $2 OR translate(c.manager_name,'كيى','کیی') ILIKE $2 OR
+           translate(cc.full_name,'كيى','کیی') ILIKE $2 OR cc.phone ILIKE $2 OR cc.mobile ILIKE $2 OR
+           cc.email ILIKE $2 OR cn.ip ILIKE $2 OR translate(cn.provider,'كيى','کیی') ILIKE $2)
+        ORDER BY c.name LIMIT 20`,
+      [companyIds, `%${q}%`],
+    ) : { rows: [] },
   ]);
+  items.push(...companies.rows.map((item) => ({ kind: "company", companyId: item.id, ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
   if (exactIp && !hosts.rows.some((item) => item.ip === exactIp)) {
@@ -467,6 +632,80 @@ async function listBackupFiles() {
   return files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+async function getSetting(key, fallback = {}) {
+  const found = await pool.query("SELECT value FROM app_settings WHERE key=$1", [key]);
+  return found.rows[0]?.value || fallback;
+}
+
+function nextBackupAt(settings) {
+  if (!settings.enabled) return null;
+  const now = new Date();
+  const last = settings.lastRunAt ? new Date(settings.lastRunAt) : null;
+  const due = last && !Number.isNaN(last.getTime())
+    ? new Date(last.getTime() + Number(settings.intervalDays || 1) * 86_400_000)
+    : new Date(now);
+  due.setHours(Number(settings.hour || 0), 0, 0, 0);
+  if (!last && due <= now) return now;
+  while (due <= (last || new Date(0))) due.setDate(due.getDate() + Number(settings.intervalDays || 1));
+  return due;
+}
+
+async function cleanupOldBackups(retentionDays) {
+  const cutoff = Date.now() - Number(retentionDays || 30) * 86_400_000;
+  for (const item of await listBackupFiles()) {
+    if (new Date(item.createdAt).getTime() < cutoff) await fs.unlink(path.join(BACKUP_DIR, item.name)).catch(() => {});
+  }
+}
+
+let automaticBackupRunning = false;
+async function runAutomaticBackup() {
+  if (automaticBackupRunning) return;
+  const raw = await getSetting("backup", {});
+  const settings = normalizeBackupSettings(raw, raw);
+  const due = nextBackupAt(settings);
+  if (!settings.enabled || !due || due.getTime() > Date.now()) return;
+  automaticBackupRunning = true;
+  try {
+    const filename = await createBackupFile();
+    const saved = { ...settings, lastRunAt: new Date().toISOString() };
+    await pool.query(
+      `INSERT INTO app_settings(key,value,updated_at) VALUES('backup',$1::jsonb,now())
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()`,
+      [JSON.stringify(saved)],
+    );
+    await cleanupOldBackups(saved.retentionDays);
+    await audit(null, "automatic_create", "backup", filename, { detail: { intervalDays: saved.intervalDays } });
+    broadcast({ type: "backup", filename });
+  } finally {
+    automaticBackupRunning = false;
+  }
+}
+
+let monitoringCycleRunning = false;
+async function runMonitoringCycle() {
+  if (monitoringCycleRunning) return;
+  const settings = await getSetting("monitoring", { enabled: true });
+  if (settings.enabled === false) return;
+  monitoringCycleRunning = true;
+  try {
+    const due = await pool.query(
+      `SELECT id,ip,name,monitor_driver AS "monitorDriver",monitor_port AS "monitorPort",monitor_username AS "monitorUsername",
+              monitor_secret_ciphertext AS "monitorSecret",monitor_ca_pem AS "monitorCaPem"
+         FROM hosts WHERE deleted_at IS NULL AND radio_mode='ap' AND monitor_enabled=true
+          AND monitor_driver IN ('mikrotik','mikrotik-rest','mikrotik-api-ssl')
+          AND (monitor_checked_at IS NULL OR monitor_checked_at < now() - (monitor_interval * interval '1 second'))
+        ORDER BY monitor_checked_at NULLS FIRST LIMIT 10`,
+    );
+    await Promise.all(due.rows.map(async (host) => {
+      try { await saveMikrotikPoll({ pool, host, result: await pollMikrotik({ host, secretBox }) }); }
+      catch (error) { await saveMikrotikPoll({ pool, host, error }); }
+      broadcast({ type: "host", entityId: host.id });
+    }));
+  } finally {
+    monitoringCycleRunning = false;
+  }
+}
+
 async function api(req, res, url, user) {
   const pathname = url.pathname;
 
@@ -515,7 +754,28 @@ async function api(req, res, url, user) {
 
   if (req.method === "GET" && pathname === "/api/backups") {
     requireAdmin(user);
-    return json(res, 200, { ok: true, path: BACKUP_DISPLAY_PATH, items: await listBackupFiles() });
+    const settings = normalizeBackupSettings(await getSetting("backup", {}), await getSetting("backup", {}));
+    return json(res, 200, {
+      ok: true,
+      path: BACKUP_DISPLAY_PATH,
+      items: await listBackupFiles(),
+      settings,
+      nextRunAt: nextBackupAt(settings)?.toISOString() || null,
+    });
+  }
+
+  if (req.method === "PUT" && pathname === "/api/backups/settings") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const current = await getSetting("backup", {});
+    const settings = normalizeBackupSettings(body, current);
+    await pool.query(
+      `INSERT INTO app_settings(key,value,updated_by,updated_at) VALUES('backup',$1::jsonb,$2,now())
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=now()`,
+      [JSON.stringify(settings), user.id],
+    );
+    await audit(user, "update", "backup_settings", null, { detail: settings });
+    return json(res, 200, { ok: true, settings, nextRunAt: nextBackupAt(settings)?.toISOString() || null });
   }
 
   if (req.method === "POST" && pathname === "/api/backups") {
@@ -523,6 +783,44 @@ async function api(req, res, url, user) {
     const filename = await createBackupFile();
     await audit(user, "create", "backup", filename);
     return json(res, 201, { ok: true, filename });
+  }
+
+  if (req.method === "GET" && pathname === "/api/trash") {
+    requireAdmin(user);
+    const items = await pool.query(
+      `SELECT 'company' AS kind,id,name AS label,NULL::text AS "companyName",deleted_at AS "deletedAt" FROM companies WHERE deleted_at IS NOT NULL
+       UNION ALL
+       SELECT 'space',s.id,s.name || ' — ' || s.cidr,c.name,s.deleted_at FROM address_spaces s JOIN companies c ON c.id=s.company_id WHERE s.deleted_at IS NOT NULL
+       UNION ALL
+       SELECT 'prefix',p.id,p.name || ' — ' || p.cidr,c.name,p.deleted_at FROM prefixes p JOIN address_spaces s ON s.id=p.space_id JOIN companies c ON c.id=s.company_id WHERE p.deleted_at IS NOT NULL
+       UNION ALL
+       SELECT 'host',h.id,COALESCE(NULLIF(h.name,''),h.ip) || ' — ' || h.ip,c.name,h.deleted_at FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id WHERE h.deleted_at IS NOT NULL
+       ORDER BY "deletedAt" DESC`,
+    );
+    return json(res, 200, { ok: true, retentionDays: 30, items: items.rows });
+  }
+
+  const trashMutation = pathname.match(/^\/api\/trash\/(company|space|prefix|host)\/([^/]+)$/);
+  if (trashMutation && req.method === "POST") {
+    requireAdmin(user);
+    const tables = { company: "companies", space: "address_spaces", prefix: "prefixes", host: "hosts" };
+    const table = tables[trashMutation[1]];
+    const restored = await pool.query(`UPDATE ${table} SET deleted_at=NULL,deleted_by=NULL,updated_at=now() WHERE id=$1 AND deleted_at IS NOT NULL RETURNING id`, [trashMutation[2]]);
+    if (!restored.rowCount) throw Object.assign(new Error("رکوردی برای بازگردانی پیدا نشد."), { status: 404 });
+    await audit(user, "restore", trashMutation[1], trashMutation[2]);
+    broadcast({ type: "restore", entityId: trashMutation[2] });
+    return json(res, 200, { ok: true });
+  }
+
+  if (trashMutation && req.method === "DELETE") {
+    requireAdmin(user);
+    const tables = { company: "companies", space: "address_spaces", prefix: "prefixes", host: "hosts" };
+    const table = tables[trashMutation[1]];
+    const removed = await pool.query(`DELETE FROM ${table} WHERE id=$1 AND deleted_at IS NOT NULL RETURNING id`, [trashMutation[2]]);
+    if (!removed.rowCount) throw Object.assign(new Error("رکوردی برای حذف نهایی پیدا نشد."), { status: 404 });
+    await audit(user, "purge", trashMutation[1], trashMutation[2]);
+    broadcast({ type: "purge", entityId: trashMutation[2] });
+    return json(res, 200, { ok: true });
   }
 
   const backupDownload = pathname.match(/^\/api\/backups\/([^/]+)\/download$/);
@@ -558,7 +856,8 @@ async function api(req, res, url, user) {
     const companyIds = (await listBootstrap(user)).companies.map((item) => item.id);
     const maps = user.role === "admin"
       ? await pool.query(`SELECT m.id,m.company_id AS "companyId",m.name,m.description,c.name AS "companyName"
-                            FROM topology_maps m LEFT JOIN companies c ON c.id=m.company_id ORDER BY m.name`)
+                            FROM topology_maps m JOIN companies c ON c.id=m.company_id
+                           WHERE c.deleted_at IS NULL ORDER BY m.name`)
       : companyIds.length
         ? await pool.query(`SELECT m.id,m.company_id AS "companyId",m.name,m.description,c.name AS "companyName"
                               FROM topology_maps m LEFT JOIN companies c ON c.id=m.company_id
@@ -614,7 +913,8 @@ async function api(req, res, url, user) {
       `SELECT n.id,n.host_id AS "hostId",n.x,n.y,n.width,n.height,h.ip,h.name,h.type,h.status,h.vendor,h.model,
               h.radio_mode AS "radioMode",h.ssid,s.id AS "spaceId",s.name AS "spaceName",s.cidr AS "spaceCidr"
          FROM topology_nodes n JOIN hosts h ON h.id=n.host_id JOIN address_spaces s ON s.id=h.space_id
-        WHERE n.map_id=$1 AND h.space_id=ANY($2::text[]) ORDER BY h.name,h.ip`,
+        WHERE n.map_id=$1 AND h.space_id=ANY($2::text[]) AND h.deleted_at IS NULL AND s.deleted_at IS NULL
+        ORDER BY h.name,h.ip`,
       [map.id, spaceIds],
     ) : { rows: [] };
     const nodeIds = nodes.rows.map((item) => item.id);
@@ -759,16 +1059,59 @@ async function api(req, res, url, user) {
 
   const exportMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/export$/);
   if (req.method === "GET" && exportMatch) {
-    const payload = await spaceData(user, exportMatch[1]);
-    const body = Buffer.from(JSON.stringify({ version: APP_VERSION, exportedAt: new Date().toISOString(), ...payload }, null, 2));
+    const space = await getSpaceForUser(user, exportMatch[1]);
+    const payload = await buildSubnetPackage({ pool, space, cidr: space.cidr, appVersion: APP_VERSION, parseCidr, contains });
+    const body = Buffer.from(JSON.stringify(payload, null, 2));
     res.writeHead(200, {
       "Content-Type": "application/json; charset=utf-8",
       "Content-Length": body.length,
-      "Content-Disposition": `attachment; filename="ems-ipam-${payload.space.cidr.replaceAll("/", "-")}.json"`,
+      "Content-Disposition": `attachment; filename="ems-ipam-${space.cidr.replaceAll("/", "-")}.emsipam.json"`,
       "Cache-Control": "no-store",
     });
     return res.end(body);
   }
+
+  const prefixExport = pathname.match(/^\/api\/prefixes\/([^/]+)\/export$/);
+  if (req.method === "GET" && prefixExport) {
+    const found = await pool.query(
+      `SELECT p.id,p.cidr,p.space_id AS "spaceId" FROM prefixes p WHERE p.id=$1 AND p.deleted_at IS NULL`,
+      [prefixExport[1]],
+    );
+    const prefix = found.rows[0];
+    if (!prefix) throw Object.assign(new Error("زیرشبکه پیدا نشد."), { status: 404 });
+    const space = await getSpaceForUser(user, prefix.spaceId);
+    const payload = await buildSubnetPackage({ pool, space, cidr: prefix.cidr, appVersion: APP_VERSION, parseCidr, contains });
+    const body = Buffer.from(JSON.stringify(payload, null, 2));
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": body.length,
+      "Content-Disposition": `attachment; filename="ems-ipam-${prefix.cidr.replaceAll("/", "-")}.emsipam.json"`,
+      "Cache-Control": "no-store",
+    });
+    return res.end(body);
+  }
+
+  if (req.method === "POST" && pathname === "/api/imports/subnet") {
+    requireWriter(user);
+    const body = await readBody(req);
+    const space = await getSpaceForUser(user, cleanText(body.destinationSpaceId, 80));
+    if (!(await canManageCompany(user, space.companyId))) throw Object.assign(new Error("برای ورود اطلاعات باید به کل شرکت مقصد دسترسی ویرایش داشته باشید."), { status: 403 });
+    const result = await importSubnetPackage({
+      pool,
+      user,
+      destinationSpace: space,
+      packageData: body.package,
+      mode: body.mode,
+      parseCidr,
+      contains,
+    });
+    await audit(user, "import", "subnet_package", result.cidr, { companyId: space.companyId, spaceId: space.id, detail: result });
+    broadcast({ type: "import", companyId: space.companyId, spaceId: space.id });
+    return json(res, 200, { ok: true, result });
+  }
+
+  const companyMutation = pathname.match(/^\/api\/companies\/([^/]+)$/);
+  if (req.method === "GET" && companyMutation) return json(res, 200, await companyData(user, companyMutation[1]));
 
   if (req.method === "POST" && pathname === "/api/companies") {
     requireAdmin(user);
@@ -776,23 +1119,69 @@ async function api(req, res, url, user) {
     const name = cleanText(body.name, 120);
     if (!name) throw new Error("نام شرکت الزامی است.");
     const id = crypto.randomUUID();
-    await pool.query("INSERT INTO companies(id,name,description) VALUES($1,$2,$3)", [id, name, cleanText(body.description, 1000)]);
-    await audit(user, "create", "company", id, { companyId: id, detail: { name } });
+    const parentId = cleanText(body.parentCompanyId, 80) || null;
+    if (parentId && !(await canAccessCompany(user, parentId))) throw new Error("شرکت مادر معتبر نیست.");
+    const kind = ["company", "branch", "customer", "site"].includes(body.kind) ? body.kind : "company";
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO companies(id,parent_company_id,kind,code,name,description,address,postal_code,phone,manager_name,latitude,longitude,notes)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [id, parentId, kind, cleanText(body.code, 80), name, cleanText(body.description, 2000), cleanText(body.address, 1000),
+          cleanText(body.postalCode, 40), cleanText(body.phone, 80), cleanText(body.managerName, 160),
+          nullableCoordinate(body.latitude, -90, 90), nullableCoordinate(body.longitude, -180, 180), cleanText(body.notes, 12000)],
+      );
+      await replaceCompanyDetails(client, id, body);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+    await audit(user, "create", "company", id, { companyId: id, detail: { name, kind } });
     broadcast({ type: "company", companyId: id });
     return json(res, 201, { ok: true, id });
   }
 
-  const companyMutation = pathname.match(/^\/api\/companies\/([^/]+)$/);
   if (req.method === "PUT" && companyMutation) {
-    requireAdmin(user);
+    requireWriter(user);
+    if (!(await canManageCompany(user, companyMutation[1]))) throw Object.assign(new Error("دسترسی ویرایش این شرکت را ندارید."), { status: 403 });
     const body = await readBody(req);
     const name = cleanText(body.name, 120);
     if (!name) throw new Error("نام شرکت الزامی است.");
-    const updated = await pool.query(
-      "UPDATE companies SET name=$1,description=$2,updated_at=now() WHERE id=$3 RETURNING id",
-      [name, cleanText(body.description, 1000), companyMutation[1]],
-    );
-    if (!updated.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+    const parentId = cleanText(body.parentCompanyId, 80) || null;
+    if (parentId === companyMutation[1]) throw new Error("شرکت نمی‌تواند زیرمجموعه خودش باشد.");
+    if (parentId && !(await canAccessCompany(user, parentId))) throw new Error("شرکت مادر معتبر نیست.");
+    if (parentId) {
+      const cycle = await pool.query(
+        `WITH RECURSIVE descendants AS (
+           SELECT id FROM companies WHERE parent_company_id=$1 AND deleted_at IS NULL
+           UNION
+           SELECT c.id FROM companies c JOIN descendants d ON c.parent_company_id=d.id WHERE c.deleted_at IS NULL
+         ) SELECT 1 FROM descendants WHERE id=$2 LIMIT 1`,
+        [companyMutation[1], parentId],
+      );
+      if (cycle.rowCount) throw new Error("شرکت مادر نمی‌تواند از زیرمجموعه‌های همین شرکت انتخاب شود.");
+    }
+    const kind = ["company", "branch", "customer", "site"].includes(body.kind) ? body.kind : "company";
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE companies SET parent_company_id=$1,kind=$2,code=$3,name=$4,description=$5,address=$6,postal_code=$7,
+           phone=$8,manager_name=$9,latitude=$10,longitude=$11,notes=$12,updated_at=now()
+         WHERE id=$13 AND deleted_at IS NULL RETURNING id`,
+        [parentId, kind, cleanText(body.code, 80), name, cleanText(body.description, 2000), cleanText(body.address, 1000),
+          cleanText(body.postalCode, 40), cleanText(body.phone, 80), cleanText(body.managerName, 160),
+          nullableCoordinate(body.latitude, -90, 90), nullableCoordinate(body.longitude, -180, 180), cleanText(body.notes, 12000), companyMutation[1]],
+      );
+      if (!updated.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+      await replaceCompanyDetails(client, companyMutation[1], body);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
     await audit(user, "update", "company", companyMutation[1], { companyId: companyMutation[1], detail: { name } });
     broadcast({ type: "company", companyId: companyMutation[1] });
     return json(res, 200, { ok: true });
@@ -800,10 +1189,12 @@ async function api(req, res, url, user) {
 
   if (req.method === "DELETE" && companyMutation) {
     requireAdmin(user);
-    const found = await pool.query("SELECT id,name FROM companies WHERE id=$1", [companyMutation[1]]);
+    const found = await pool.query("SELECT id,name FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyMutation[1]]);
     if (!found.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
+    const children = await pool.query("SELECT 1 FROM companies WHERE parent_company_id=$1 AND deleted_at IS NULL LIMIT 1", [companyMutation[1]]);
+    if (children.rowCount) throw Object.assign(new Error("ابتدا شرکت‌ها یا شعبه‌های زیرمجموعه را حذف یا جابه‌جا کنید."), { status: 409 });
     await audit(user, "delete", "company", companyMutation[1], { detail: { name: found.rows[0].name } });
-    await pool.query("DELETE FROM companies WHERE id=$1", [companyMutation[1]]);
+    await pool.query("UPDATE companies SET deleted_at=now(),deleted_by=$1 WHERE id=$2", [user.id, companyMutation[1]]);
     broadcast({ type: "company", companyId: companyMutation[1] });
     return json(res, 200, { ok: true });
   }
@@ -831,15 +1222,15 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const next = validateRootCidr(body.cidr);
     const [prefixes, hosts] = await Promise.all([
-      pool.query("SELECT cidr FROM prefixes WHERE space_id=$1", [current.id]),
-      pool.query("SELECT ip FROM hosts WHERE space_id=$1", [current.id]),
+      pool.query("SELECT cidr FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL", [current.id]),
+      pool.query("SELECT ip FROM hosts WHERE space_id=$1 AND deleted_at IS NULL", [current.id]),
     ]);
     if (prefixes.rows.some((item) => !contains(next, parseCidr(item.cidr))) || hosts.rows.some((item) => !contains(next, item.ip))) {
       throw Object.assign(new Error("رنج جدید شامل همه زیررنج‌ها و IPهای ثبت‌شده نیست."), { status: 409 });
     }
     const name = cleanText(body.name, 120) || next.cidr;
     await pool.query(
-      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5",
+      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5 AND deleted_at IS NULL",
       [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id],
     );
     await audit(user, "update", "space", current.id, { companyId: current.companyId, spaceId: current.id, detail: { name, cidr: next.cidr } });
@@ -851,7 +1242,7 @@ async function api(req, res, url, user) {
     requireWriter(user);
     const current = await getSpaceForUser(user, spaceMutation[1]);
     await audit(user, "delete", "space", current.id, { companyId: current.companyId, detail: { name: current.name, cidr: current.cidr } });
-    await pool.query("DELETE FROM address_spaces WHERE id=$1", [current.id]);
+    await pool.query("UPDATE address_spaces SET deleted_at=now(),deleted_by=$1 WHERE id=$2", [user.id, current.id]);
     broadcast({ type: "space", companyId: current.companyId, spaceId: current.id });
     return json(res, 200, { ok: true });
   }
@@ -869,7 +1260,7 @@ async function api(req, res, url, user) {
       cleanText(body.gateway, 80), validColor(body.color), cleanText(body.description, 2000), user.id,
     ];
     if (requestedId) {
-      const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1", [requestedId]);
+      const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1 AND deleted_at IS NULL", [requestedId]);
       if (!current.rowCount || current.rows[0].spaceId !== space.id) {
         throw Object.assign(new Error("رنج پیدا نشد یا به این شبکه تعلق ندارد."), { status: 404 });
       }
@@ -895,12 +1286,12 @@ async function api(req, res, url, user) {
   if (req.method === "DELETE" && prefixDelete) {
     requireWriter(user);
     const found = await pool.query(
-      "SELECT p.id,p.cidr,p.space_id AS \"spaceId\",s.company_id AS \"companyId\" FROM prefixes p JOIN address_spaces s ON s.id=p.space_id WHERE p.id=$1",
+      "SELECT p.id,p.cidr,p.space_id AS \"spaceId\",s.company_id AS \"companyId\" FROM prefixes p JOIN address_spaces s ON s.id=p.space_id WHERE p.id=$1 AND p.deleted_at IS NULL",
       [prefixDelete[1]],
     );
     const item = found.rows[0];
     if (!item || !(await canAccessSpace(user, item.spaceId))) throw Object.assign(new Error("رنج پیدا نشد."), { status: 404 });
-    await pool.query("DELETE FROM prefixes WHERE id=$1", [item.id]);
+    await pool.query("UPDATE prefixes SET deleted_at=now(),deleted_by=$1 WHERE id=$2", [user.id, item.id]);
     await audit(user, "delete", "prefix", item.id, { companyId: item.companyId, spaceId: item.spaceId, detail: { cidr: item.cidr } });
     broadcast({ type: "prefix", companyId: item.companyId, spaceId: item.spaceId, entityId: item.id });
     return json(res, 200, { ok: true });
@@ -915,7 +1306,7 @@ async function api(req, res, url, user) {
     let current = null;
     if (requestedId) {
       current = (await pool.query(
-        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret FROM hosts WHERE id=$1",
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret,monitor_secret_ciphertext AS \"monitorSecret\" FROM hosts WHERE id=$1 AND deleted_at IS NULL",
         [requestedId],
       )).rows[0] || null;
       if (!current || !(await canAccessSpace(user, current.spaceId))) {
@@ -923,7 +1314,7 @@ async function api(req, res, url, user) {
       }
     } else {
       current = (await pool.query(
-        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2",
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret,monitor_secret_ciphertext AS \"monitorSecret\" FROM hosts WHERE space_id=$1 AND ip=$2",
         [space.id, ip],
       )).rows[0] || null;
     }
@@ -931,18 +1322,26 @@ async function api(req, res, url, user) {
     let secretCiphertext = current?.secret || "";
     if (body.clearPassword === true) secretCiphertext = "";
     else if (String(body.password || "")) secretCiphertext = secretBox.encrypt(String(body.password));
+    let monitorSecretCiphertext = current?.monitorSecret || "";
+    if (body.clearMonitorPassword === true) monitorSecretCiphertext = "";
+    else if (String(body.monitorPassword || "")) monitorSecretCiphertext = secretBox.encrypt(String(body.monitorPassword));
     const radioMode = ["", "ap", "station"].includes(String(body.radioMode || "").toLowerCase()) ? String(body.radioMode || "").toLowerCase() : "";
     let radioParentHostId = cleanText(body.radioParentHostId, 80) || null;
     if (radioParentHostId) {
       const parent = await pool.query(
         `SELECT h.id,s.id AS "spaceId" FROM hosts h JOIN address_spaces s ON s.id=h.space_id
-          WHERE h.id=$1 AND h.radio_mode='ap'`,
+          WHERE h.id=$1 AND h.radio_mode='ap' AND h.deleted_at IS NULL AND s.deleted_at IS NULL`,
         [radioParentHostId],
       );
       if (!parent.rowCount || !(await canAccessSpace(user, parent.rows[0].spaceId))) throw Object.assign(new Error("رادیوی AP انتخاب‌شده پیدا نشد یا دسترسی ندارید."), { status: 404 });
       if (parent.rows[0].id === id) throw new Error("یک رادیو نمی‌تواند والد خودش باشد.");
     }
     if (radioMode !== "station") radioParentHostId = null;
+    const monitorEnabled = radioMode === "ap" && body.monitorEnabled === true;
+    const requestedMonitorDriver = body.monitorDriver === "mikrotik-api-ssl" ? "mikrotik-api-ssl" : "mikrotik-rest";
+    const monitorDriver = monitorEnabled ? requestedMonitorDriver : "";
+    const monitorPort = validatePort(body.monitorPort || (requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443), { allowZero: false }) || (requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443);
+    const monitorInterval = Math.max(15, Math.min(300, Math.round(Number(body.monitorInterval || 60)) || 60));
     const values = [
       id, space.id, ip, cleanText(body.name, 160), cleanText(body.status, 40) || "active",
       cleanText(body.type, 100), cleanText(body.os, 160), cleanText(body.mac, 32), cleanText(body.vlan, 40),
@@ -951,6 +1350,8 @@ async function api(req, res, url, user) {
       cleanText(body.vendor, 100), cleanText(body.model, 120), cleanText(body.serial, 120), cleanText(body.firmware, 120),
       radioMode, cleanText(body.ssid, 160), cleanText(body.frequency, 80), cleanText(body.channel, 80),
       cleanText(body.signal, 40), radioParentHostId, JSON.stringify(normalizeConnections(body.connectionMethods)),
+      monitorEnabled, monitorDriver, monitorPort, cleanText(body.monitorUsername, 120), monitorSecretCiphertext,
+      cleanText(body.monitorCaPem, 20000), monitorInterval,
     ];
     const client = await pool.connect();
     let savedId = id;
@@ -958,15 +1359,20 @@ async function api(req, res, url, user) {
       await client.query("BEGIN");
       const saved = await client.query(
         `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by,
-                           vendor,model,serial,firmware,radio_mode,ssid,frequency,channel,signal,radio_parent_host_id,connection_methods)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb)
+                           vendor,model,serial,firmware,radio_mode,ssid,frequency,channel,signal,radio_parent_host_id,connection_methods,
+                           monitor_enabled,monitor_driver,monitor_port,monitor_username,monitor_secret_ciphertext,monitor_ca_pem,monitor_interval)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,
+                $29,$30,$31,$32,$33,$34,$35)
          ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id,ip=excluded.ip,name=excluded.name,status=excluded.status,type=excluded.type,
            os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
            location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
            notes=excluded.notes,ports=excluded.ports,vendor=excluded.vendor,model=excluded.model,serial=excluded.serial,
            firmware=excluded.firmware,radio_mode=excluded.radio_mode,ssid=excluded.ssid,frequency=excluded.frequency,
            channel=excluded.channel,signal=excluded.signal,radio_parent_host_id=excluded.radio_parent_host_id,
-           connection_methods=excluded.connection_methods,updated_by=excluded.updated_by,updated_at=now()
+           connection_methods=excluded.connection_methods,monitor_enabled=excluded.monitor_enabled,monitor_driver=excluded.monitor_driver,
+           monitor_port=excluded.monitor_port,monitor_username=excluded.monitor_username,monitor_secret_ciphertext=excluded.monitor_secret_ciphertext,
+           monitor_ca_pem=excluded.monitor_ca_pem,monitor_interval=excluded.monitor_interval,deleted_at=NULL,deleted_by=NULL,
+           updated_by=excluded.updated_by,updated_at=now()
          RETURNING id`,
         values,
       );
@@ -997,7 +1403,7 @@ async function api(req, res, url, user) {
     requireWriter(user);
     const space = await getSpaceForUser(user, hostSecret[1]);
     const ip = validateHostIp(decodeURIComponent(hostSecret[2]), space.cidr);
-    const found = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2", [space.id, ip]);
+    const found = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2 AND deleted_at IS NULL", [space.id, ip]);
     if (!found.rowCount) throw Object.assign(new Error("اطلاعات IP پیدا نشد."), { status: 404 });
     await audit(user, "reveal_secret", "host", ip, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
     return json(res, 200, { ok: true, password: secretBox.decrypt(found.rows[0].secret) });
@@ -1008,11 +1414,39 @@ async function api(req, res, url, user) {
     requireWriter(user);
     const space = await getSpaceForUser(user, hostDelete[1]);
     const ip = validateHostIp(decodeURIComponent(hostDelete[2]), space.cidr);
-    const found = await pool.query("DELETE FROM hosts WHERE space_id=$1 AND ip=$2 RETURNING id", [space.id, ip]);
+    const found = await pool.query("UPDATE hosts SET deleted_at=now(),deleted_by=$1 WHERE space_id=$2 AND ip=$3 AND deleted_at IS NULL RETURNING id", [user.id, space.id, ip]);
     if (!found.rowCount) throw Object.assign(new Error("اطلاعات IP پیدا نشد."), { status: 404 });
     await audit(user, "delete", "host", found.rows[0].id, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
     broadcast({ type: "host", companyId: space.companyId, spaceId: space.id, entityId: found.rows[0].id });
     return json(res, 200, { ok: true });
+  }
+
+  const hostMonitorTest = pathname.match(/^\/api\/hosts\/([^/]+)\/monitor\/test$/);
+  if (req.method === "POST" && hostMonitorTest) {
+    requireWriter(user);
+    const host = (await pool.query(
+      `SELECT h.id,h.ip,h.name,h.space_id AS "spaceId",h.monitor_driver AS "monitorDriver",h.monitor_port AS "monitorPort",h.monitor_username AS "monitorUsername",
+              h.monitor_secret_ciphertext AS "monitorSecret",h.monitor_ca_pem AS "monitorCaPem"
+         FROM hosts h WHERE h.id=$1 AND h.deleted_at IS NULL AND h.radio_mode='ap' AND h.monitor_enabled=true`,
+      [hostMonitorTest[1]],
+    )).rows[0];
+    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("رادیوی قابل پایش پیدا نشد."), { status: 404 });
+    try {
+      const result = await pollMikrotik({ host, secretBox });
+      await saveMikrotikPoll({ pool, host, result });
+      await audit(user, "test", "mikrotik_monitor", host.id, { spaceId: host.spaceId, detail: { stations: result.stations.length } });
+      broadcast({ type: "host", spaceId: host.spaceId, entityId: host.id });
+      return json(res, 200, { ok: true, state: result });
+    } catch (error) {
+      await saveMikrotikPoll({ pool, host, error });
+      throw error;
+    }
+  }
+
+  if (req.method === "POST" && pathname === "/api/mikrotik/script") {
+    requireWriter(user);
+    const body = await readBody(req);
+    return json(res, 200, { ok: true, script: buildMikrotikScript(body) });
   }
 
   if (req.method === "POST" && pathname === "/api/ping") {
@@ -1213,7 +1647,26 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`EMS IPAM ${APP_VERSION} listening on ${PORT}`);
 });
 
+const backupTimer = setInterval(() => runAutomaticBackup().catch((error) => console.error("automatic backup", error)), 60_000);
+const monitorTimer = setInterval(() => runMonitoringCycle().catch((error) => console.error("monitoring cycle", error)), 15_000);
+const trashTimer = setInterval(async () => {
+  try {
+    await pool.query("DELETE FROM hosts WHERE deleted_at < now() - interval '30 days'");
+    await pool.query("DELETE FROM prefixes WHERE deleted_at < now() - interval '30 days'");
+    await pool.query("DELETE FROM address_spaces WHERE deleted_at < now() - interval '30 days'");
+    await pool.query("DELETE FROM companies WHERE deleted_at < now() - interval '30 days'");
+  } catch (error) { console.error("trash cleanup", error); }
+}, 6 * 60 * 60_000);
+backupTimer.unref();
+monitorTimer.unref();
+trashTimer.unref();
+setTimeout(() => runAutomaticBackup().catch((error) => console.error("automatic backup", error)), 5000).unref();
+setTimeout(() => runMonitoringCycle().catch((error) => console.error("monitoring cycle", error)), 3000).unref();
+
 async function shutdown() {
+  clearInterval(backupTimer);
+  clearInterval(monitorTimer);
+  clearInterval(trashTimer);
   server.close();
   for (const client of eventClients) client.end();
   await database.close();

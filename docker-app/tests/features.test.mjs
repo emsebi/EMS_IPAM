@@ -2,19 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-test("schema keeps IP, radio, scoped access and topology in one database", async () => {
+test("schema keeps companies, IP, monitoring, scoped access and topology in one database", async () => {
   const schema = await fs.readFile(new URL("../server/schema.sql", import.meta.url), "utf8");
-  for (const table of ["user_space_access", "device_ports", "topology_maps", "topology_nodes", "topology_links"]) {
+  for (const table of ["company_contacts", "company_connections", "app_settings", "user_space_access", "device_ports", "topology_maps", "topology_nodes", "topology_links"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   }
-  for (const column of ["radio_mode", "ssid", "radio_parent_host_id", "connection_methods"]) {
+  for (const column of ["parent_company_id", "deleted_at", "radio_mode", "ssid", "radio_parent_host_id", "connection_methods", "monitor_enabled", "monitor_state"]) {
     assert.match(schema, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`));
   }
 });
 
 test("server exposes inventory, global search, topology and downloadable backups", async () => {
   const server = await fs.readFile(new URL("../server/main.mjs", import.meta.url), "utf8");
-  for (const route of ["/api/search", "/api/inventory", "/api/backups", "/api/maps"]) {
+  for (const route of ["/api/search", "/api/inventory", "/api/backups", "/api/backups/settings", "/api/trash", "/api/imports/subnet", "/api/mikrotik/script", "/api/maps"]) {
     assert.match(server, new RegExp(route.replaceAll("/", "\\/")));
   }
   assert.match(server, /createBackupFile/);
@@ -22,6 +22,11 @@ test("server exposes inventory, global search, topology and downloadable backups
   assert.match(server, /canAccessSpace/);
   assert.match(server, /canAccessSpace\(user, item\.spaceId\)/);
   assert.match(server, /ON CONFLICT\(id\) DO UPDATE SET space_id=excluded\.space_id,ip=excluded\.ip/);
+});
+
+test("native VNC viewer uses its standard default port", async () => {
+  const database = await fs.readFile(new URL("../server/db.mjs", import.meta.url), "utf8");
+  assert.match(database, /\["VNC",\s*"VNC",\s*5900/);
 });
 
 test("destructive and scoped workflows keep their safety guards", async () => {
@@ -35,4 +40,9 @@ test("destructive and scoped workflows keep their safety guards", async () => {
   assert.match(server, /canAccessSpace\(user, item\.spaceId\)/);
   assert.match(server, /pg_dump/);
   assert.match(server, /EMS_SECRET_KEY/);
+  assert.match(server, /deleted_at=now\(\)/);
+  assert.match(server, /runAutomaticBackup/);
+  assert.match(server, /runMonitoringCycle/);
+  assert.match(server, /ابتدا شرکت‌ها یا شعبه‌های زیرمجموعه را حذف یا جابه‌جا کنید/);
+  assert.match(server, /WITH RECURSIVE descendants/);
 });

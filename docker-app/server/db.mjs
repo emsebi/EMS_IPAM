@@ -37,7 +37,7 @@ export function createDatabase(connectionString) {
     }
 
     const tools = [
-      ["VNC", "VNC", 5800, "#d94b5b"],
+      ["VNC", "VNC", 5900, "#d94b5b"],
       ["MIK", "WinBox", 8291, "#3478d4"],
       ["RDP", "Remote Desktop", 3389, "#2fa36f"],
       ["SSH", "SSH Terminal", 22, "#e48a2d"],

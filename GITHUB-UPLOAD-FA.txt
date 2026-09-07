@@ -1,37 +1,27 @@
-تنظیمات ساخت Repository
+راهنمای انتشار نسخه ۰.۵.۰ در GitHub
 
-Owner: emsebi
-Repository name: EMS_IPAM
-Visibility: Public
-Add README: Off
-Add .gitignore: No .gitignore
-Add license: No license فعلاً
+مخزن:
+https://github.com/emsebi/EMS_IPAM
 
-پس از ساخت Repository، محتویات پوشه EMS_IPAM را مستقیماً در ریشه Repository
-قرار دهید؛ خود پوشه EMS_IPAM را به‌عنوان یک زیرپوشه اضافه نکنید.
+۱. تمام محتویات بستهٔ EMS_IPAM-GitHub-v0.5.0.zip را مستقیماً در ریشهٔ شاخه main قرار دهید.
+خود پوشه را به‌عنوان یک زیرپوشه اضافه نکنید.
 
-پوشه‌های docker-app، windows-client و docs را همراه با همه فایل‌های داخلشان
-آپلود کنید. تصویر README در مسیر docs/ems-ipam-preview-v0.4.0.png قرار دارد.
-نام تصویر نسخه‌دار است تا GitHub تصویر قدیمی را از Cache نمایش ندهد.
+۲. این چهار تصویر جدید باید در پوشه docs وجود داشته باشند:
+docs/ems-ipam-companies-v0.5.0.png
+docs/ems-ipam-ip-management-v0.5.0.png
+docs/ems-ipam-radios-v0.5.0.png
+docs/ems-ipam-inventory-v0.5.0.png
 
-ساختار اصلی Repository:
+۳. بستهٔ کلاینت ویندوز باید دقیقاً در مسیر زیر باشد:
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip
 
-docker-app/
-docs/
-windows-client/
-.env.example
-.gitignore
-compose.yml
-install.sh
-portainer-stack.yml
-README.md
-VERSION
-
-شاخه پیش‌فرض باید main باشد.
-
-دستور نصب پس از کامل‌شدن Upload:
-
+۴. پس از انتشار، نصب مستقیم سرور با این دستور انجام می‌شود:
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 
-توجه: تا زمانی که تمام فایل‌ها، به‌خصوص install.sh، compose.yml و docker-app،
-در Repository قرار نگرفته‌اند این دستور را اجرا نکنید.
+۵. پس از نصب، صفحهٔ راهنمای کلاینت ویندوز از این نشانی باز می‌شود:
+http://SERVER-IP:PORT/client.html
+
+۶. دانلود مستقیم کلاینت از خود سرویس:
+http://SERVER-IP:PORT/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip
+
+۷. پیش از انتشار، نتیجهٔ آزمون و هش فایل‌ها را با SHA256SUMS.txt تطبیق دهید.
