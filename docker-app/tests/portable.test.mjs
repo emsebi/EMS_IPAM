@@ -22,7 +22,7 @@ test("portable subnet export stays scoped and excludes every secret", async () =
     pool,
     space: { id: "s1", cidr: "10.20.0.0/16", name: "مرکزی", companyName: "نمونه" },
     cidr: "10.20.30.0/24",
-    appVersion: "0.5.0",
+    appVersion: "0.5.1",
     parseCidr,
     contains,
   });

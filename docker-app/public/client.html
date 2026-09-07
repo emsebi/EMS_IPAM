@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>کلاینت اتصال ویندوز — EMS IPAM</title>
-  <link rel="stylesheet" href="/styles.css?v=0.5.0">
+  <link rel="stylesheet" href="/styles.css?v=0.5.1">
 </head>
 <body>
   <main class="client-download-page">
@@ -12,7 +12,7 @@
       <section class="client-hero">
         <h1>کلاینت اتصال ویندوز</h1>
         <p>این بسته ابزارهای نصب‌شده را خودکار پیدا می‌کند و دکمه‌های اتصال سامانه را به برنامه‌های ویندوز متصل می‌کند. رمز عبور داخل لینک مرورگر قرار نمی‌گیرد.</p>
-        <a class="btn primary client-download" href="/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip" download>دانلود نسخهٔ ۰.۵.۰ برای ویندوز</a>
+        <a class="btn primary client-download" href="/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip" download>دانلود نسخهٔ ۰.۵.۱ برای ویندوز</a>
       </section>
       <section class="client-panel">
         <h2>مراحل نصب</h2>
@@ -20,6 +20,7 @@
           <div class="client-step">فایل فشرده را دانلود و از حالت فشرده خارج کنید.</div>
           <div class="client-step">روی فایل <span class="ltr mono">Install.cmd</span> دوبار کلیک کنید. نصب برای همان کاربر ویندوز انجام می‌شود و دسترسی مدیر سیستم لازم نیست.</div>
           <div class="client-step">در مرورگر به سامانه برگردید و کنار تجهیز روی «اتصال» و سپس ابزار موردنظر کلیک کنید.</div>
+          <div class="client-step">اگر مرورگر برای بازکردن لینک سؤال کرد، <b>EMS IPAM Client</b> را انتخاب کنید؛ WinBox را مستقیم انتخاب نکنید.</div>
           <div class="client-step">اگر ابزار خودکار پیدا نشد، فقط بار اول پنجرهٔ انتخاب فایل باز می‌شود؛ فایل اجرایی برنامه را معرفی کنید.</div>
         </div>
       </section>
@@ -28,8 +29,8 @@
         <div class="client-tools"><span>WinBox</span><span>Remote Desktop</span><span>SSH / PuTTY</span><span>VNC Viewer</span></div>
       </section>
       <section class="client-panel client-note">
-        <h2>نکتهٔ امنیتی</h2>
-        <p>سامانه فقط IP، پورت و در صورت ثبت‌شدن نام کاربری را به برنامهٔ مقصد می‌فرستد. رمز عبور باید داخل برنامهٔ مقصد وارد شود و هیچ رمز پیش‌فرضی ساخته نمی‌شود.</p>
+        <h2>اگر آدرس emsipam داخل WinBox دیده شد</h2>
+        <p>یعنی مرورگر به‌اشتباه WinBox را مستقیماً انتخاب کرده است. در Firefox از Settings ← General ← Applications انتخاب emsipam را پاک کنید، سپس فایل <span class="ltr mono">Repair.cmd</span> را اجرا و EMS IPAM Client را انتخاب کنید. فایل <span class="ltr mono">Check.cmd</span> نیز مسیر ثبت‌شده و آخرین مقصد را نشان می‌دهد؛ مقصد WinBox باید مانند <span class="ltr mono">192.168.20.1:9191</span> باشد.</p>
       </section>
       <div class="client-footer">EMS IPAM — طراحی و توسعه: ابراهیم مامانی</div>
     </div>

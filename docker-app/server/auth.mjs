@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 const scrypt = promisify(crypto.scrypt);
 
 export async function hashPassword(password) {
-  if (typeof password !== "string" || password.length < 8) throw new Error("رمز عبور باید حداقل ۸ کاراکتر باشد.");
+  if (typeof password !== "string" || password.length < 1) throw new Error("رمز عبور نمی‌تواند خالی باشد.");
   const salt = crypto.randomBytes(16).toString("hex");
   const derived = await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 });
   return `scrypt$${salt}$${Buffer.from(derived).toString("hex")}`;

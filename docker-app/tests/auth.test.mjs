@@ -9,3 +9,9 @@ test("passwords are salted and verified", async () => {
   assert.equal(await verifyPassword("StrongPassword-123", first), true);
   assert.equal(await verifyPassword("wrong-password", first), false);
 });
+
+test("short non-empty passwords are accepted without a forced length", async () => {
+  const value = await hashPassword("1");
+  assert.equal(await verifyPassword("1", value), true);
+  await assert.rejects(() => hashPassword(""), /خالی/);
+});

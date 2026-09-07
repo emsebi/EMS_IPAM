@@ -63,6 +63,12 @@ export function validateChildCidr(value, rootCidr) {
   return parsed;
 }
 
+export function defaultGateway(value) {
+  const parsed = typeof value === "string" ? parseCidr(value) : value;
+  if (!parsed || parsed.prefix >= 32) return "";
+  return intToIpv4(parsed.prefix === 31 ? parsed.start : parsed.start + 1);
+}
+
 export function validateHostIp(value, rootCidr) {
   const parsed = ipv4ToInt(value);
   const root = parseCidr(rootCidr);

@@ -35,16 +35,32 @@ $config = [ordered]@{ tools = [ordered]@{
 } }
 $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $target 'ems-client.json') -Encoding UTF8
 
-$command = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $target 'EMS-IPAM-Protocol.ps1') + '" "%1"'
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$command = '"' + $powershell + '" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $target 'EMS-IPAM-Protocol.ps1') + '" "%1"'
 $root = 'HKCU:\Software\Classes\emsipam'
+if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 New-Item -Path $root -Force | Out-Null
-Set-Item -Path $root -Value 'URL:EMS IPAM Protocol'
+Set-Item -Path $root -Value 'URL:EMS IPAM Client'
 New-ItemProperty -Path $root -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $root -Name 'FriendlyTypeName' -Value 'EMS IPAM Client' -PropertyType String -Force | Out-Null
+$iconKey = Join-Path $root 'DefaultIcon'
+New-Item -Path $iconKey -Force | Out-Null
+Set-Item -Path $iconKey -Value ($powershell + ',0')
 $commandKey = Join-Path $root 'shell\open\command'
 New-Item -Path $commandKey -Force | Out-Null
 Set-Item -Path $commandKey -Value $command
 
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class EmsShellRefresh {
+  [DllImport("shell32.dll")] public static extern void SHChangeNotify(uint eventId, uint flags, IntPtr item1, IntPtr item2);
+}
+'@
+[EmsShellRefresh]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+
 Write-Host 'EMS Client Pack installed successfully.' -ForegroundColor Green
+Write-Host 'Protocol: emsipam -> EMS IPAM Client (not WinBox directly)' -ForegroundColor Cyan
 foreach ($item in @(@('WinBox',$winbox),@('RDP',$rdp),@('SSH',$ssh),@('VNC',$vnc))) {
     if ($item[1]) { Write-Host ($item[0] + ': found') -ForegroundColor Green }
     else { Write-Host ($item[0] + ': not found - file selection will open on first use') -ForegroundColor Yellow }

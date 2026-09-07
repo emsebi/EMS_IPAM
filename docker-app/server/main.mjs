@@ -18,6 +18,7 @@ import {
 } from "./auth.mjs";
 import {
   contains,
+  defaultGateway,
   intToIpv4,
   parseCidr,
   validateChildCidr,
@@ -38,7 +39,7 @@ const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.5.1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
@@ -49,7 +50,7 @@ function cleanTextEnvironment(value) {
 }
 
 if (!DATABASE_URL && !process.env.PGHOST) throw new Error("تنظیمات اتصال PostgreSQL تعریف نشده است.");
-if (ADMIN_PASSWORD.length < 12) throw new Error("EMS_ADMIN_PASSWORD باید حداقل ۱۲ کاراکتر باشد.");
+if (ADMIN_PASSWORD.length < 1) throw new Error("EMS_ADMIN_PASSWORD نمی‌تواند خالی باشد.");
 const secretBox = createSecretBox(SECRET_KEY);
 
 const database = createDatabase(DATABASE_URL);
@@ -692,7 +693,7 @@ async function runMonitoringCycle() {
       `SELECT id,ip,name,monitor_driver AS "monitorDriver",monitor_port AS "monitorPort",monitor_username AS "monitorUsername",
               monitor_secret_ciphertext AS "monitorSecret",monitor_ca_pem AS "monitorCaPem"
          FROM hosts WHERE deleted_at IS NULL AND radio_mode='ap' AND monitor_enabled=true
-          AND monitor_driver IN ('mikrotik','mikrotik-rest','mikrotik-api-ssl')
+          AND monitor_driver IN ('mikrotik','mikrotik-api','mikrotik-rest','mikrotik-api-ssl')
           AND (monitor_checked_at IS NULL OR monitor_checked_at < now() - (monitor_interval * interval '1 second'))
         ORDER BY monitor_checked_at NULLS FIRST LIMIT 10`,
     );
@@ -1257,7 +1258,7 @@ async function api(req, res, url, user) {
     const values = [
       id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
-      cleanText(body.gateway, 80), validColor(body.color), cleanText(body.description, 2000), user.id,
+      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), cleanText(body.description, 2000), user.id,
     ];
     if (requestedId) {
       const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1 AND deleted_at IS NULL", [requestedId]);
@@ -1338,9 +1339,12 @@ async function api(req, res, url, user) {
     }
     if (radioMode !== "station") radioParentHostId = null;
     const monitorEnabled = radioMode === "ap" && body.monitorEnabled === true;
-    const requestedMonitorDriver = body.monitorDriver === "mikrotik-api-ssl" ? "mikrotik-api-ssl" : "mikrotik-rest";
+    const requestedMonitorDriver = ["mikrotik-api", "mikrotik-api-ssl", "mikrotik-rest"].includes(body.monitorDriver)
+      ? body.monitorDriver
+      : "mikrotik-api";
     const monitorDriver = monitorEnabled ? requestedMonitorDriver : "";
-    const monitorPort = validatePort(body.monitorPort || (requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443), { allowZero: false }) || (requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443);
+    const defaultMonitorPort = requestedMonitorDriver === "mikrotik-api" ? 8728 : requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443;
+    const monitorPort = validatePort(body.monitorPort || defaultMonitorPort, { allowZero: false }) || defaultMonitorPort;
     const monitorInterval = Math.max(15, Math.min(300, Math.round(Number(body.monitorInterval || 60)) || 60));
     const values = [
       id, space.id, ip, cleanText(body.name, 160), cleanText(body.status, 40) || "active",
@@ -1480,7 +1484,7 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const username = cleanText(body.username, 80);
     if (!/^[A-Za-z0-9_.-]{3,80}$/.test(username)) throw new Error("نام کاربری باید حداقل ۳ کاراکتر و شامل حروف، عدد، نقطه یا خط تیره باشد.");
-    if (String(body.password || "").length < 8) throw new Error("رمز عبور باید حداقل ۸ کاراکتر باشد.");
+    if (!String(body.password || "")) throw new Error("رمز عبور نمی‌تواند خالی باشد.");
     const id = crypto.randomUUID();
     const role = safeRole(body.role);
     const client = await pool.connect();
@@ -1523,7 +1527,6 @@ async function api(req, res, url, user) {
       const updated = await client.query("UPDATE users SET display_name=$1,role=$2,active=$3,updated_at=now() WHERE id=$4 RETURNING id", fields);
       if (!updated.rowCount) throw Object.assign(new Error("کاربر پیدا نشد."), { status: 404 });
       if (cleanText(body.password, 500)) {
-        if (String(body.password).length < 8) throw new Error("رمز عبور باید حداقل ۸ کاراکتر باشد.");
         await client.query("UPDATE users SET password_hash=$1 WHERE id=$2", [await hashPassword(String(body.password)), userUpdate[1]]);
       }
       await client.query("DELETE FROM user_company_access WHERE user_id=$1", [userUpdate[1]]);

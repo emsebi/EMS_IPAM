@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { contains, intToIpv4, ipv4ToInt, parseCidr, validateChildCidr, validatePort, validateRootCidr } from "../server/ip.mjs";
+import { contains, defaultGateway, intToIpv4, ipv4ToInt, parseCidr, validateChildCidr, validatePort, validateRootCidr } from "../server/ip.mjs";
 
 test("IPv4 conversion is stable", () => {
   const value = ipv4ToInt("192.168.20.10");
@@ -26,4 +26,10 @@ test("root ranges and ports are validated", () => {
   assert.equal(validatePort("9191"), 9191);
   assert.throws(() => validatePort(70000));
   assert.throws(() => validateRootCidr("10.0.0.0/8"));
+});
+
+test("gateway is calculated from the selected network", () => {
+  assert.equal(defaultGateway("192.168.0.0/30"), "192.168.0.1");
+  assert.equal(defaultGateway("10.40.8.64/28"), "10.40.8.65");
+  assert.equal(defaultGateway("10.40.8.70/32"), "");
 });

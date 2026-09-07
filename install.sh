@@ -31,7 +31,11 @@ read_secret_twice() {
     read -r -s -p "$prompt_text: " first <"$TTY_DEVICE" || fail "Unable to read the password."
     printf '\n'
     if (( ${#first} < minimum_length )); then
-      printf 'Password must contain at least %s characters.\n' "$minimum_length" >&2
+      if (( minimum_length == 1 )); then
+        printf 'Password cannot be empty.\n' >&2
+      else
+        printf 'Password must contain at least %s characters.\n' "$minimum_length" >&2
+      fi
       continue
     fi
     if [[ "$first" == *"'"* ]]; then
@@ -121,13 +125,13 @@ start_and_check() {
 install_app() {
   [[ ! -e "$INSTALL_DIR" ]] || fail "Installation directory '$INSTALL_DIR' already exists. Choose Update or remove the existing installation first."
   log "Installation settings"
-  read_secret_twice POSTGRES_PASSWORD "POSTGRES_PASSWORD (minimum 16 characters)" 16
+  read_secret_twice POSTGRES_PASSWORD "POSTGRES_PASSWORD (any non-empty password)" 1
   while true; do
     read_default EMS_ADMIN_USERNAME "EMS_ADMIN_USERNAME" "admin"
     [[ "$EMS_ADMIN_USERNAME" =~ ^[A-Za-z0-9_.-]{3,80}$ ]] && break
     printf 'Username must be 3-80 characters and use only letters, numbers, dot, underscore or hyphen.\n' >&2
   done
-  read_secret_twice EMS_ADMIN_PASSWORD "EMS_ADMIN_PASSWORD (minimum 12 characters)" 12
+  read_secret_twice EMS_ADMIN_PASSWORD "EMS_ADMIN_PASSWORD (any non-empty password)" 1
   while true; do
     read_default EMS_HTTP_PORT "EMS_HTTP_PORT" "8080"
     if [[ "$EMS_HTTP_PORT" =~ ^[0-9]+$ ]]; then
@@ -276,7 +280,7 @@ uninstall_app() {
   load_installation
   log "Stopping and removing application containers"
   "${compose[@]}" down --remove-orphans
-  docker image rm ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   printf '\nApplication containers were removed.\n'
   printf 'Database volume, configuration, encryption key and backups were kept.\n'
   printf 'Use Update to install the application again.\n'
@@ -289,7 +293,7 @@ uninstall_all() {
   read -r -p "Type DELETE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
   [[ "$confirmation" == "DELETE" ]] || fail "Full uninstall cancelled."
   "${compose[@]}" down --volumes --remove-orphans
-  docker image rm ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   [[ "$INSTALL_DIR" == /opt/* && "$INSTALL_DIR" != "/opt" ]] || fail "Unsafe installation directory. Files were not removed."
   rm -rf -- "$INSTALL_DIR"
   printf '\nEMS IPAM and its database were permanently removed.\n'

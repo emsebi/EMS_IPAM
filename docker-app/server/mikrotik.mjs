@@ -1,4 +1,5 @@
 import https from "node:https";
+import net from "node:net";
 import tls from "node:tls";
 import crypto from "node:crypto";
 
@@ -114,16 +115,18 @@ function sentenceObject(words) {
   return output;
 }
 
-function routerApiSslPoll({ host, password }) {
+function routerApiPoll({ host, password, secure = false }) {
   return new Promise((resolve, reject) => {
-    const socket = tls.connect({
-      host: host.ip,
-      port: Number(host.monitorPort || 8729),
-      rejectUnauthorized: true,
-      ca: host.monitorCaPem || undefined,
-      servername: /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host.ip) ? undefined : host.ip,
-      minVersion: "TLSv1.2",
-    });
+    const socket = secure
+      ? tls.connect({
+        host: host.ip,
+        port: Number(host.monitorPort || 8729),
+        rejectUnauthorized: true,
+        ca: host.monitorCaPem || undefined,
+        servername: /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host.ip) ? undefined : host.ip,
+        minVersion: "TLSv1.2",
+      })
+      : net.connect({ host: host.ip, port: Number(host.monitorPort || 8728) });
     let buffer = Buffer.alloc(0);
     let sentence = [];
     let phase = "login";
@@ -143,7 +146,15 @@ function routerApiSslPoll({ host, password }) {
       const item = sentenceObject(words);
       if (item.reply === "!re") rows.push(item);
       if (item.reply === "!trap" || item.reply === "!fatal") trap = item.message || "خطای API میکروتیک";
+      if (item.reply === "!fatal") return finish(new Error(trap));
       if (item.reply !== "!done" && item.reply !== "!empty") return;
+      if (trap && phase === "wifi") {
+        trap = "";
+        phase = "wireless";
+        rows = [];
+        send(["/interface/wireless/registration-table/print", "=.proplist=mac-address,interface,ssid,radio-name,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
+        return;
+      }
       if (trap) return finish(new Error(trap));
       if (phase === "login" && item.ret) {
         const response = crypto.createHash("md5").update(Buffer.concat([Buffer.from([0]), Buffer.from(password), Buffer.from(item.ret, "hex")])).digest("hex");
@@ -156,13 +167,13 @@ function routerApiSslPoll({ host, password }) {
         send(["/system/resource/print", "=.proplist=board-name,platform,version,uptime,cpu-load,free-memory"]);
       } else if (phase === "resource") {
         resource = rows[0] || {};
-        phase = "wireless";
+        phase = "wifi";
         rows = [];
-        send(["/interface/wireless/registration-table/print", "=.proplist=mac-address,interface,ssid,radio-name,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
+        send(["/interface/wifi/registration-table/print", "=.proplist=mac-address,interface,ssid,radio-name,signal,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
       } else {
         finish(null, {
           online: true,
-          package: "wireless-api-ssl",
+          package: `${phase === "wifi" ? "wifi" : "wireless"}-${secure ? "api-ssl" : "api"}`,
           checkedAt: new Date().toISOString(),
           identity: clean(resource["board-name"] || resource.platform || host.name, 160),
           version: clean(resource.version, 120),
@@ -173,8 +184,8 @@ function routerApiSslPoll({ host, password }) {
         });
       }
     };
-    socket.setTimeout(8000, () => finish(new Error("مهلت ارتباط API-SSL میکروتیک تمام شد.")));
-    socket.on("secureConnect", () => send(["/login", `=name=${host.monitorUsername}`, `=password=${password}`]));
+    socket.setTimeout(8000, () => finish(new Error(`مهلت ارتباط ${secure ? "API-SSL" : "API"} میکروتیک تمام شد.`)));
+    socket.on(secure ? "secureConnect" : "connect", () => send(["/login", `=name=${host.monitorUsername}`, `=password=${password}`]));
     socket.on("data", (chunk) => {
       received += chunk.length;
       if (received > 5 * 1024 * 1024) return finish(new Error("پاسخ میکروتیک بیش از حد مجاز است."));
@@ -191,14 +202,15 @@ function routerApiSslPoll({ host, password }) {
       } catch (error) { finish(error); }
     });
     socket.on("error", (error) => finish(error));
-    socket.on("end", () => { if (!settled) finish(new Error("ارتباط API-SSL میکروتیک پیش از دریافت پاسخ بسته شد.")); });
+    socket.on("end", () => { if (!settled) finish(new Error(`ارتباط ${secure ? "API-SSL" : "API"} میکروتیک پیش از دریافت پاسخ بسته شد.`)); });
   });
 }
 
 export async function pollMikrotik({ host, secretBox }) {
   const password = secretBox.decrypt(host.monitorSecret || "");
-  if (!password) throw new Error("رمز کاربر پایش میکروتیک ثبت نشده است.");
-  if (host.monitorDriver === "mikrotik-api-ssl") return routerApiSslPoll({ host, password });
+  if (!host.monitorUsername) throw new Error("نام کاربری پایش میکروتیک ثبت نشده است.");
+  if (host.monitorDriver === "mikrotik-api-ssl") return routerApiPoll({ host, password, secure: true });
+  if (host.monitorDriver !== "mikrotik-rest") return routerApiPoll({ host, password, secure: false });
   const request = (pathname) => routerRequest({
     host: host.ip,
     port: Number(host.monitorPort || 443),
@@ -269,23 +281,23 @@ export async function saveMikrotikPoll({ pool, host, result, error }) {
   }
 }
 
-export function buildMikrotikScript({ serverIp, username, password, certificateName, port, transport = "mikrotik-rest" }) {
-  const ip = clean(serverIp, 64);
+export function buildMikrotikScript({ username, password, certificateName, port, transport = "mikrotik-api" }) {
   const user = clean(username, 80);
   const pass = String(password ?? "").replaceAll("\\", "\\\\").replaceAll('"', '\\"');
   const cert = clean(certificateName, 120);
   const apiSsl = transport === "mikrotik-api-ssl";
-  const servicePort = Math.max(1, Math.min(65535, Number(port) || (apiSsl ? 8729 : 443)));
-  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) throw new Error("IP سرور سامانه معتبر نیست.");
+  const rest = transport === "mikrotik-rest";
+  const servicePort = Math.max(1, Math.min(65535, Number(port) || (apiSsl ? 8729 : rest ? 443 : 8728)));
   if (!/^[A-Za-z0-9_.-]{3,80}$/.test(user)) throw new Error("نام کاربری میکروتیک معتبر نیست.");
-  if (String(password || "").length < 12) throw new Error("رمز کاربر پایش باید حداقل ۱۲ کاراکتر باشد.");
-  if (!cert) throw new Error("نام Certificate سرویس امن میکروتیک را وارد کنید.");
-  const policy = apiSsl ? "read,api" : "read,rest-api";
-  const service = apiSsl ? "api-ssl" : "www-ssl";
-  return [
+  if ((apiSsl || rest) && !cert) throw new Error("برای روش رمزگذاری‌شده نام Certificate را وارد کنید؛ روش ساده API به Certificate نیاز ندارد.");
+  const policy = rest ? "read,rest-api" : "read,api";
+  const service = rest ? "www-ssl" : apiSsl ? "api-ssl" : "api";
+  const commands = [
     `:if ([:len [/user/group find where name="ems-ipam"]] = 0) do={ /user/group/add name=ems-ipam policy=${policy} } else={ /user/group/set [find where name="ems-ipam"] policy=${policy} }`,
-    `:if ([:len [/user find where name="${user}"]] = 0) do={ /user/add name=${user} group=ems-ipam address=${ip}/32 password="${pass}" } else={ /user/set [find where name="${user}"] group=ems-ipam address=${ip}/32 password="${pass}" disabled=no }`,
-    `/ip/service/set ${service} disabled=no port=${servicePort} certificate=${cert} tls-version=only-1.2 address=${ip}/32`,
-    `:if ([:len [/ip/firewall/filter find where comment="EMS IPAM secure monitor"]] = 0) do={ /ip/firewall/filter/add chain=input action=accept protocol=tcp dst-port=${servicePort} src-address=${ip} comment="EMS IPAM secure monitor" }`,
-  ].join("\n");
+    `:if ([:len [/user find where name="${user}"]] = 0) do={ /user/add name=${user} group=ems-ipam password="${pass}" } else={ /user/set [find where name="${user}"] group=ems-ipam password="${pass}" disabled=no }`,
+  ];
+  commands.push((apiSsl || rest)
+    ? `/ip/service/set ${service} disabled=no port=${servicePort} certificate=${cert} tls-version=only-1.2`
+    : `/ip/service/set api disabled=no port=${servicePort}`);
+  return commands.join("\n");
 }

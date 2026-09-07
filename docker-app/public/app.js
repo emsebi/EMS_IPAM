@@ -1,4 +1,4 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs?v=0.5.0";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs?v=0.5.1";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -40,7 +40,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const page = $("page");
 
-const savedTheme = localStorage.getItem("ems-theme") || "light";
+const savedTheme = localStorage.getItem("ems-theme") || "dark";
 document.documentElement.dataset.theme = savedTheme;
 const nativeShowModal = HTMLDialogElement.prototype.showModal;
 HTMLDialogElement.prototype.showModal = function showCleanDialog() {
@@ -134,6 +134,23 @@ function contains(container, candidate) {
 
 function networkAt(address, prefix) {
   return parseCidr(`${intToIpv4(address)}/${prefix}`);
+}
+
+function defaultGatewayForCidr(cidr) {
+  const parsed = parseCidr(cidr);
+  if (!parsed || parsed.prefix >= 32) return "";
+  return intToIpv4(parsed.prefix === 31 ? parsed.start : parsed.start + 1);
+}
+
+function normalizedConnectionMethods(host = {}, configured = null) {
+  const hasConfiguredList = Array.isArray(configured) || Array.isArray(host.connectionMethods);
+  const methods = Array.isArray(configured) ? configured : Array.isArray(host.connectionMethods) ? host.connectionMethods : [];
+  if (hasConfiguredList) return methods.map((item) => ({ ...item, type: String(item.type || "").toUpperCase().replace("WINBOX", "MIK") })).filter((item) => item.type);
+  return Object.entries(host.ports || {}).filter(([, port]) => port !== "" && port !== null && port !== undefined).map(([type, port]) => ({ type: String(type).toUpperCase().replace("WINBOX", "MIK"), port }));
+}
+
+function hostConnectionLabel(host = {}) {
+  return normalizedConnectionMethods(host).map((item) => item.type).join(" · ");
 }
 
 function canWrite() {
@@ -332,7 +349,7 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
   const parent = state.bootstrap.companies.find((item) => item.id === company.parentCompanyId);
   const mapUrl = company.latitude !== null && company.longitude !== null ? `https://www.google.com/maps?q=${encodeURIComponent(`${company.latitude},${company.longitude}`)}` : "";
   const contacts = (result.contacts || []).map((item) => `<article class="contact-card"><span class="contact-icon">${escapeHtml((item.fullName || "؟").slice(0, 1))}</span><div><b>${escapeHtml(item.fullName)}</b><small>${escapeHtml(item.jobTitle || "بدون سمت")} — ${escapeHtml(item.mobile || item.phone || "بدون شماره")} ${item.email ? `— ${escapeHtml(item.email)}` : ""}</small></div>${item.isPrimary ? `<span class="company-tree-badge">تماس اصلی</span>` : ""}</article>`).join("") || `<div class="empty-state compact-empty">فردی ثبت نشده است.</div>`;
-  const connections = (result.connections || []).map((item) => `<article class="connection-card"><span class="contact-icon">↗</span><div><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.provider || "بدون شرکت اینترنتی")} — ${escapeHtml(item.deviceName || "تجهیز نامشخص")}</small></div><div><b class="connection-ip">${escapeHtml(item.ip)}</b><button class="btn sm company-tool" data-ip="${escapeHtml(item.ip)}">اتصال</button></div></article>`).join("") || `<div class="empty-state compact-empty">ارتباطی ثبت نشده است.</div>`;
+  const connections = (result.connections || []).map((item) => `<article class="connection-card"><span class="contact-icon">↗</span><div><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.provider || "بدون شرکت اینترنتی")} — ${escapeHtml(item.deviceName || "تجهیز نامشخص")}</small></div><div><b class="connection-ip">${escapeHtml(item.ip)}</b>${normalizedConnectionMethods(item).length ? `<button class="btn sm company-tool" data-ip="${escapeHtml(item.ip)}">اتصال</button>` : ""}</div></article>`).join("") || `<div class="empty-state compact-empty">ارتباطی ثبت نشده است.</div>`;
   const spaces = (result.spaces || []).map((space) => `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`).join("") || `<div class="empty-state compact-empty">رنج اصلی تعریف نشده است.</div>`;
   page.innerHTML = `<section class="company-hero"><div class="company-identity"><span class="company-avatar">${escapeHtml(company.name.slice(0, 1))}</span><div><span class="company-tree-badge">${escapeHtml(kind)}${parent ? ` زیرمجموعه ${escapeHtml(parent.name)}` : ""}</span><h2>${escapeHtml(company.name)}</h2><p>${escapeHtml(company.description || company.address || "اطلاعات تکمیلی ثبت نشده است.")}</p></div></div><div class="company-hero-actions"><button id="backCompanies" class="btn">بازگشت به شرکت‌ها</button>${canManageCompany(companyId) ? `<button id="editCurrentCompany" class="btn">ویرایش اطلاعات</button><button id="addCurrentSpace" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></section>
     <section class="company-quick-info"><article class="info-card"><span>مدیر شرکت</span><b>${escapeHtml(company.managerName || "ثبت نشده")}</b></article><article class="info-card"><span>شماره تماس</span><b class="ltr">${escapeHtml(company.phone || "—")}</b></article><article class="info-card"><span>کد پستی</span><b class="ltr">${escapeHtml(company.postalCode || "—")}</b></article><article class="info-card"><span>موقعیت</span>${mapUrl ? `<a href="${mapUrl}" target="_blank" rel="noopener noreferrer">نمایش در Google Maps</a>` : `<b>ثبت نشده</b>`}</article></section>
@@ -406,9 +423,10 @@ function renderRootVerticalTable(root, hosts) {
       const isRoot = info.cidr === root.cidr;
       const color = item?.color || (isRoot ? space.color : "#eef2f7");
       const label = item?.name || (isRoot ? space.name : "آزاد");
+      const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
       const first = (start >>> 8) & 255;
       const last = ((start + span * 256 - 1) >>> 8) & 255;
-      html += `<td rowspan="${span}" class="root-prefix-span" style="--range-color:${escapeHtml(color)}"><button class="root-prefix-open ${item || isRoot ? "named" : ""}" data-cidr="${escapeHtml(info.cidr)}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><span>${first}–${last}</span><small>${escapeHtml(label)}</small></button></td>`;
+      html += `<td rowspan="${span}" class="root-prefix-span" style="--range-color:${escapeHtml(color)}"><button class="root-prefix-open ${item || isRoot ? "named" : ""}" data-cidr="${escapeHtml(info.cidr)}" title="${escapeHtml([label, detail, info.cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><span>${first}–${last}</span><strong>${escapeHtml(label)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button></td>`;
     }
     html += `</tr>`;
   }
@@ -569,7 +587,8 @@ function renderIpGrid(sheet) {
       const host = hosts.get(ip);
       const prefix = mostSpecific(address);
       const system = last === 0 || last === 255;
-      grid += `<div class="ip-cell ${host ? "recorded" : ""} ${system ? "system" : ""}" data-ip="${ip}" style="--cell-color:${prefix?.color || "#eef1f6"};--host-color:${HOST_COLORS[host?.status] || "#3157d5"}" title="${escapeHtml(host?.name || ip)}"><i class="fill"></i><button class="ping-dot ${pingClass(ip, system, pings)}" data-ip="${ip}" title="ابزارهای اتصال"></button><span class="last">${last}</span>${host ? `<div class="host-name">${escapeHtml(host.name || host.type || STATUS_LABELS[host.status])}</div>` : system ? `<div class="host-name">${last === 0 ? "Network" : "Broadcast"}</div>` : ""}</div>`;
+      const connectable = !system && host && normalizedConnectionMethods(host).length > 0;
+      grid += `<div class="ip-cell ${host ? "recorded" : ""} ${system ? "system" : ""}" data-ip="${ip}" style="--cell-color:${prefix?.color || "#eef1f6"};--host-color:${HOST_COLORS[host?.status] || "#3157d5"}" title="${escapeHtml(host?.name || ip)}"><i class="fill"></i><button class="ping-dot ${pingClass(ip, system, pings)} ${connectable ? "connectable" : ""}" data-ip="${ip}" title="${connectable ? "ابزارهای اتصال" : "وضعیت IP"}"></button><span class="last">${last}</span>${host ? `<div class="host-name">${escapeHtml(host.name || host.type || STATUS_LABELS[host.status])}</div>` : system ? `<div class="host-name">${last === 0 ? "Network" : "Broadcast"}</div>` : ""}</div>`;
     }
     grid += `</div>`;
   }
@@ -580,20 +599,22 @@ function renderVerticalTable(sheet) {
   const exactPrefixes = new Map(state.data.prefixes.map((item) => [item.cidr, item]));
   const hosts = hostMap();
   const pings = pingMap();
-  let html = `<div class="vertical-table-wrap"><table class="vertical-subnet-table"><thead><tr><th>IP و نام کوتاه</th><th>وضعیت</th>${DETAIL_PREFIXES.map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
+  let html = `<div class="vertical-table-wrap"><table class="vertical-subnet-table"><thead><tr><th>IP و نام تجهیز</th><th>وضعیت</th><th>اتصال</th>${DETAIL_PREFIXES.map((prefix) => `<th>/${prefix}</th>`).join("")}</tr></thead><tbody>`;
   for (let last = 0; last < 256; last += 1) {
     const ip = intToIpv4(sheet.start + last);
     const host = hosts.get(ip);
     const system = last === 0 || last === 255;
     const ping = pings.get(ip);
     const status = system ? (last === 0 ? "Network" : "Broadcast") : host ? (STATUS_LABELS[host.status] || host.status) : "آزاد";
-    html += `<tr class="${host ? "recorded" : ""} ${system ? "system" : ""}"><td><button class="ip-line map-ip-cell" data-ip="${ip}"><span class="mono ltr">${escapeHtml(ip)}</span>${host?.name ? `<b>[${escapeHtml(host.name)}]</b>` : ""}</button></td><td><span class="table-status"><i class="${ping ? (ping.online ? "online" : "offline") : "unknown"}"></i>${escapeHtml(status)}</span></td>`;
+    const connectionLabel = host ? hostConnectionLabel(host) : "";
+    html += `<tr class="${host ? "recorded" : ""} ${system ? "system" : ""}"><td><button class="ip-line map-ip-cell" data-ip="${ip}"><span class="mono ltr">${escapeHtml(ip)}</span>${host?.name ? `<b>${escapeHtml(host.name)}</b>` : ""}</button></td><td><span class="table-status"><i class="${ping ? (ping.online ? "online" : "offline") : "unknown"}"></i>${escapeHtml(status)}</span></td><td class="table-connect">${connectionLabel ? `<button class="table-connect-button" data-ip="${escapeHtml(ip)}" title="${escapeHtml(`اتصال با ${connectionLabel}`)}">${escapeHtml(connectionLabel)}</button>` : `<span>—</span>`}</td>`;
     for (const prefix of DETAIL_PREFIXES) {
       const size = detailGroupSize(prefix);
       if (last % size !== 0) continue;
       const cidr = `${intToIpv4(sheet.start + last)}/${prefix}`;
       const item = exactPrefixes.get(cidr);
-      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><button class="table-prefix map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml(item?.name || cidr)}"><span>${last}–${last + size - 1}</span>${item?.name ? `<b>${escapeHtml(item.name)}</b>` : `<small>آزاد</small>`}</button></td>`;
+      const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
+      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><button class="table-prefix map-prefix-cell ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml([item?.name, detail, cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(cidr)}</b><span>${last}–${last + size - 1}</span><strong>${escapeHtml(item?.name || "آزاد")}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button></td>`;
     }
     html += `</tr>`;
   }
@@ -716,7 +737,7 @@ function renderSheet() {
   page.querySelectorAll(".tree-edit-prefix").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openPrefixDialog(node.dataset.cidr); }));
   page.querySelector(".tree-up")?.addEventListener("click", (event) => { state.treeFocusCidr = event.currentTarget.dataset.cidr; renderSheet(); });
   page.querySelectorAll(".tree-jump").forEach((node) => node.addEventListener("click", () => { state.treeFocusCidr = node.dataset.cidr; renderSheet(); }));
-  page.querySelectorAll(".ping-dot:not(.system)").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
+  page.querySelectorAll(".ping-dot.connectable,.table-connect-button").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
   attachPrefixEditHandlers();
   attachPrefixDeleteHandlers();
 }
@@ -835,7 +856,9 @@ async function deleteSpace(id) {
 
 function openPrefixDialog(cidr, id = null) {
   const item = id ? state.data.prefixes.find((entry) => entry.id === id) : state.data.prefixes.find((entry) => entry.cidr === cidr) || null;
-  const value = item || { id: "", cidr, name: "", status: "active", role: "", vlan: "", gateway: "", color: COLORS[state.data.prefixes.length % COLORS.length], description: "" };
+  const value = item
+    ? { ...item, gateway: item.gateway || defaultGatewayForCidr(item.cidr) }
+    : { id: "", cidr, name: "", status: "active", role: "", vlan: "", gateway: defaultGatewayForCidr(cidr), color: COLORS[state.data.prefixes.length % COLORS.length], description: "" };
   if (!value.cidr) return;
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
   $("prefixCidrTitle").textContent = value.cidr;
@@ -862,7 +885,8 @@ function renderHostPorts(host = {}) {
 
 function renderHostConnections(host = {}) {
   const configured = new Set((host.connectionMethods || []).map((item) => String(item.type || "").toUpperCase()).map((type) => type === "WINBOX" ? "MIK" : type));
-  const selected = configured.size ? configured : new Set(state.bootstrap.tools.map((tool) => tool.tool));
+  const legacy = new Set(normalizedConnectionMethods(host).map((item) => item.type));
+  const selected = configured.size ? configured : legacy;
   $("hostConnections").innerHTML = state.bootstrap.tools.map((tool) => `<label class="connection-choice"><input type="checkbox" value="${escapeHtml(tool.tool)}" ${selected.has(tool.tool) ? "checked" : ""}><b style="color:${escapeHtml(tool.color)}">${escapeHtml(tool.label || tool.tool)}</b></label>`).join("");
 }
 
@@ -928,7 +952,7 @@ function renderInventory() {
     return companyMatch && typeMatch && queryMatch;
   });
   const online = items.filter((item) => monitorDisplay(item).className === "online").length;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">موجودی شبکه</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">جست‌وجو، ویرایش، اتصال و مشاهده وضعیت تجهیزات همه شرکت‌ها از یک صفحه</div></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">شرکت‌ها</div><div class="value">${formatNumber(new Set(items.map((item) => item.companyId)).size)}</div></article><article class="stat"><div class="label">رادیوها</div><div class="value">${formatNumber(items.filter((item) => item.radioMode).length)}</div></article><article class="stat"><div class="label">پایش آنلاین</div><div class="value">${formatNumber(online)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل یا سریال…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type) => `<option value="${escapeHtml(type)}" ${type === state.inventoryType ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>وضعیت پایش</th><th>عملیات</th></tr></thead><tbody>${items.map((item) => { const monitor = monitorDisplay(item); return `<tr><td class="inventory-name"><b>${escapeHtml(item.name || "بدون نام")}</b><small>${escapeHtml(item.owner || item.location || "—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac || "—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type || "نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ") || "—")}</small></td><td><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button><button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button></div></td></tr>`; }).join("") || `<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">موجودی شبکه</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">جست‌وجو، ویرایش، اتصال و مشاهده وضعیت تجهیزات همه شرکت‌ها از یک صفحه</div></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">شرکت‌ها</div><div class="value">${formatNumber(new Set(items.map((item) => item.companyId)).size)}</div></article><article class="stat"><div class="label">رادیوها</div><div class="value">${formatNumber(items.filter((item) => item.radioMode).length)}</div></article><article class="stat"><div class="label">پایش آنلاین</div><div class="value">${formatNumber(online)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل یا سریال…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type) => `<option value="${escapeHtml(type)}" ${type === state.inventoryType ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>وضعیت پایش</th><th>عملیات</th></tr></thead><tbody>${items.map((item) => { const monitor = monitorDisplay(item); const hasTools = normalizedConnectionMethods(item).length > 0; return `<tr><td class="inventory-name"><b>${escapeHtml(item.name || "بدون نام")}</b><small>${escapeHtml(item.owner || item.location || "—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac || "—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type || "نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ") || "—")}</small></td><td><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button>${hasTools ? `<button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button>` : ""}</div></td></tr>`; }).join("") || `<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
   $("inventorySearch").addEventListener("input", (event) => { state.inventoryQuery = event.target.value; renderInventory(); requestAnimationFrame(() => { $("inventorySearch")?.focus(); $("inventorySearch")?.setSelectionRange(state.inventoryQuery.length, state.inventoryQuery.length); }); });
   $("inventoryType").addEventListener("change", (event) => { state.inventoryType = event.target.value; renderInventory(); });
   $("refreshInventory").addEventListener("click", () => openInventoryPage(true));
@@ -941,12 +965,26 @@ function updateRadioFields(selectedParent = "") {
   $("radioParentField").classList.toggle("hidden", mode !== "station");
   $("mikrotikMonitorFields").classList.toggle("hidden", mode !== "ap");
   const aps = state.inventory.filter((item) => item.radioMode === "ap" && item.id !== $("hostId").value);
-  $("hostRadioParent").innerHTML = `<option value="">انتخاب نشده</option>${aps.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selectedParent ? "selected" : ""}>${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ssid || "بدون SSID")} — ${escapeHtml(item.ip)}</option>`).join("")}`;
+  const query = $("hostRadioParentSearch").value.trim().toLowerCase();
+  const matches = aps.filter((item) => !query || [item.name, item.ip, item.ssid, item.mac, item.companyName, item.spaceName, item.location].some((value) => String(value || "").toLowerCase().includes(query)));
+  const visible = selectedParent && !matches.some((item) => item.id === selectedParent) ? [aps.find((item) => item.id === selectedParent), ...matches].filter(Boolean) : matches;
+  $("hostRadioParent").innerHTML = `<option value="">انتخاب نشده</option>${visible.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selectedParent ? "selected" : ""}>${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ssid || "بدون SSID")} — ${escapeHtml(item.ip)} — ${escapeHtml(item.companyName || "")}</option>`).join("")}`;
+  $("hostRadioParentHint").textContent = `${formatNumber(matches.length)} AP پیدا شد${query ? "؛ نتیجه با نوشتن فیلتر می‌شود." : "؛ برای جست‌وجوی سریع تایپ کنید."}`;
   $("ssidSuggestions").innerHTML = aps.filter((item) => item.ssid).map((item) => `<option value="${escapeHtml(item.ssid)}">${escapeHtml(item.name || item.ip)}</option>`).join("");
   if (mode === "station") {
     const parent = aps.find((item) => item.id === $("hostRadioParent").value);
     if (parent?.ssid && !$("hostSsid").value) $("hostSsid").value = parent.ssid;
   }
+}
+
+function monitorPortFor(driver) {
+  return driver === "mikrotik-api" ? 8728 : driver === "mikrotik-api-ssl" ? 8729 : 443;
+}
+
+function updateMonitorDriverUi({ syncPort = false, script = false } = {}) {
+  const driver = $(script ? "scriptTransport" : "hostMonitorDriver").value;
+  if (syncPort) $(script ? "scriptPort" : "hostMonitorPort").value = monitorPortFor(driver);
+  $(script ? "scriptCertificateField" : "monitorCertificateField").classList.toggle("hidden", driver === "mikrotik-api");
 }
 
 function openHostDialog(ip) {
@@ -958,13 +996,17 @@ function openHostDialog(ip) {
   $("hostPassword").type = "password";
   $("clearHostPassword").checked = false;
   $("hostMonitorEnabled").checked = Boolean(value.monitorEnabled);
-  $("hostMonitorDriver").value = value.monitorDriver === "mikrotik-api-ssl" ? "mikrotik-api-ssl" : "mikrotik-rest";
-  $("hostMonitorPort").value = value.monitorPort || 443;
+  $("hostRadioParentSearch").value = "";
+  $("hostMonitorDriver").value = ["mikrotik-api", "mikrotik-api-ssl", "mikrotik-rest"].includes(value.monitorDriver) ? value.monitorDriver : "mikrotik-api";
+  $("hostMonitorPort").value = value.monitorPort || 8728;
   $("hostMonitorUsername").value = value.monitorUsername || "";
   $("hostMonitorPassword").value = "";
+  $("clearMonitorPassword").checked = false;
+  $("clearMonitorPasswordWrap").classList.toggle("hidden", !value.hasMonitorPassword || !canWrite());
   $("hostMonitorPassword").placeholder = value.hasMonitorPassword ? "برای حفظ رمز فعلی خالی بماند" : "رمز کاربر فقط خواندنی";
   $("hostMonitorInterval").value = value.monitorInterval || 60;
   $("hostMonitorCaPem").value = value.monitorCaPem || "";
+  updateMonitorDriverUi();
   const monitor = monitorDisplay(value);
   $("monitorStatusText").textContent = value.monitorError || (value.monitorCheckedAt ? `${monitor.label} — آخرین بررسی ${new Date(value.monitorCheckedAt).toLocaleString("fa-IR")}` : "هنوز بررسی نشده است.");
   $("testMikrotikMonitor").classList.toggle("hidden", !item?.id || !value.monitorEnabled || !canWrite());
@@ -981,12 +1023,14 @@ function openHostDialog(ip) {
 }
 
 function openToolMenu(event, ip, allowedMethods = null, connection = {}) {
+  event?.stopPropagation?.();
   const host = state.data?.hosts?.find((item) => item.ip === ip) || state.inventory.find((item) => item.ip === ip) || { ports: {} };
-  const configured = Array.isArray(allowedMethods) ? allowedMethods : host.connectionMethods;
-  const allowed = new Set((configured || []).map((item) => String(item.type || "").toUpperCase()).map((type) => type === "WINBOX" ? "MIK" : type));
-  const connectionPorts = new Map((configured || []).filter((item) => item?.port !== null && item?.port !== undefined).map((item) => [String(item.type || "").toUpperCase().replace("WINBOX", "MIK"), Number(item.port)]));
+  const configured = normalizedConnectionMethods(host, Array.isArray(allowedMethods) ? allowedMethods : null);
+  const allowed = new Set(configured.map((item) => item.type));
+  const connectionPorts = new Map(configured.filter((item) => item?.port !== null && item?.port !== undefined).map((item) => [item.type, Number(item.port)]));
   const username = connection.username || host.username || "";
-  const tools = allowed.size ? state.bootstrap.tools.filter((tool) => allowed.has(tool.tool)) : state.bootstrap.tools;
+  const tools = state.bootstrap.tools.filter((tool) => allowed.has(tool.tool));
+  if (!tools.length) return toast("برای این تجهیز روش اتصالی انتخاب نشده است.");
   const menu = $("toolMenu");
   menu.innerHTML = `<div class="tool-menu-title">${escapeHtml(ip)} — انتخاب ابزار</div><div class="tool-buttons">${tools.map((tool) => {
     const port = connectionPorts.has(tool.tool) ? connectionPorts.get(tool.tool) : Object.prototype.hasOwnProperty.call(host.ports || {}, tool.tool) ? host.ports[tool.tool] : tool.defaultPort;
@@ -1085,7 +1129,7 @@ async function refreshUsers() {
 }
 
 function resetUserForm() {
-  $("userForm").reset(); $("userId").value = ""; $("userUsername").disabled = false; $("userFormTitle").textContent = "کاربر جدید"; $("passwordHint").textContent = "حداقل ۸ کاراکتر"; $("userActiveWrap").classList.add("hidden"); $("cancelUserEdit").classList.add("hidden"); renderCompanyAccess([], []);
+  $("userForm").reset(); $("userId").value = ""; $("userUsername").disabled = false; $("userFormTitle").textContent = "کاربر جدید"; $("passwordHint").textContent = "هر رمز دلخواه؛ برای کاربر جدید خالی نباشد"; $("userActiveWrap").classList.add("hidden"); $("cancelUserEdit").classList.add("hidden"); renderCompanyAccess([], []);
 }
 
 function editUser(user) {
@@ -1159,29 +1203,39 @@ function renderRadios() {
   const radios = state.inventory.filter((item) => (!state.currentCompanyId || item.companyId === state.currentCompanyId) && (item.radioMode === "ap" || item.radioMode === "station"));
   const aps = radios.filter((item) => item.radioMode === "ap");
   const stations = radios.filter((item) => item.radioMode === "station");
-  const stationNode = (item) => { const monitor = monitorDisplay(item); return `<article class="radio-station-node ${radioSignalClass(item.signal)}"><button class="open-inventory-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid || "SSID نامشخص")}</em></span><span class="radio-health"><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span><small class="radio-signal">${escapeHtml(item.signal || "—")}</small></span></button><button class="radio-tools radio-node-tool" data-id="${escapeHtml(item.id)}">WinBox / SSH</button></article>`; };
-  const listStation = (item) => { const monitor = monitorDisplay(item); return `<div class="radio-station"><span class="status-dot ${monitor.className === "online" ? "online" : "unknown"}"></span><button class="open-inventory-host radio-list-main" data-id="${escapeHtml(item.id)}"><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small></button><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span><button class="btn sm radio-tools" data-id="${escapeHtml(item.id)}">اتصال</button></div>`; };
+  const stationNode = (item) => { const monitor = monitorDisplay(item); return `<article class="radio-station-node ${radioSignalClass(item.signal)}"><button class="open-inventory-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid || "SSID نامشخص")}</em></span><span class="radio-health"><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span><small class="radio-signal">${escapeHtml(item.signal || "—")}</small></span></button>${normalizedConnectionMethods(item).length ? `<button class="radio-tools radio-node-tool" data-id="${escapeHtml(item.id)}">اتصال</button>` : ""}</article>`; };
+  const listStation = (item) => { const monitor = monitorDisplay(item); return `<div class="radio-station"><span class="status-dot ${monitor.className === "online" ? "online" : "unknown"}"></span><button class="open-inventory-host radio-list-main" data-id="${escapeHtml(item.id)}"><b>${escapeHtml(item.name || item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small></button><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span>${normalizedConnectionMethods(item).length ? `<button class="btn sm radio-tools" data-id="${escapeHtml(item.id)}">اتصال</button>` : ""}</div>`; };
   const treeCards = aps.map((ap) => {
     const children = stations.filter((item) => item.radioParentHostId === ap.id);
     const monitor = monitorDisplay(ap);
-    return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><div class="radio-health"><span class="mono ltr">${escapeHtml(ap.ip)}</span><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span></div></div><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">WinBox / SSH</button></div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-inventory-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name || ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid || "SSID تعریف نشده")}</em></span><span class="radio-ap-meta">${escapeHtml(ap.frequency || "—")}<br>${escapeHtml(ap.channel || "—")}</span></button>${children.length ? `<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item) => `<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>` : `<div class="radio-empty-branch"><span>Station متصل ثبت نشده است.</span><button class="btn sm primary radio-add-station" data-id="${escapeHtml(ap.id)}">اتصال اولین Station</button></div>`}</div></div></article>`;
+    return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><div class="radio-health"><span class="mono ltr">${escapeHtml(ap.ip)}</span><span class="monitor-pill ${monitor.className}">${escapeHtml(monitor.label)}</span></div></div><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button>${normalizedConnectionMethods(ap).length ? `<button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button>` : ""}</div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-inventory-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name || ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid || "SSID تعریف نشده")}</em></span><span class="radio-ap-meta">${escapeHtml(ap.frequency || "—")}<br>${escapeHtml(ap.channel || "—")}</span></button>${children.length ? `<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item) => `<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>` : `<div class="radio-empty-branch"><span>Station متصل ثبت نشده است.</span><button class="btn sm primary radio-add-station" data-id="${escapeHtml(ap.id)}">اتصال اولین Station</button></div>`}</div></div></article>`;
   }).join("");
   const listCards = aps.map((ap) => {
     const children = stations.filter((item) => item.radioParentHostId === ap.id);
-    return `<article class="radio-ap-card"><div class="radio-ap-head"><button class="open-inventory-host radio-title" data-id="${escapeHtml(ap.id)}"><span class="radio-icon">AP</span><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><p><span class="mono ltr">${escapeHtml(ap.ip)}</span> — ${escapeHtml(ap.ssid || "SSID تعریف نشده")}</p></div></button><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button></div></div><div class="radio-meta"><span>فرکانس: <b>${escapeHtml(ap.frequency || "—")}</b></span><span>کانال: <b>${escapeHtml(ap.channel || "—")}</b></span><span>کلاینت: <b>${formatNumber(children.length)}</b></span></div><div class="radio-children">${children.map(listStation).join("") || `<div class="empty-state compact-empty">Station متصل ثبت نشده است.</div>`}</div></article>`;
+    return `<article class="radio-ap-card"><div class="radio-ap-head"><button class="open-inventory-host radio-title" data-id="${escapeHtml(ap.id)}"><span class="radio-icon">AP</span><div><h3>${escapeHtml(ap.name || ap.ip)}</h3><p><span class="mono ltr">${escapeHtml(ap.ip)}</span> — ${escapeHtml(ap.ssid || "SSID تعریف نشده")}</p></div></button><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button>${normalizedConnectionMethods(ap).length ? `<button class="btn sm radio-tools" data-id="${escapeHtml(ap.id)}">اتصال</button>` : ""}</div></div><div class="radio-meta"><span>فرکانس: <b>${escapeHtml(ap.frequency || "—")}</b></span><span>کانال: <b>${escapeHtml(ap.channel || "—")}</b></span><span>کلاینت: <b>${formatNumber(children.length)}</b></span></div><div class="radio-children">${children.map(listStation).join("") || `<div class="empty-state compact-empty">Station متصل ثبت نشده است.</div>`}</div></article>`;
   }).join("");
   const orphans = stations.filter((item) => !aps.some((ap) => ap.id === item.radioParentHostId));
   const parentOptions = aps.map((ap) => `<option value="${escapeHtml(ap.id)}">${escapeHtml(ap.name || ap.ip)} — ${escapeHtml(ap.ssid || "بدون SSID")} — ${escapeHtml(ap.ip)}</option>`).join("");
   const radioContent = state.radioViewMode === "tree" ? `<section class="radio-tree-grid">${treeCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>` : `<section class="radio-grid">${listCards || `<div class="panel empty-state">هنوز رادیویی با حالت AP ثبت نشده است.</div>`}</section>`;
   const monitoredOnline = radios.filter((item) => monitorDisplay(item).className === "online").length;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تجهیزات</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">وضعیت آنلاین، سیگنال و اتصال Stationها از میکروتیک به‌صورت خودکار به‌روزرسانی می‌شود.</div></div><div class="head-actions"><div class="segmented"><button class="radio-view-mode ${state.radioViewMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button><button class="radio-view-mode ${state.radioViewMode === "list" ? "active" : ""}" data-mode="list">نمای فهرست</button></div></div></div><section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو و اتصال</b><small>IP را وارد کنید؛ فرم همان IP با حالت رادیو و AP انتخاب‌شده باز می‌شود.</small></div><button id="newApShortcut" class="btn sm">ثبت AP جدید</button></div><div class="radio-register-form"><input id="radioQuickIp" class="ltr mono" placeholder="192.168.1.11"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه و تکمیل اطلاعات</button></div></section><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(aps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(stations.length)}</div></div><div class="stat"><div class="label">پایش آنلاین</div><div class="value">${formatNumber(monitoredOnline)}</div></div></section>${radioContent}${orphans.length ? `<section class="panel orphan-panel"><div class="section-title"><h3>Stationهای بدون AP مشخص</h3><span class="subtitle">برای اتصال، روی رکورد کلیک کنید یا از فرم سریع بالا استفاده کنید.</span></div><div class="radio-orphan-grid">${orphans.map(stationNode).join("")}</div></section>` : ""}`;
-  const syncQuickMode = () => $("radioQuickParent").classList.toggle("hidden", $("radioQuickMode").value !== "station");
+  page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تجهیزات</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">وضعیت آنلاین، سیگنال و اتصال Stationها از میکروتیک به‌صورت خودکار به‌روزرسانی می‌شود.</div></div><div class="head-actions"><div class="segmented"><button class="radio-view-mode ${state.radioViewMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button><button class="radio-view-mode ${state.radioViewMode === "list" ? "active" : ""}" data-mode="list">نمای فهرست</button></div></div></div><section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو و اتصال</b><small>IP را وارد کنید؛ فرم همان IP با حالت رادیو و AP انتخاب‌شده باز می‌شود.</small></div><button id="newApShortcut" class="btn sm">ثبت AP جدید</button></div><div class="radio-register-form"><input id="radioQuickIp" class="ltr mono" placeholder="192.168.1.11"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><input id="radioQuickParentSearch" class="hidden" placeholder="جست‌وجوی AP…"><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه و تکمیل اطلاعات</button></div></section><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(aps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(stations.length)}</div></div><div class="stat"><div class="label">پایش آنلاین</div><div class="value">${formatNumber(monitoredOnline)}</div></div></section>${radioContent}${orphans.length ? `<section class="panel orphan-panel"><div class="section-title"><h3>Stationهای بدون AP مشخص</h3><span class="subtitle">برای اتصال، روی رکورد کلیک کنید یا از فرم سریع بالا استفاده کنید.</span></div><div class="radio-orphan-grid">${orphans.map(stationNode).join("")}</div></section>` : ""}`;
+  const syncQuickMode = () => {
+    const hidden = $("radioQuickMode").value !== "station";
+    $("radioQuickParentSearch").classList.toggle("hidden", hidden);
+    $("radioQuickParent").classList.toggle("hidden", hidden);
+  };
+  const filterQuickParents = (selected = $("radioQuickParent").value) => {
+    const query = $("radioQuickParentSearch").value.trim().toLowerCase();
+    const matches = aps.filter((item) => !query || [item.name, item.ip, item.ssid, item.mac, item.companyName, item.spaceName].some((value) => String(value || "").toLowerCase().includes(query)));
+    $("radioQuickParent").innerHTML = `<option value="">انتخاب AP — ${formatNumber(matches.length)} نتیجه</option>${matches.map((ap) => `<option value="${escapeHtml(ap.id)}" ${ap.id === selected ? "selected" : ""}>${escapeHtml(ap.name || ap.ip)} — ${escapeHtml(ap.ssid || "بدون SSID")} — ${escapeHtml(ap.ip)}</option>`).join("")}`;
+  };
   $("radioQuickMode").addEventListener("change", syncQuickMode);
+  $("radioQuickParentSearch").addEventListener("input", () => filterQuickParents());
   $("radioQuickOpen").addEventListener("click", () => quickOpenRadio($("radioQuickIp").value, $("radioQuickMode").value, $("radioQuickParent").value));
   $("radioQuickIp").addEventListener("keydown", (event) => { if (event.key === "Enter") quickOpenRadio(event.currentTarget.value, $("radioQuickMode").value, $("radioQuickParent").value); });
   $("newApShortcut").addEventListener("click", () => { $("radioQuickMode").value = "ap"; syncQuickMode(); $("radioQuickIp").focus(); });
   page.querySelectorAll(".radio-view-mode").forEach((node) => node.addEventListener("click", () => { state.radioViewMode = node.dataset.mode; localStorage.setItem("ems-radio-view-mode", state.radioViewMode); renderRadios(); }));
-  page.querySelectorAll(".radio-add-station").forEach((node) => node.addEventListener("click", () => { $("radioQuickMode").value = "station"; syncQuickMode(); $("radioQuickParent").value = node.dataset.id; $("radioQuickIp").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
+  page.querySelectorAll(".radio-add-station").forEach((node) => node.addEventListener("click", () => { $("radioQuickMode").value = "station"; $("radioQuickParentSearch").value = ""; filterQuickParents(node.dataset.id); syncQuickMode(); $("radioQuickIp").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
   page.querySelectorAll(".open-inventory-host").forEach((node) => node.addEventListener("click", () => openInventoryItem(state.inventory.find((item) => item.id === node.dataset.id))));
   page.querySelectorAll(".radio-tools").forEach((node) => node.addEventListener("click", (event) => {
     const item = state.inventory.find((entry) => entry.id === node.dataset.id);
@@ -1229,7 +1283,7 @@ function renderTopology() {
     const label = link.label || [link.fromPortName, link.toPortName].filter(Boolean).join(" ↔ ") || link.speed || link.medium;
     return `<g class="topology-link-group" data-id="${escapeHtml(link.id)}"><line class="topology-link" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeHtml(link.color)}"></line><text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 7}">${escapeHtml(label)}</text></g>`;
   }).join("");
-  const cards = nodes.map((node) => `<article class="topology-node" data-id="${escapeHtml(node.id)}" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><button class="node-drag" type="button" title="جابه‌جایی">⠿</button><button class="node-main node-open" data-id="${escapeHtml(node.id)}"><span class="node-icon">${topologyIcon(node.type, node.radioMode)}</span><span><b>${escapeHtml(node.name || node.ip)}</b><small class="mono ltr">${escapeHtml(node.ip)}</small></span></button><div class="node-actions"><button class="node-connect" data-id="${escapeHtml(node.id)}" title="اتصال">↗</button>${canEditMap ? `<button class="node-link" data-id="${escapeHtml(node.id)}" title="ساخت لینک">⌁</button><button class="node-remove" data-id="${escapeHtml(node.id)}" title="حذف از نقشه">×</button>` : ""}</div></article>`).join("");
+  const cards = nodes.map((node) => `<article class="topology-node" data-id="${escapeHtml(node.id)}" style="left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px"><button class="node-drag" type="button" title="جابه‌جایی">⠿</button><button class="node-main node-open" data-id="${escapeHtml(node.id)}"><span class="node-icon">${topologyIcon(node.type, node.radioMode)}</span><span><b>${escapeHtml(node.name || node.ip)}</b><small class="mono ltr">${escapeHtml(node.ip)}</small></span></button><div class="node-actions">${normalizedConnectionMethods(node).length ? `<button class="node-connect" data-id="${escapeHtml(node.id)}" title="اتصال">↗</button>` : ""}${canEditMap ? `<button class="node-link" data-id="${escapeHtml(node.id)}" title="ساخت لینک">⌁</button><button class="node-remove" data-id="${escapeHtml(node.id)}" title="حذف از نقشه">×</button>` : ""}</div></article>`).join("");
   const mapOptions = state.maps.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === state.currentMapId ? "selected" : ""}>${escapeHtml(item.name)} — ${escapeHtml(item.companyName || "")}</option>`).join("");
   page.innerHTML = `<div class="headline"><div><div class="crumb">مدیریت تصویری شبکه</div><h2>نقشه اتصال تجهیزات و پورت‌ها</h2><div class="subtitle">هر گره به همان IP و دستگاه ثبت‌شده در سامانه متصل است.</div></div><div class="head-actions">${state.maps.length ? `<select id="mapSelect" class="map-select">${mapOptions}</select>` : ""}${(state.bootstrap.fullCompanyIds || []).length ? `<button id="addMapButton" class="btn">نقشه جدید</button>` : ""}${canEditMap ? `<button id="editMapButton" class="btn">ویرایش نقشه</button><button id="addMapNodeButton" class="btn primary">افزودن تجهیز</button><button id="deleteMapButton" class="btn danger">حذف نقشه</button>` : ""}</div></div>${map ? `<section class="panel topology-panel"><div class="topology-toolbar"><div><b>${escapeHtml(map.name)}</b><span>${escapeHtml(map.description || map.companyName || "")}</span></div><div class="legend"><span><i class="dot used"></i>برای اتصال، دکمه زنجیر دو تجهیز را بزنید.</span></div></div><div class="topology-scroll"><div class="topology-canvas"><svg class="topology-svg" width="1800" height="900">${lines}</svg>${cards}</div></div></section>` : `<section class="panel empty-state">هنوز نقشه‌ای ساخته نشده است.${(state.bootstrap.fullCompanyIds || []).length ? " با دکمه «نقشه جدید» شروع کنید." : ""}</section>`}`;
   $("mapSelect")?.addEventListener("change", async (event) => { state.currentMapId = event.target.value; state.mapData = await request(`/api/maps/${encodeURIComponent(state.currentMapId)}/data`); renderTopology(); });
@@ -1371,16 +1425,18 @@ function openAboutDialog() {
 
 function openMikrotikScriptDialog() {
   $("mikrotikScriptForm").reset();
-  $("scriptTransport").value = $("hostMonitorDriver").value || "mikrotik-rest";
+  $("scriptTransport").value = $("hostMonitorDriver").value || "mikrotik-api";
   $("scriptUsername").value = $("hostMonitorUsername").value || "ems-ipam";
-  $("scriptPort").value = $("hostMonitorPort").value || 443;
+  $("scriptPassword").value = $("hostMonitorPassword").value || "";
+  $("scriptPort").value = $("hostMonitorPort").value || 8728;
   $("scriptOutput").value = "";
+  updateMonitorDriverUi({ script: true });
   markFormClean($("mikrotikScriptForm"));
   $("mikrotikScriptDialog").showModal();
 }
 
 document.addEventListener("click", (event) => {
-  if (!event.target.closest("#toolMenu") && !event.target.closest(".ping-dot")) $("toolMenu").classList.add("hidden");
+  if (!event.target.closest("#toolMenu") && !event.target.closest(".ping-dot") && !event.target.closest(".table-connect-button")) $("toolMenu").classList.add("hidden");
   if (!event.target.closest(".searchbox")) $("searchResults").classList.add("hidden");
 });
 
@@ -1479,19 +1535,20 @@ $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const ports = {};
   $("hostPorts").querySelectorAll(".host-port").forEach((node) => { if (node.value !== "") ports[node.dataset.tool] = Number(node.value); });
-  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, password: $("hostPassword").value, clearPassword: $("clearHostPassword").checked, owner: $("hostOwner").value, location: $("hostLocation").value, vendor: $("hostVendor").value, model: $("hostModel").value, serial: $("hostSerial").value, firmware: $("hostFirmware").value, radioMode: $("hostRadioMode").value, ssid: $("hostSsid").value, frequency: $("hostFrequency").value, channel: $("hostChannel").value, signal: $("hostSignal").value, radioParentHostId: $("hostRadioParent").value || null, monitorEnabled: $("hostMonitorEnabled").checked, monitorDriver: $("hostMonitorDriver").value, monitorPort: Number($("hostMonitorPort").value || 443), monitorUsername: $("hostMonitorUsername").value, monitorPassword: $("hostMonitorPassword").value, monitorInterval: Number($("hostMonitorInterval").value || 60), monitorCaPem: $("hostMonitorCaPem").value, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, connectionMethods: collectHostConnections(), ports, devicePorts: collectDevicePorts() } }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body: { id: $("hostId").value || undefined, spaceId: state.currentSpaceId, ip: $("hostIp").value, name: $("hostName").value, status: $("hostStatus").value, type: $("hostType").value, os: $("hostOs").value, mac: $("hostMac").value, vlan: $("hostVlan").value, username: $("hostUsername").value, password: $("hostPassword").value, clearPassword: $("clearHostPassword").checked, owner: $("hostOwner").value, location: $("hostLocation").value, vendor: $("hostVendor").value, model: $("hostModel").value, serial: $("hostSerial").value, firmware: $("hostFirmware").value, radioMode: $("hostRadioMode").value, ssid: $("hostSsid").value, frequency: $("hostFrequency").value, channel: $("hostChannel").value, signal: $("hostSignal").value, radioParentHostId: $("hostRadioParent").value || null, monitorEnabled: $("hostMonitorEnabled").checked, monitorDriver: $("hostMonitorDriver").value, monitorPort: Number($("hostMonitorPort").value || 8728), monitorUsername: $("hostMonitorUsername").value, monitorPassword: $("hostMonitorPassword").value, clearMonitorPassword: $("clearMonitorPassword").checked, monitorInterval: Number($("hostMonitorInterval").value || 60), monitorCaPem: $("hostMonitorCaPem").value, secretRef: $("hostSecretRef").value, notes: $("hostNotes").value, connectionMethods: collectHostConnections(), ports, devicePorts: collectDevicePorts() } }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); renderCurrent(); toast("اطلاعات IP ذخیره شد."); } catch (error) { toast(error.message); }
 });
 
 $("addDevicePort").addEventListener("click", () => appendDevicePort());
 $("hostRadioMode").addEventListener("change", () => updateRadioFields($("hostRadioParent").value));
+$("hostRadioParentSearch").addEventListener("input", () => updateRadioFields($("hostRadioParent").value));
 $("hostRadioParent").addEventListener("change", () => {
   const parent = state.inventory.find((item) => item.id === $("hostRadioParent").value);
   if (parent?.ssid) $("hostSsid").value = parent.ssid;
 });
 $("hostMonitorEnabled").addEventListener("change", () => $("testMikrotikMonitor").classList.toggle("hidden", !$("hostMonitorEnabled").checked || !$("hostId").value));
-$("hostMonitorDriver").addEventListener("change", () => { $("hostMonitorPort").value = $("hostMonitorDriver").value === "mikrotik-api-ssl" ? 8729 : 443; });
+$("hostMonitorDriver").addEventListener("change", () => updateMonitorDriverUi({ syncPort: true }));
 $("openMikrotikScript").addEventListener("click", openMikrotikScriptDialog);
-$("scriptTransport").addEventListener("change", () => { $("scriptPort").value = $("scriptTransport").value === "mikrotik-api-ssl" ? 8729 : 443; });
+$("scriptTransport").addEventListener("change", () => updateMonitorDriverUi({ syncPort: true, script: true }));
 $("testMikrotikMonitor").addEventListener("click", async () => {
   if ($("hostForm").dataset.dirty === "1") return toast("ابتدا تنظیمات رادیو را ذخیره کنید و سپس آزمایش ارتباط را بزنید.");
   const button = $("testMikrotikMonitor"); button.disabled = true; button.textContent = "در حال آزمایش…";
@@ -1499,7 +1556,7 @@ $("testMikrotikMonitor").addEventListener("click", async () => {
     const result = await request(`/api/hosts/${encodeURIComponent($("hostId").value)}/monitor/test`, { method: "POST" });
     $("monitorStatusText").textContent = `ارتباط موفق — ${formatNumber(result.state?.stations?.length || 0)} Station مشاهده شد.`;
     await ensureInventory(true);
-    toast("ارتباط امن میکروتیک موفق بود.");
+    toast("ارتباط میکروتیک موفق بود.");
   } catch (error) { $("monitorStatusText").textContent = error.message; toast(error.message); }
   finally { button.disabled = false; button.textContent = "آزمایش ارتباط"; }
 });
@@ -1572,8 +1629,8 @@ $("importForm").addEventListener("submit", async (event) => {
 $("mikrotikScriptForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    const result = await request("/api/mikrotik/script", { method: "POST", body: { serverIp: $("scriptServerIp").value, username: $("scriptUsername").value, password: $("scriptPassword").value, certificateName: $("scriptCertificate").value, port: Number($("scriptPort").value), transport: $("scriptTransport").value } });
-    $("scriptOutput").value = result.script; markFormClean(event.currentTarget); toast("اسکریپت امن ساخته شد.");
+    const result = await request("/api/mikrotik/script", { method: "POST", body: { username: $("scriptUsername").value, password: $("scriptPassword").value, certificateName: $("scriptCertificate").value, port: Number($("scriptPort").value), transport: $("scriptTransport").value } });
+    $("scriptOutput").value = result.script; markFormClean(event.currentTarget); toast("اسکریپت آماده شد.");
   } catch (error) { toast(error.message); }
 });
 $("copyMikrotikScript").addEventListener("click", async () => { if (!$("scriptOutput").value) return toast("ابتدا اسکریپت را بسازید."); await navigator.clipboard.writeText($("scriptOutput").value); toast("اسکریپت کپی شد."); });

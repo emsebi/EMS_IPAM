@@ -1,19 +1,19 @@
-راهنمای انتشار نسخه ۰.۵.۰ در GitHub
+راهنمای انتشار نسخه ۰.۵.۱ در GitHub
 
 مخزن:
 https://github.com/emsebi/EMS_IPAM
 
-۱. تمام محتویات بستهٔ EMS_IPAM-GitHub-v0.5.0.zip را مستقیماً در ریشهٔ شاخه main قرار دهید.
+۱. تمام محتویات بستهٔ EMS_IPAM-GitHub-v0.5.1.zip را مستقیماً در ریشهٔ شاخه main قرار دهید.
 خود پوشه را به‌عنوان یک زیرپوشه اضافه نکنید.
 
 ۲. این چهار تصویر جدید باید در پوشه docs وجود داشته باشند:
-docs/ems-ipam-companies-v0.5.0.png
-docs/ems-ipam-ip-management-v0.5.0.png
-docs/ems-ipam-radios-v0.5.0.png
-docs/ems-ipam-inventory-v0.5.0.png
+docs/ems-ipam-companies-v0.5.1.png
+docs/ems-ipam-ip-management-v0.5.1.png
+docs/ems-ipam-radios-v0.5.1.png
+docs/ems-ipam-inventory-v0.5.1.png
 
 ۳. بستهٔ کلاینت ویندوز باید دقیقاً در مسیر زیر باشد:
-docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip
 
 ۴. پس از انتشار، نصب مستقیم سرور با این دستور انجام می‌شود:
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
@@ -22,6 +22,6 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 http://SERVER-IP:PORT/client.html
 
 ۶. دانلود مستقیم کلاینت از خود سرویس:
-http://SERVER-IP:PORT/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip
+http://SERVER-IP:PORT/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip
 
 ۷. پیش از انتشار، نتیجهٔ آزمون و هش فایل‌ها را با SHA256SUMS.txt تطبیق دهید.

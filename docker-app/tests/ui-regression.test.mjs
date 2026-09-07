@@ -48,7 +48,15 @@ test("tree reaches individual IPs and the UI keeps all requested modes", async (
   assert.match(script, /sheet-context/);
   assert.match(script, /radio-tree-card/);
   assert.match(script, /radioQuickParent/);
+  assert.match(script, /table-connect-button/);
+  assert.match(script, /hostRadioParentSearch/);
+  assert.match(script, /defaultGatewayForCidr/);
+  assert.match(script, /localStorage\.getItem\("ems-theme"\) \|\| "dark"/);
+  assert.match(script, /event\?\.stopPropagation\?\.\(\)/);
+  assert.match(script, /normalizedConnectionMethods/);
   assert.match(css, /vertical-subnet-table\{[^}]*direction:ltr/);
   assert.match(css, /tree-scroll\{[^}]*overflow:scroll/);
   assert.match(css, /subnet-span\.prefix-28/);
+  assert.match(css, /\.table-prefix\.named\{background:transparent!important/);
+  assert.match(css, /\[data-theme="dark"\] \.vertical-subnet-table td/);
 });

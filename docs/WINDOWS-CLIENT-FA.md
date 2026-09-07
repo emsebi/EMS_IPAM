@@ -12,7 +12,7 @@ emsipam://
 
 دانلود مستقیم از GitHub:
 
-[EMS IPAM Windows Client v0.5.0](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip)
+[EMS IPAM Windows Client v0.5.1](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip)
 
 دانلود از سرور نصب‌شده:
 
@@ -34,7 +34,29 @@ Install.cmd
 
 ۴. مرورگر را دوباره باز کنید و در سامانه، کنار تجهیز یا IP روی «اتصال» بزنید.
 
-۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید کنید.
+۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید و **EMS IPAM Client** را انتخاب کنید. WinBox را مستقیماً برای پروتکل `emsipam` انتخاب نکنید.
+
+## رفع نمایش لینک emsipam داخل WinBox
+
+اگر داخل کادر `Connect To` عبارت زیر دیده شد:
+
+```text
+emsipam://open?tool=MIK&host=192.168.20.1&port=9191
+```
+
+مرورگر به‌اشتباه WinBox را مستقیماً به‌عنوان برنامهٔ بازکننده انتخاب کرده است. در Firefox به مسیر `Settings > General > Applications` بروید، انتخاب مربوط به `emsipam` را پاک کنید و سپس `Repair.cmd` را از بستهٔ کلاینت اجرا کنید.
+
+پس از اصلاح، WinBox فقط این مقدار را دریافت می‌کند:
+
+```text
+192.168.20.1:9191
+```
+
+فایل `Check.cmd` مسیر ثبت‌شده و آخرین اجرای کلاینت را نمایش می‌دهد. گزارش آخرین مقصد نیز در این فایل است:
+
+```text
+%LOCALAPPDATA%\EMS-IPAM-Client\last-launch.txt
+```
 
 ## ابزارهای پشتیبانی‌شده
 

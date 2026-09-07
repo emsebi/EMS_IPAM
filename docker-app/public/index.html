@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — مدیریت تصویری شبکه</title>
-  <link rel="stylesheet" href="/styles.css?v=0.5.0">
+  <link rel="stylesheet" href="/styles.css?v=0.5.1">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -147,22 +147,28 @@
               <label class="field">حالت رادیو<select id="hostRadioMode"><option value="">رادیو نیست</option><option value="ap">AP</option><option value="station">Station</option></select></label>
               <label class="field">SSID<input id="hostSsid" list="ssidSuggestions"></label>
               <datalist id="ssidSuggestions"></datalist>
-              <label id="radioParentField" class="field hidden">اتصال به AP<select id="hostRadioParent"></select></label>
+              <label id="radioParentField" class="field full hidden">اتصال به AP
+                <input id="hostRadioParentSearch" placeholder="جست‌وجو با نام، IP، SSID، MAC، شرکت یا شعبه…" autocomplete="off">
+                <select id="hostRadioParent"></select>
+                <small id="hostRadioParentHint">برای کوتاه‌شدن فهرست، بخشی از مشخصات AP را بنویسید.</small>
+              </label>
               <label class="field">فرکانس<input id="hostFrequency"></label>
               <label class="field">کانال<input id="hostChannel"></label>
               <label class="field">سیگنال<input id="hostSignal" placeholder="مثلاً -58 dBm"></label>
             </div>
           </fieldset>
           <fieldset id="mikrotikMonitorFields" class="field full ports-fieldset hidden">
-            <legend>پایش امن میکروتیک</legend>
-            <label class="check-field"><input id="hostMonitorEnabled" type="checkbox"> دریافت خودکار وضعیت، سیگنال و Stationها از رابط امن میکروتیک</label>
+            <legend>پایش میکروتیک</legend>
+            <label class="check-field"><input id="hostMonitorEnabled" type="checkbox"> دریافت خودکار وضعیت، سیگنال و Stationها از میکروتیک</label>
+            <p class="notice">روش ساده فقط به IP همین تجهیز، نام کاربری و رمز دلخواه نیاز دارد؛ Certificate لازم نیست.</p>
             <div class="form-grid compact-grid">
-              <label class="field">روش امن ارتباط<select id="hostMonitorDriver"><option value="mikrotik-rest">REST روی HTTPS برای RouterOS v7</option><option value="mikrotik-api-ssl">API-SSL برای RouterOS v6</option></select></label>
-              <label class="field">پورت امن ارتباط<input id="hostMonitorPort" class="ltr" type="number" min="1" max="65535" value="443"></label>
+              <label class="field">روش ارتباط<select id="hostMonitorDriver"><option value="mikrotik-api">روش ساده API — بدون Certificate</option><option value="mikrotik-api-ssl">پیشرفته: API-SSL</option><option value="mikrotik-rest">پیشرفته: REST روی HTTPS</option></select></label>
+              <label class="field">پورت ارتباط<input id="hostMonitorPort" class="ltr" type="number" min="1" max="65535" value="8728"></label>
               <label class="field">نام کاربری پایش<input id="hostMonitorUsername" autocomplete="off"></label>
-              <label class="field">رمز کاربر پایش<input id="hostMonitorPassword" type="password" autocomplete="new-password" placeholder="برای حفظ رمز فعلی خالی بماند"></label>
+              <label class="field">رمز کاربر پایش<input id="hostMonitorPassword" type="password" autocomplete="new-password" placeholder="هر رمز دلخواه؛ می‌تواند خالی باشد"></label>
+              <label id="clearMonitorPasswordWrap" class="check-field hidden"><input id="clearMonitorPassword" type="checkbox"> حذف رمز قبلی و استفاده از رمز خالی</label>
               <label class="field">فاصله بررسی، ثانیه<input id="hostMonitorInterval" type="number" min="15" max="300" value="60"></label>
-              <label class="field full">گواهی CA برای اعتبارسنجی TLS<textarea id="hostMonitorCaPem" class="ltr mono" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+              <label id="monitorCertificateField" class="field full hidden">گواهی CA فقط برای روش پیشرفته<textarea id="hostMonitorCaPem" class="ltr mono" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
             </div>
             <div class="inline-actions"><button id="testMikrotikMonitor" class="btn sm" type="button">آزمایش ارتباط</button><button id="openMikrotikScript" class="btn sm" type="button">ساخت اسکریپت تنظیم میکروتیک</button><span id="monitorStatusText" class="subtitle"></span></div>
           </fieldset>
@@ -197,7 +203,7 @@
         <h4 id="userFormTitle">کاربر جدید</h4>
         <label class="field">نام کاربری<input id="userUsername" required autocomplete="off"></label>
         <label class="field">نام نمایشی<input id="userDisplayName"></label>
-        <label class="field">رمز عبور<input id="userPassword" type="password" autocomplete="new-password"><small id="passwordHint">حداقل ۸ کاراکتر</small></label>
+        <label class="field">رمز عبور<input id="userPassword" type="password" autocomplete="new-password"><small id="passwordHint">هر رمز دلخواه؛ برای کاربر جدید خالی نباشد</small></label>
         <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="editor">ویرایشگر</option><option value="admin">مدیر کل</option></select></label>
         <label id="userActiveWrap" class="check-field hidden"><input id="userActive" type="checkbox" checked> کاربر فعال باشد</label>
         <fieldset id="companyAccessField" class="company-access"><legend>شرکت‌های قابل دسترسی</legend><div id="companyAccessList"></div></fieldset>
@@ -251,14 +257,13 @@
 
   <dialog id="mikrotikScriptDialog" class="wide-dialog">
     <form id="mikrotikScriptForm">
-      <div class="modal-head"><div><h3>اسکریپت اتصال امن میکروتیک</h3><p>کاربر فقط خواندنی و دسترسی محدود به IP سرور سامانه</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3>اسکریپت آمادهٔ میکروتیک</h3><p>یک‌بار در Terminal میکروتیک اجرا کنید؛ روش ساده Certificate نمی‌خواهد.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
-        <label class="field">IP سرور EMS IPAM<input id="scriptServerIp" class="ltr mono" required></label>
-        <label class="field">نسخه و روش ارتباط<select id="scriptTransport"><option value="mikrotik-rest">RouterOS v7 — REST روی HTTPS</option><option value="mikrotik-api-ssl">RouterOS v6 — API-SSL</option></select></label>
+        <label class="field">روش ارتباط<select id="scriptTransport"><option value="mikrotik-api">روش ساده API — بدون Certificate</option><option value="mikrotik-api-ssl">پیشرفته: API-SSL</option><option value="mikrotik-rest">پیشرفته: REST روی HTTPS</option></select></label>
         <label class="field">نام کاربری<input id="scriptUsername" value="ems-ipam" required></label>
-        <label class="field">رمز قوی<input id="scriptPassword" type="password" minlength="12" required></label>
-        <label class="field">نام Certificate در میکروتیک<input id="scriptCertificate" required></label>
-        <label class="field">پورت امن<input id="scriptPort" type="number" min="1" max="65535" value="443"></label>
+        <label class="field">رمز دلخواه<input id="scriptPassword" type="password" placeholder="در صورت نیاز خالی بماند"></label>
+        <label id="scriptCertificateField" class="field hidden">نام Certificate در میکروتیک<input id="scriptCertificate"></label>
+        <label class="field">پورت<input id="scriptPort" type="number" min="1" max="65535" value="8728"></label>
         <label class="field full">خروجی اسکریپت<textarea id="scriptOutput" class="ltr mono script-output" readonly></textarea></label>
       </div>
       <div class="modal-foot"><button class="btn" type="button" data-close>بستن</button><button id="copyMikrotikScript" class="btn" type="button">کپی</button><button class="btn primary" type="submit">ساخت اسکریپت</button></div>
@@ -322,6 +327,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=0.5.0"></script>
+  <script type="module" src="/app.js?v=0.5.1"></script>
 </body>
 </html>

@@ -83,6 +83,8 @@ $tool.mode = [string]$resolvedTool.mode
 $config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $configPath -Encoding UTF8
 
 $target = if ($portValue -gt 0) { $hostValue + ':' + $portValue } else { $hostValue }
+$logPath = Join-Path $PSScriptRoot 'last-launch.txt'
+@("time=" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "tool=" + $toolName, "target=" + $target) | Set-Content -LiteralPath $logPath -Encoding UTF8
 $arguments = switch ([string]$tool.mode) {
     'winbox' { if ($usernameValue) { @($target, $usernameValue) } else { @($target) } }
     'rdp' { @('/v:' + $target, '/prompt') }

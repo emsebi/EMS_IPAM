@@ -2,23 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildMikrotikScript, encodeApiSentence, saveMikrotikPoll } from "../server/mikrotik.mjs";
 
-test("generated MikroTik setup is TLS-only, read-only and source restricted", () => {
+test("generated MikroTik setup defaults to simple read-only API without a certificate", () => {
   const script = buildMikrotikScript({
-    serverIp: "10.10.10.5",
     username: "ems-ipam",
-    password: "a-strong-password",
-    certificateName: "ems-rest-cert",
-    port: 443,
+    password: "1",
   });
-  assert.match(script, /policy=read,rest-api/);
-  assert.match(script, /www-ssl disabled=no/);
-  assert.match(script, /tls-version=only-1\.2/);
-  assert.match(script, /address=10\.10\.10\.5\/32/);
-  assert.match(script, /src-address=10\.10\.10\.5/);
-  assert.doesNotMatch(script, /8728|policy=.*write|sensitive/);
+  assert.match(script, /policy=read,api/);
+  assert.match(script, /api disabled=no port=8728/);
+  assert.match(script, /password="1"/);
+  assert.doesNotMatch(script, /certificate=|firewall|policy=.*write|sensitive/);
 
   const legacy = buildMikrotikScript({
-    serverIp: "10.10.10.5",
     username: "ems-ipam",
     password: "a-strong-password",
     certificateName: "ems-api-cert",
@@ -30,13 +24,16 @@ test("generated MikroTik setup is TLS-only, read-only and source restricted", ()
   assert.doesNotMatch(legacy, /rest-api/);
 
   const legacyDefaultPort = buildMikrotikScript({
-    serverIp: "10.10.10.5",
     username: "ems-ipam",
     password: "a-strong-password",
     certificateName: "ems-api-cert",
     transport: "mikrotik-api-ssl",
   });
   assert.match(legacyDefaultPort, /api-ssl disabled=no port=8729/);
+
+  const rest = buildMikrotikScript({ username: "ems-ipam", password: "", certificateName: "ems-rest-cert", transport: "mikrotik-rest" });
+  assert.match(rest, /policy=read,rest-api/);
+  assert.match(rest, /www-ssl disabled=no port=443 certificate=ems-rest-cert/);
 });
 
 test("RouterOS API sentence encoder terminates words and supports long values", () => {
