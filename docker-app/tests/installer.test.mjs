@@ -42,10 +42,13 @@ test("Windows connection client auto-detects tools and passes usernames without 
   assert.match(protocol, /Select-ToolFile/);
   assert.match(protocol, /usernameValue/);
   assert.match(protocol, /\$target = if \(\$portValue -gt 0\)/);
-  assert.match(protocol, /'winbox' \{ if \(\$usernameValue\) \{ @\(\$target, \$usernameValue\)/);
+  assert.match(protocol, /'winbox' \{ @\(\$target\) \}/);
+  assert.doesNotMatch(protocol, /'winbox' \{[^}]*\$usernameValue/);
   assert.match(protocol, /last-launch\.txt/);
   assert.match(protocol, /'\/prompt'/);
   assert.doesNotMatch(protocol, /query\['password'\]/);
+  assert.match(setup, /Register-EmsProtocol 'emsipam-client'/);
+  assert.match(setup, /WinBox receives only IP:PORT/);
   assert.match(setup, /not found - file selection will open on first use/);
   assert.match(setup, /URL:EMS IPAM Client/);
 });

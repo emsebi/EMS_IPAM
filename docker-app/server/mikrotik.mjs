@@ -55,6 +55,8 @@ function firstSignal(value) {
 function normalizeStation(item) {
   return {
     mac: clean(item["mac-address"] || item.mac || "", 32).toUpperCase(),
+    address: clean(item["last-ip"] || item["last-ipv4"] || item.address || "", 64),
+    hostname: clean(item.hostname || item.comment || "", 160),
     interface: clean(item.interface, 80),
     ssid: clean(item.ssid, 160),
     radioName: clean(item["radio-name"], 160),
@@ -132,6 +134,7 @@ function routerApiPoll({ host, password, secure = false }) {
     let phase = "login";
     let rows = [];
     let resource = {};
+    let identityName = "";
     let trap = "";
     let received = 0;
     let settled = false;
@@ -152,7 +155,7 @@ function routerApiPoll({ host, password, secure = false }) {
         trap = "";
         phase = "wireless";
         rows = [];
-        send(["/interface/wireless/registration-table/print", "=.proplist=mac-address,interface,ssid,radio-name,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
+        send(["/interface/wireless/registration-table/print", "=.proplist=mac-address,last-ip,last-ipv4,hostname,comment,interface,ssid,radio-name,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
         return;
       }
       if (trap) return finish(new Error(trap));
@@ -162,24 +165,33 @@ function routerApiPoll({ host, password, secure = false }) {
         rows = [];
         send(["/login", `=name=${host.monitorUsername}`, `=response=00${response}`]);
       } else if (phase === "login" || phase === "login-response") {
+        phase = "identity";
+        rows = [];
+        send(["/system/identity/print", "=.proplist=name"]);
+      } else if (phase === "identity") {
+        identityName = clean(rows[0]?.name || host.name, 160);
         phase = "resource";
         rows = [];
-        send(["/system/resource/print", "=.proplist=board-name,platform,version,uptime,cpu-load,free-memory"]);
+        send(["/system/resource/print", "=.proplist=board-name,platform,architecture-name,version,uptime,cpu-load,free-memory,total-memory"]);
       } else if (phase === "resource") {
         resource = rows[0] || {};
         phase = "wifi";
         rows = [];
-        send(["/interface/wifi/registration-table/print", "=.proplist=mac-address,interface,ssid,radio-name,signal,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
+        send(["/interface/wifi/registration-table/print", "=.proplist=mac-address,last-ip,last-ipv4,hostname,comment,interface,ssid,radio-name,signal,signal-strength,signal-strength-ch0,tx-rate,rx-rate,tx-bytes,rx-bytes,uptime,last-activity"]);
       } else {
         finish(null, {
           online: true,
           package: `${phase === "wifi" ? "wifi" : "wireless"}-${secure ? "api-ssl" : "api"}`,
           checkedAt: new Date().toISOString(),
-          identity: clean(resource["board-name"] || resource.platform || host.name, 160),
+          identity: identityName || clean(host.name, 160),
+          model: clean(resource["board-name"], 120),
+          platform: clean(resource.platform, 120),
+          architecture: clean(resource["architecture-name"], 120),
           version: clean(resource.version, 120),
           uptime: clean(resource.uptime, 80),
           cpuLoad: clean(resource["cpu-load"], 20),
           freeMemory: clean(resource["free-memory"], 40),
+          totalMemory: clean(resource["total-memory"], 40),
           stations: rows.map(normalizeStation),
         });
       }
@@ -220,6 +232,7 @@ export async function pollMikrotik({ host, secretBox }) {
     pathname,
   });
   const resource = await request("/rest/system/resource");
+  const identity = await request("/rest/system/identity");
   let wirelessPackage = "wifi";
   let registrations;
   try {
@@ -230,15 +243,20 @@ export async function pollMikrotik({ host, secretBox }) {
     registrations = await request("/rest/interface/wireless/registration-table");
   }
   const resourceItem = Array.isArray(resource) ? resource[0] || {} : resource || {};
+  const identityItem = Array.isArray(identity) ? identity[0] || {} : identity || {};
   return {
     online: true,
     package: wirelessPackage,
     checkedAt: new Date().toISOString(),
-    identity: clean(resourceItem["board-name"] || resourceItem.platform || host.name, 160),
+    identity: clean(identityItem.name || host.name, 160),
+    model: clean(resourceItem["board-name"], 120),
+    platform: clean(resourceItem.platform, 120),
+    architecture: clean(resourceItem["architecture-name"], 120),
     version: clean(resourceItem.version, 120),
     uptime: clean(resourceItem.uptime, 80),
     cpuLoad: clean(resourceItem["cpu-load"], 20),
     freeMemory: clean(resourceItem["free-memory"], 40),
+    totalMemory: clean(resourceItem["total-memory"], 40),
     stations: (Array.isArray(registrations) ? registrations : []).map(normalizeStation),
   };
 }

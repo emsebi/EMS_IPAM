@@ -280,7 +280,7 @@ uninstall_app() {
   load_installation
   log "Stopping and removing application containers"
   "${compose[@]}" down --remove-orphans
-  docker image rm ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.5.2 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   printf '\nApplication containers were removed.\n'
   printf 'Database volume, configuration, encryption key and backups were kept.\n'
   printf 'Use Update to install the application again.\n'
@@ -293,7 +293,7 @@ uninstall_all() {
   read -r -p "Type DELETE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
   [[ "$confirmation" == "DELETE" ]] || fail "Full uninstall cancelled."
   "${compose[@]}" down --volumes --remove-orphans
-  docker image rm ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.5.2 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   [[ "$INSTALL_DIR" == /opt/* && "$INSTALL_DIR" != "/opt" ]] || fail "Unsafe installation directory. Files were not removed."
   rm -rf -- "$INSTALL_DIR"
   printf '\nEMS IPAM and its database were permanently removed.\n'

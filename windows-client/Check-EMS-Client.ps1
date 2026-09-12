@@ -1,8 +1,11 @@
 $ErrorActionPreference = 'Stop'
-$root = 'Registry::HKEY_CURRENT_USER\Software\Classes\emsipam'
+$root = 'Registry::HKEY_CURRENT_USER\Software\Classes\emsipam-client'
 $command = (Get-Item -LiteralPath (Join-Path $root 'shell\open\command')).GetValue('')
 Write-Host 'EMS IPAM protocol handler:' -ForegroundColor Cyan
 Write-Host $command
+if ($command -notmatch 'EMS-IPAM-Protocol\.ps1') {
+    throw 'Protocol handler is incorrect. Run Repair.cmd again.'
+}
 $log = Join-Path $env:LOCALAPPDATA 'EMS-IPAM-Client\last-launch.txt'
 if (Test-Path -LiteralPath $log) {
     Write-Host ''

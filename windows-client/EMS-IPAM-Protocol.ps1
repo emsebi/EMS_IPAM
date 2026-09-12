@@ -59,7 +59,7 @@ function Resolve-Tool([string]$Name, $ConfiguredTool) {
 }
 
 $uri = [System.Uri]$UriValue
-if ($uri.Scheme -ne 'emsipam' -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
+if (@('emsipam-client','emsipam') -notcontains $uri.Scheme -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
 $query = Parse-Query $uri.Query
 $toolName = ([string]$query['tool']).ToUpperInvariant()
 $hostValue = [string]$query['host']
@@ -86,7 +86,9 @@ $target = if ($portValue -gt 0) { $hostValue + ':' + $portValue } else { $hostVa
 $logPath = Join-Path $PSScriptRoot 'last-launch.txt'
 @("time=" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "tool=" + $toolName, "target=" + $target) | Set-Content -LiteralPath $logPath -Encoding UTF8
 $arguments = switch ([string]$tool.mode) {
-    'winbox' { if ($usernameValue) { @($target, $usernameValue) } else { @($target) } }
+    # WinBox must receive exactly one argument: IP:PORT. Never pass the
+    # internal EMS URI or another value to its Connect To field.
+    'winbox' { @($target) }
     'rdp' { @('/v:' + $target, '/prompt') }
     'putty' {
         $items = @('-ssh', $hostValue)
