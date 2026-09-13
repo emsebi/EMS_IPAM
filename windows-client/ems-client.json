@@ -15,6 +15,10 @@
     "SSH": {
       "path": "",
       "mode": "putty"
+    },
+    "TELNET": {
+      "path": "",
+      "mode": "putty-telnet"
     }
   }
 }

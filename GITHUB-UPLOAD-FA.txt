@@ -1,31 +1,39 @@
-راهنمای انتشار نسخه ۰.۵.۲ در GitHub
+راهنمای انتشار نسخه 0.6.0 در GitHub
 
-مخزن:
+مخزن مقصد:
 https://github.com/emsebi/EMS_IPAM
 
-پیش‌نیاز نصب روی سرور: Docker Engine و Docker Compose باید از قبل نصب باشند. برای روش گرافیکی، Portainer نیز باید پیش از شروع نصب و آماده باشد.
+1) از شاخه main یک نسخه پشتیبان یا Branch موقت بسازید.
 
-۱. تمام محتویات بستهٔ EMS_IPAM-GitHub-v0.5.2.zip را مستقیماً در ریشهٔ شاخه main قرار دهید.
-خود پوشه را به‌عنوان یک زیرپوشه اضافه نکنید.
+2) فایل EMS-IPAM-Network-Map-v0.6.0-GitHub.zip را Extract کنید.
 
-اگر نسخهٔ ۰.۵.۱ از قبل در مخزن یا روی رایانه وجود دارد، می‌توانید به‌جای بستهٔ کامل، محتویات EMS_IPAM-Update-Files-v0.5.2.zip را روی همان پوشه جایگزین کنید. مسیر داخلی همهٔ فایل‌ها حفظ شده است.
+3) وارد پوشه استخراج‌شده EMS_IPAM_v0.6.0 شوید.
 
-۲. این چهار تصویر جدید باید در پوشه docs وجود داشته باشند:
-docs/ems-ipam-companies-v0.5.2.png
-docs/ems-ipam-ip-management-v0.5.2.png
-docs/ems-ipam-radios-v0.5.2.png
-docs/ems-ipam-inventory-v0.5.2.png
+4) تمام محتویات داخل این پوشه را مستقیماً در ریشه مخزن EMS_IPAM بارگذاری کنید و جایگزینی فایل‌های هم‌نام را بپذیرید.
 
-۳. بستهٔ کلاینت ویندوز باید دقیقاً در مسیر زیر باشد:
-docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.2.zip
+مهم:
+- خود فایل ZIP را داخل GitHub نریزید.
+- پوشه EMS_IPAM_v0.6.0 را به‌صورت یک زیرپوشه داخل مخزن نریزید.
+- مسیر نهایی باید مانند compose.yml و install.sh در ریشه مخزن باشد.
+- فایل واقعی .env سرور را هرگز در GitHub قرار ندهید؛ فقط .env.example مجاز است.
 
-۴. پس از انتشار، نصب مستقیم سرور با این دستور انجام می‌شود:
+5) بعد از Commit، برای نصب یا ارتقا اجرا کنید:
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 
-۵. پس از نصب، صفحهٔ راهنمای کلاینت ویندوز از این نشانی باز می‌شود:
-http://SERVER-IP:PORT/client.html
+6) در نصب تازه گزینه 1 و در سرور دارای نسخه قبلی گزینه 2 را انتخاب کنید.
 
-۶. دانلود مستقیم کلاینت از خود سرویس:
-http://SERVER-IP:PORT/downloads/EMS-IPAM-Windows-Client-v0.5.2.zip
+هشدار ارتقا:
+نسخه 0.6 رمزهای قدیمی تجهیزات و اطلاعات پایش خودکار را برای همیشه از دیتابیس پاک می‌کند. قبل از اجرا از تصمیم خود مطمئن باشید. بکاپ تمیز پس از پاک‌سازی ساخته می‌شود.
 
-۷. پیش از انتشار، نتیجهٔ آزمون و هش فایل‌ها را با SHA256SUMS.txt تطبیق دهید.
+7) پس از موفقیت، نقشه شبکه از این مسیر است:
+http://SERVER-IP:PORT/network-map/
+
+8) برای به‌روزرسانی‌های بعدی فقط ماژول نقشه:
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/modules/network-map/install.sh | sudo bash -s -- update
+
+این دستور فقط کانتینر نقشه را Build می‌کند و مدیریت IP یا دیتابیس را Build نمی‌کند.
+
+9) فایل کلاینت ویندوز باید در این مسیر باشد:
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip
+
+10) پیش از انتشار، آزمون‌ها و SHA256SUMS.txt را بررسی کنید.

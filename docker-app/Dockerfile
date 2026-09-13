@@ -1,11 +1,10 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates iputils-ping openssh-client sshpass postgresql-client tar tini \
+    && apt-get install -y --no-install-recommends ca-certificates iputils-ping postgresql-client tar tini \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN mkdir -p /backups && chown node:node /backups
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
     && npm cache clean --force

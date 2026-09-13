@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>نقشه شبکه — EMS</title>
+  <link rel="stylesheet" href="/network-map/styles.css?v=0.6.0">
+  <link rel="stylesheet" href="/network-map/recovery.css?v=0.6.0">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brandmark">NM</span><span><b>نقشه شبکه</b><small>سامانه مدیریت شبکه EMS</small></span></a>
+    <nav><button id="homeButton" class="nav active" type="button">نقشه‌ها</button><a class="nav" href="/">مدیریت آی‌پی</a></nav>
+    <div class="top-actions"><span id="sessionBadge" class="session-badge">اتصال فقط هنگام حضور کاربر</span><button id="themeButton" class="icon" type="button" title="تغییر پوسته">☾</button></div>
+  </header>
+  <main id="page" class="page"><div class="loading">در حال بارگذاری…</div></main>
+
+  <dialog id="scanDialog" class="wide-dialog">
+    <form id="scanForm">
+      <div class="dialog-head"><div><h2 id="scanTitle">ایجاد نقشه جدید</h2><p>سوئیچ شروع و اطلاعات اتصال موقت را وارد کنید.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="dialog-body">
+        <input id="scanMapId" type="hidden">
+        <section class="form-section"><h3>مشخصات نقشه</h3><div class="form-grid">
+          <label>شرکت یا سایت<select id="scanCompany" required></select></label>
+          <label>نام نقشه<input id="scanName" required maxlength="120" placeholder="مثلاً شبکه دیتاسنتر کرج"></label>
+          <label class="full">توضیحات<textarea id="scanDescription" maxlength="1000"></textarea></label>
+          <label>آدرس سوئیچ شروع<input id="scanSeedIp" class="ltr" required inputmode="decimal" placeholder="10.252.22.200"></label>
+        </div></section>
+        <section class="form-section"><h3>اتصال موقت</h3><div class="security-note"><b>رمز ذخیره نمی‌شود.</b><span>اطلاعات فقط در حافظه عملیات فعال است و با پایان کار، خروج یا بسته‌شدن صفحه حذف می‌شود.</span></div><div class="form-grid">
+          <label>روش اتصال<select id="scanProtocol"><option value="ssh">SSH — پیشنهادی</option><option value="telnet">Telnet — ناامن و فقط تجهیزات قدیمی</option></select></label>
+          <label>پورت<input id="scanPort" class="ltr" type="number" min="1" max="65535" value="22"></label>
+          <label>نام کاربری<input id="scanUsername" class="ltr" autocomplete="off" required></label>
+          <label>رمز ورود<input id="scanPassword" type="password" autocomplete="new-password" required></label>
+          <label>رمز فعال‌سازی، اختیاری<input id="scanEnablePassword" type="password" autocomplete="new-password"><small>اگر سطح ورود ۱۵ نیست وارد شود.</small></label>
+          <label>حداکثر تعداد سوئیچ<input id="scanMaxDevices" type="number" min="1" max="500" value="200"></label>
+        </div><div id="telnetWarning" class="danger-note hidden">در ارتباط تلنت، نام کاربری و رمز بین سامانه و سوئیچ رمزنگاری نمی‌شود.</div></section>
+        <details><summary>تنظیمات سوئیچ‌های کند</summary><div class="form-grid compact">
+          <label>مهلت اتصال، ثانیه<input id="scanConnectTimeout" type="number" min="5" max="60" value="30"></label>
+          <label>مهلت هر فرمان، ثانیه<input id="scanCommandTimeout" type="number" min="15" max="180" value="90"></label>
+          <label>تعداد تلاش مجدد<input id="scanRetries" type="number" min="0" max="2" value="2"></label>
+          <label>اتصال هم‌زمان<input id="scanConcurrency" type="number" min="1" max="8" value="4"></label>
+        </div></details>
+      </div>
+      <div class="dialog-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">شروع بررسی و ذخیره نسخه</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="editDialog">
+    <form id="editForm">
+      <div class="dialog-head"><div><h2>ویرایش مشخصات نقشه</h2><p>نسخه‌های قبلی نقشه دست‌نخورده باقی می‌مانند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="dialog-body form-grid"><label>نام نقشه<input id="editName" required maxlength="120"></label><label class="full">توضیحات<textarea id="editDescription" maxlength="1000"></textarea></label></div>
+      <div class="dialog-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="backupDialog" class="wide-dialog">
+    <form id="backupForm">
+      <div class="dialog-head"><div><h2>بکاپ امن کانفیگ</h2><p>سوئیچ‌ها را انتخاب کنید؛ خطوط حساس پیش از ذخیره پاک می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="dialog-body"><div class="security-note"><b>رمز اتصال ذخیره نمی‌شود.</b><span>نسخه کامل کانفیگ نیز در بکاپ گروهی ذخیره نمی‌شود؛ نسخه پاک‌سازی‌شده برای مشاهده و مقایسه می‌ماند.</span></div><div class="backup-layout"><section><div class="select-head"><label><input id="backupAll" type="checkbox"> انتخاب همه</label><span id="backupCount"></span></div><div id="backupDevices" class="device-checks"></div></section><section class="form-grid one">
+        <label>روش اتصال<select id="backupProtocol"><option value="ssh">SSH</option><option value="telnet">Telnet — ناامن</option></select></label>
+        <label>پورت<input id="backupPort" type="number" min="1" max="65535" value="22"></label>
+        <label>نام کاربری<input id="backupUsername" autocomplete="off" required></label>
+        <label>رمز ورود<input id="backupPassword" type="password" autocomplete="new-password" required></label>
+        <label>رمز فعال‌سازی، اختیاری<input id="backupEnablePassword" type="password" autocomplete="new-password"></label>
+      </section></div></div>
+      <div class="dialog-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">شروع بکاپ انتخاب‌شده‌ها</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="jobDialog">
+    <div class="dialog-head"><div><h2>وضعیت عملیات</h2><p id="jobType">در حال اجرا</p></div></div>
+    <div class="dialog-body"><div class="job-spinner"></div><h3 id="jobMessage">عملیات شروع شد.</h3><p id="jobCounters"></p><div class="progress"><i id="jobProgress"></i></div><div id="jobResult" class="job-result"></div></div>
+    <div class="dialog-foot"><button id="cancelJob" class="btn danger" type="button">توقف عملیات</button><button id="closeJob" class="btn primary hidden" type="button">بستن</button></div>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="/network-map/app.js?v=0.6.0"></script>
+</body>
+</html>

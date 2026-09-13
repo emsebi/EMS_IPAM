@@ -46,11 +46,9 @@ test("tree reaches individual IPs and the UI keeps all requested modes", async (
   assert.match(script, /ems-display-mode"\) \|\| "table"/);
   assert.doesNotMatch(script, /selected\.prefix === 23 \|\| selected\.prefix === 24/);
   assert.match(script, /sheet-context/);
-  assert.match(script, /useful-radio-card/);
+  assert.match(script, /radio-tree-card/);
   assert.match(script, /radioQuickParent/);
-  assert.match(script, /connectionButtonsHtml/);
-  assert.match(script, /direct-copy/);
-  assert.match(script, /direct-tool/);
+  assert.match(script, /table-connect-button/);
   assert.match(script, /hostRadioParentSearch/);
   assert.match(script, /defaultGatewayForCidr/);
   assert.match(script, /localStorage\.getItem\("ems-theme"\) \|\| "dark"/);
@@ -61,5 +59,4 @@ test("tree reaches individual IPs and the UI keeps all requested modes", async (
   assert.match(css, /subnet-span\.prefix-28/);
   assert.match(css, /\.table-prefix\.named\{background:transparent!important/);
   assert.match(css, /\[data-theme="dark"\] \.vertical-subnet-table td/);
-  assert.match(css, /\[data-theme="dark"\] \.root-prefix-open/);
 });

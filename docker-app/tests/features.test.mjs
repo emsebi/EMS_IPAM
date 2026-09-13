@@ -2,19 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-test("schema keeps companies, IP, monitoring, scoped access and topology in one database", async () => {
+test("schema keeps companies, IP, scoped access and topology in one database", async () => {
   const schema = await fs.readFile(new URL("../server/schema.sql", import.meta.url), "utf8");
-  for (const table of ["company_contacts", "company_connections", "app_settings", "user_space_access", "device_ports", "topology_maps", "topology_nodes", "topology_links", "mikrotik_backup_targets", "mikrotik_config_backups", "online_report_targets", "online_report_runs", "online_report_results", "integration_tokens"]) {
+  for (const table of ["company_contacts", "company_connections", "app_settings", "user_space_access", "device_ports", "topology_maps", "topology_nodes", "topology_links"]) {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   }
-  for (const column of ["parent_company_id", "deleted_at", "radio_mode", "ssid", "radio_parent_host_id", "connection_methods", "monitor_enabled", "monitor_state", "backup_enabled", "backup_ssh_port", "backup_username", "backup_routeros_version"]) {
+  for (const column of ["parent_company_id", "deleted_at", "radio_mode", "ssid", "radio_parent_host_id", "connection_methods", "monitor_enabled", "monitor_state"]) {
     assert.match(schema, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`));
   }
+  assert.match(schema, /secret_ciphertext='',/);
+  assert.match(schema, /monitor_secret_ciphertext='',/);
+  assert.match(schema, /DELETE FROM app_settings WHERE key='monitoring'/);
 });
 
 test("server exposes inventory, global search, topology and downloadable backups", async () => {
   const server = await fs.readFile(new URL("../server/main.mjs", import.meta.url), "utf8");
-  for (const route of ["/api/search", "/api/inventory", "/api/backups", "/api/backups/settings", "/api/config-backups", "/api/online-reports", "/api/integrations/network-map", "/api/integration/v1/snapshot", "/api/integration/v1/hosts/sync", "/api/settings/appearance", "/api/trash", "/api/imports/subnet", "/api/mikrotik/script", "/api/maps"]) {
+  for (const route of ["/api/search", "/api/inventory", "/api/backups", "/api/backups/settings", "/api/trash", "/api/imports/subnet", "/api/mikrotik/script", "/api/maps"]) {
     assert.match(server, new RegExp(route.replaceAll("/", "\\/")));
   }
   assert.match(server, /createBackupFile/);
@@ -39,15 +42,14 @@ test("destructive and scoped workflows keep their safety guards", async () => {
   assert.match(server, /h\.radio_mode='ap'/);
   assert.match(server, /canAccessSpace\(user, item\.spaceId\)/);
   assert.match(server, /pg_dump/);
-  assert.match(server, /EMS_SECRET_KEY/);
+  assert.doesNotMatch(server, /EMS_SECRET_KEY/);
   assert.match(server, /deleted_at=now\(\)/);
   assert.match(server, /runAutomaticBackup/);
-  assert.match(server, /runMonitoringCycle/);
-  assert.match(server, /runOnlineReportCycle/);
-  assert.match(server, /runMikrotikBackup/);
-  assert.match(server, /attempts: 3/);
-  assert.match(server, /passwordById/);
-  assert.doesNotMatch(server, /mikrotik_backup_targets[^;]*password/is);
+  assert.doesNotMatch(server, /runMonitoringCycle/);
+  assert.match(server, /NETWORK_MAP_ENABLED/);
+  assert.match(server, /proxyNetworkMap/);
+  assert.match(server, /const secretCiphertext = ""/);
+  assert.match(server, /const monitorSecretCiphertext = ""/);
   assert.match(server, /ابتدا شرکت‌ها یا شعبه‌های زیرمجموعه را حذف یا جابه‌جا کنید/);
   assert.match(server, /WITH RECURSIVE descendants/);
 });

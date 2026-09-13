@@ -21,11 +21,17 @@ test("installer validates a downloaded archive before extraction", async () => {
 });
 
 test("setup exposes install, update, backup, restore and both uninstall modes", async () => {
-  const installer = await fs.readFile(installerUrl, "utf8");
+  const [installer, modules] = await Promise.all([
+    fs.readFile(installerUrl, "utf8"),
+    fs.readFile(new URL("../../modules.conf", import.meta.url), "utf8"),
+  ]);
   for (const label of ["Install", "Update", "Backup Database", "Restore Database", "Uninstall App (Keep Database)", "Uninstall App + Database"]) {
     assert.match(installer, new RegExp(label.replace(/[()+]/g, "\\$&")));
   }
-  assert.match(installer, /EMS_SECRET_KEY/);
+  assert.doesNotMatch(installer, /EMS_SECRET_KEY/);
+  assert.match(modules, /network-map\|Network Map\|modules\/network-map\/install\.sh\|EMS_NETWORK_MAP_ENABLED\|ON/);
+  assert.match(installer, /purge_device_credentials/);
+  assert.match(installer, /Enable or Disable Modules/);
   assert.match(installer, /Type DELETE to continue/);
   assert.match(installer, /Type RESTORE to continue/);
   assert.match(installer, /backup_database/);
@@ -42,13 +48,12 @@ test("Windows connection client auto-detects tools and passes usernames without 
   assert.match(protocol, /Select-ToolFile/);
   assert.match(protocol, /usernameValue/);
   assert.match(protocol, /\$target = if \(\$portValue -gt 0\)/);
-  assert.match(protocol, /'winbox' \{ @\(\$target\) \}/);
-  assert.doesNotMatch(protocol, /'winbox' \{[^}]*\$usernameValue/);
+  assert.match(protocol, /'winbox' \{ if \(\$usernameValue\) \{ @\(\$target, \$usernameValue\)/);
+  assert.match(protocol, /'putty-telnet'/);
+  assert.match(protocol, /'telnet'/);
   assert.match(protocol, /last-launch\.txt/);
   assert.match(protocol, /'\/prompt'/);
   assert.doesNotMatch(protocol, /query\['password'\]/);
-  assert.match(setup, /Register-EmsProtocol 'emsipam-client'/);
-  assert.match(setup, /WinBox receives only IP:PORT/);
   assert.match(setup, /not found - file selection will open on first use/);
   assert.match(setup, /URL:EMS IPAM Client/);
 });

@@ -50,16 +50,17 @@ function Resolve-Tool([string]$Name, $ConfiguredTool) {
         'MIK' { Find-AppPath @('winbox.exe','WinBox.exe') @('%LOCALAPPDATA%\Programs\WinBox\WinBox.exe','%ProgramFiles%\MikroTik\WinBox\WinBox.exe','%USERPROFILE%\Downloads\winbox64.exe','%USERPROFILE%\Downloads\winbox.exe') }
         'RDP' { Find-AppPath @('mstsc.exe') @('%SystemRoot%\System32\mstsc.exe') }
         'SSH' { Find-AppPath @('putty.exe','ssh.exe') @('%ProgramFiles%\PuTTY\putty.exe','%SystemRoot%\System32\OpenSSH\ssh.exe') }
+        'TELNET' { Find-AppPath @('putty.exe','telnet.exe') @('%ProgramFiles%\PuTTY\putty.exe','%SystemRoot%\System32\telnet.exe') }
         'VNC' { Find-AppPath @('vncviewer.exe','tvnviewer.exe') @('%ProgramFiles%\RealVNC\VNC Viewer\vncviewer.exe','%ProgramFiles%\TigerVNC\vncviewer.exe','%ProgramFiles%\TightVNC\tvnviewer.exe') }
     }
     if (-not $resolved) { $resolved = Select-ToolFile "مسیر برنامه $Name را انتخاب کنید" }
     if (-not $resolved) { throw "برنامه $Name پیدا نشد. نصب برنامه یا انتخاب فایل اجرایی لازم است." }
-    $mode = switch ($Name) { 'MIK' { 'winbox' } 'RDP' { 'rdp' } 'VNC' { 'vnc' } 'SSH' { if ([IO.Path]::GetFileName($resolved) -ieq 'ssh.exe') { 'openssh' } else { 'putty' } } }
+    $mode = switch ($Name) { 'MIK' { 'winbox' } 'RDP' { 'rdp' } 'VNC' { 'vnc' } 'SSH' { if ([IO.Path]::GetFileName($resolved) -ieq 'ssh.exe') { 'openssh' } else { 'putty' } } 'TELNET' { if ([IO.Path]::GetFileName($resolved) -ieq 'telnet.exe') { 'telnet' } else { 'putty-telnet' } } }
     return @{ path = $resolved; mode = $mode }
 }
 
 $uri = [System.Uri]$UriValue
-if (@('emsipam-client','emsipam') -notcontains $uri.Scheme -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
+if ($uri.Scheme -ne 'emsipam' -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
 $query = Parse-Query $uri.Query
 $toolName = ([string]$query['tool']).ToUpperInvariant()
 $hostValue = [string]$query['host']
@@ -67,7 +68,7 @@ $usernameValue = [string]$query['username']
 $portValue = 0
 $parsedIp = $null
 
-if (@('VNC','MIK','RDP','SSH') -notcontains $toolName) { throw 'ابزار مجاز نیست.' }
+if (@('VNC','MIK','RDP','SSH','TELNET') -notcontains $toolName) { throw 'ابزار مجاز نیست.' }
 if (-not [System.Net.IPAddress]::TryParse($hostValue, [ref]$parsedIp)) { throw 'IP معتبر نیست.' }
 if (-not [int]::TryParse([string]$query['port'], [ref]$portValue) -or $portValue -lt 0 -or $portValue -gt 65535) { throw 'پورت معتبر نیست.' }
 if ($usernameValue -and $usernameValue -notmatch '^[A-Za-z0-9_.@\\-]{1,120}$') { throw 'نام کاربری معتبر نیست.' }
@@ -86,9 +87,7 @@ $target = if ($portValue -gt 0) { $hostValue + ':' + $portValue } else { $hostVa
 $logPath = Join-Path $PSScriptRoot 'last-launch.txt'
 @("time=" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "tool=" + $toolName, "target=" + $target) | Set-Content -LiteralPath $logPath -Encoding UTF8
 $arguments = switch ([string]$tool.mode) {
-    # WinBox must receive exactly one argument: IP:PORT. Never pass the
-    # internal EMS URI or another value to its Connect To field.
-    'winbox' { @($target) }
+    'winbox' { if ($usernameValue) { @($target, $usernameValue) } else { @($target) } }
     'rdp' { @('/v:' + $target, '/prompt') }
     'putty' {
         $items = @('-ssh', $hostValue)
@@ -100,6 +99,12 @@ $arguments = switch ([string]$tool.mode) {
         $sshTarget = if ($usernameValue) { $usernameValue + '@' + $hostValue } else { $hostValue }
         if ($portValue -gt 0) { @('-p', [string]$portValue, $sshTarget) } else { @($sshTarget) }
     }
+    'putty-telnet' {
+        $items = @('-telnet', $hostValue)
+        if ($portValue -gt 0) { $items += @('-P', [string]$portValue) }
+        $items
+    }
+    'telnet' { if ($portValue -gt 0) { @($hostValue, [string]$portValue) } else { @($hostValue) } }
     'vnc' { @($target) }
     default { throw 'حالت اجرای ابزار مجاز نیست.' }
 }

@@ -3,7 +3,7 @@
 کلاینت ویندوز، پروتکل محلی زیر را در حساب کاربری ویندوز ثبت می‌کند:
 
 ```text
-emsipam-client://
+emsipam://
 ```
 
 با انتخاب دکمهٔ اتصال در سامانه، مرورگر آدرس، پورت، ابزار و در صورت موجودبودن نام کاربری را به کلاینت می‌دهد. کلاینت سپس برنامهٔ مناسب را روی همان رایانه اجرا می‌کند.
@@ -12,7 +12,7 @@ emsipam-client://
 
 دانلود مستقیم از GitHub:
 
-[EMS IPAM Windows Client v0.5.2](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.2.zip)
+[EMS IPAM Windows Client v0.6.0](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip)
 
 دانلود از سرور نصب‌شده:
 
@@ -34,14 +34,14 @@ Install.cmd
 
 ۴. مرورگر را دوباره باز کنید و در سامانه، کنار تجهیز یا IP روی «اتصال» بزنید.
 
-۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید و **EMS IPAM Client** را انتخاب کنید. WinBox را مستقیماً برای پروتکل `emsipam-client` یا `emsipam` انتخاب نکنید.
+۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید و **EMS IPAM Client** را انتخاب کنید. WinBox را مستقیماً برای پروتکل `emsipam` انتخاب نکنید.
 
 ## رفع نمایش لینک emsipam داخل WinBox
 
 اگر داخل کادر `Connect To` عبارت زیر دیده شد:
 
 ```text
-emsipam-client://open?tool=MIK&host=192.168.20.1&port=9191
+emsipam://open?tool=MIK&host=192.168.20.1&port=9191
 ```
 
 مرورگر به‌اشتباه WinBox را مستقیماً به‌عنوان برنامهٔ بازکننده انتخاب کرده است. در Firefox به مسیر `Settings > General > Applications` بروید، انتخاب مربوط به `emsipam` را پاک کنید و سپس `Repair.cmd` را از بستهٔ کلاینت اجرا کنید.
@@ -62,9 +62,10 @@ emsipam-client://open?tool=MIK&host=192.168.20.1&port=9191
 
 | ابزار | روش اجرا |
 |---|---|
-| WinBox | فقط مقصد دقیق `IP:PORT` به برنامه داده می‌شود. |
+| WinBox | آدرس، پورت و نام کاربری به برنامه داده می‌شود. |
 | Remote Desktop | آدرس و پورت با گزینهٔ درخواست اطلاعات ورود باز می‌شود. |
 | SSH / PuTTY | نام کاربری، آدرس و پورت برای اتصال استفاده می‌شود. |
+| Telnet / PuTTY | فقط برای تجهیزات قدیمی؛ رمز در خود ابزار مقصد وارد می‌شود. |
 | VNC Viewer | آدرس و پورت در Viewer نصب‌شده باز می‌شود. |
 | HTTP / HTTPS | نشانی در مرورگر پیش‌فرض باز می‌شود و کلاینت لازم نیست. |
 
@@ -72,7 +73,7 @@ emsipam-client://open?tool=MIK&host=192.168.20.1&port=9191
 
 ## امنیت
 
-- رمز عبور داخل `emsipam-client://` قرار نمی‌گیرد.
+- رمز عبور داخل `emsipam://` قرار نمی‌گیرد.
 - رمز عبور در خط فرمان برنامهٔ مقصد نوشته نمی‌شود.
 - ورود رمز در خود WinBox، Remote Desktop، PuTTY یا VNC انجام می‌شود.
 - کلاینت فقط نشانی‌هایی را می‌پذیرد که قالب و ابزار آن‌ها معتبر باشد.

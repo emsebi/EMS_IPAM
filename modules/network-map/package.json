@@ -1,0 +1,17 @@
+{
+  "name": "ems-network-map",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node server/main.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3",
+    "ssh2": "^1.16.0"
+  }
+}

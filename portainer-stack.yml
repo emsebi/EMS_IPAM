@@ -20,7 +20,7 @@ services:
   app:
     build:
       context: ./docker-app
-    image: ems-ipam:0.5.2
+    image: ems-ipam:0.6.0
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -29,8 +29,9 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
       EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
-      EMS_SECRET_KEY: ${EMS_SECRET_KEY}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      EMS_NETWORK_MAP_ENABLED: ${EMS_NETWORK_MAP_ENABLED:-true}
+      EMS_NETWORK_MAP_UPSTREAM: http://network-map:8090
       BACKUP_DIR: /backups
       BACKUP_DISPLAY_PATH: ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}
       PORT: 8080
@@ -51,6 +52,34 @@ services:
       - /tmp:size=64m,mode=1777
     volumes:
       - ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}:/backups
+    restart: unless-stopped
+    networks:
+      - ems_internal
+
+  network-map:
+    build:
+      context: ./modules/network-map
+    image: ems-network-map:0.6.0
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ems_ipam
+      PGUSER: ems_ipam
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PORT: 8090
+      TZ: Asia/Tehran
+    depends_on:
+      db:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     restart: unless-stopped
     networks:
       - ems_internal

@@ -41,6 +41,7 @@ export function createDatabase(connectionString) {
       ["MIK", "WinBox", 8291, "#3478d4"],
       ["RDP", "Remote Desktop", 3389, "#2fa36f"],
       ["SSH", "SSH Terminal", 22, "#e48a2d"],
+      ["TELNET", "Telnet Terminal", 23, "#b7791f"],
       ["HTTP", "Web HTTP", 80, "#64748b"],
       ["HTTPS", "Web HTTPS", 443, "#2b9ca8"],
     ];

@@ -1,4 +1,4 @@
-کلاینت اتصال ویندوز EMS IPAM — نسخه 0.5.2
+کلاینت اتصال ویندوز EMS IPAM — نسخه 0.6.0
 
 1) فایل ZIP را از حالت فشرده خارج کنید.
 2) روی Install.cmd دوبار کلیک کنید.
@@ -18,6 +18,7 @@
 - WinBox
 - Remote Desktop ویندوز
 - PuTTY یا OpenSSH ویندوز
+- Telnet یا PuTTY برای تجهیزات قدیمی
 - RealVNC، TigerVNC یا TightVNC Viewer
 
 کلاینت ابتدا App Paths ویندوز، سپس PATH و مسیرهای رایج را بررسی می‌کند.

@@ -21,7 +21,7 @@ export function pingOne(ip, timeoutSeconds = 1) {
   });
 }
 
-export async function pingMany(ips, { concurrency = 32, timeoutSeconds = 1, attempts = 1 } = {}) {
+export async function pingMany(ips, { concurrency = 32, timeoutSeconds = 1 } = {}) {
   const results = new Map();
   let cursor = 0;
   async function worker() {
@@ -29,9 +29,7 @@ export async function pingMany(ips, { concurrency = 32, timeoutSeconds = 1, atte
       const index = cursor;
       cursor += 1;
       const ip = ips[index];
-      let online = false;
-      for (let attempt = 0; attempt < Math.max(1, attempts) && !online; attempt += 1) online = await pingOne(ip, timeoutSeconds);
-      results.set(ip, online);
+      results.set(ip, await pingOne(ip, timeoutSeconds));
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, ips.length) }, () => worker()));

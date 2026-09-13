@@ -1,12 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSecretBox } from "../server/secrets.mjs";
+import fs from "node:fs/promises";
 
-test("device passwords are encrypted with authenticated encryption", () => {
-  const box = createSecretBox("0123456789abcdef0123456789abcdef");
-  const first = box.encrypt("Router-Password-123");
-  const second = box.encrypt("Router-Password-123");
-  assert.notEqual(first, second);
-  assert.equal(box.decrypt(first), "Router-Password-123");
-  assert.doesNotMatch(first, /Router-Password/);
+test("equipment credentials have no persistence or encryption helper", async () => {
+  const [server, schema] = await Promise.all([
+    fs.readFile(new URL("../server/main.mjs", import.meta.url), "utf8"),
+    fs.readFile(new URL("../server/schema.sql", import.meta.url), "utf8"),
+  ]);
+  await assert.rejects(fs.access(new URL("../server/secrets.mjs", import.meta.url)));
+  assert.doesNotMatch(server, /createSecretBox|EMS_SECRET_KEY|decrypt\(/);
+  assert.match(server, /const secretCiphertext = ""/);
+  assert.match(server, /const monitorSecretCiphertext = ""/);
+  assert.match(schema, /secret_ciphertext='',/);
+  assert.match(schema, /monitor_secret_ciphertext='',/);
+  assert.match(schema, /DELETE FROM app_settings WHERE key='monitoring'/);
 });
