@@ -4,94 +4,394 @@ set -Eeuo pipefail
 REPOSITORY="${EMS_REPOSITORY:-emsebi/EMS_IPAM}"
 REPOSITORY_REF="${EMS_REPOSITORY_REF:-main}"
 INSTALL_DIR="${EMS_INSTALL_DIR:-/opt/ems-ipam}"
-SOURCE_OVERRIDE="${EMS_INSTALL_SOURCE_DIR:-}"
+STATE_DIR="${EMS_STATE_DIR:-/var/lib/ems-ipam}"
 TTY_DEVICE="/dev/tty"
 TEMP_DIR=""
 SOURCE_DIR=""
+SCRIPT_DIR=""
+ACTION="${1:-}"
 compose=()
 
 log(){ printf '\n[EMS IPAM] %s\n' "$*"; }
-fail(){ printf '\nError: %s\n' "$*" >&2; exit 1; }
+warn(){ printf '\n[EMS IPAM] WARNING: %s\n' "$*" >&2; }
+fail(){ printf '\n[EMS IPAM] ERROR: %s\n' "$*" >&2; exit 1; }
 cleanup(){ [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]] && rm -rf -- "$TEMP_DIR" || true; }
 trap cleanup EXIT
-need(){ command -v "$1" >/dev/null 2>&1 || fail "Required command '$1' is not installed."; }
 
-read_default(){ local __v="$1" __p="$2" __d="$3" x=""; read -r -p "$__p [$__d]: " x <"$TTY_DEVICE" || fail "Unable to read input."; printf -v "$__v" '%s' "${x:-$__d}"; }
-read_yes_no(){ local __v="$1" __p="$2" __d="$3" x="" suffix='[Y/n]'; [[ "$__d" == false ]] && suffix='[y/N]'; while true; do read -r -p "$__p $suffix: " x <"$TTY_DEVICE" || fail "Unable to read input."; x="${x:-$([[ "$__d" == true ]] && printf y || printf n)}"; case "${x,,}" in y|yes|1|true) printf -v "$__v" true; return;; n|no|0|false) printf -v "$__v" false; return;; esac; done; }
-read_secret_twice(){ local __v="$1" __p="$2" a="" b=""; while true; do read -r -s -p "$__p: " a <"$TTY_DEVICE" || fail "Unable to read password."; printf '\n'; [[ -n "$a" ]] || { printf 'Password cannot be empty.\n' >&2; continue; }; [[ "$a" != *"'"* ]] || { printf "Do not use apostrophe in password.\n" >&2; continue; }; read -r -s -p "Confirm password: " b <"$TTY_DEVICE"; printf '\n'; [[ "$a" == "$b" ]] || { printf 'Passwords do not match.\n' >&2; continue; }; printf -v "$__v" '%s' "$a"; return; done; }
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
-set_env_value(){ local key="$1" value="$2" file="$INSTALL_DIR/.env" tmp; tmp="$(mktemp)"; awk -v k="$key" -v v="$value" 'BEGIN{d=0} $0 ~ "^" k "=" {print k "=\047" v "\047"; d=1; next} {print} END{if(!d) print k "=\047" v "\047"}' "$file" >"$tmp"; install -m 600 "$tmp" "$file"; rm -f "$tmp"; }
-
-module_dirs(){ find "$1/modules" -mindepth 1 -maxdepth 1 -type d ! -name '_*' -print 2>/dev/null | sort; }
-module_value(){ local file="$1" key="$2"; sed -n "s/^${key}=//p" "$file" | tail -n1 | sed -e "s/^['\"]//" -e "s/['\"]$//"; }
-validate_modules(){ local root="$1" d f id compose_file; while IFS= read -r d; do f="$d/module.env"; [[ -f "$f" ]] || fail "Missing module.env in $d"; id="$(module_value "$f" EMS_MODULE_ID)"; [[ "$id" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "Invalid module id: $id"; compose_file="$(module_value "$f" EMS_MODULE_COMPOSE)"; compose_file="${compose_file:-compose.module.yml}"; [[ -f "$d/$compose_file" ]] || fail "Missing $compose_file for module $id"; done < <(module_dirs "$root"); }
-
-download_source(){
-  TEMP_DIR="$(mktemp -d /tmp/ems-ipam-setup.XXXXXX)"; SOURCE_DIR="$TEMP_DIR/source"; mkdir -p "$SOURCE_DIR"
-  if [[ -n "$SOURCE_OVERRIDE" ]]; then [[ -d "$SOURCE_OVERRIDE" ]] || fail "Source directory not found."; cp -a "$SOURCE_OVERRIDE/." "$SOURCE_DIR/"; else
-    local u="https://github.com/${REPOSITORY}/archive/refs/heads/${REPOSITORY_REF}.tar.gz" a="$TEMP_DIR/source.tar.gz"
-    curl -fsSL --retry 3 --connect-timeout 15 -o "$a" "$u" || fail "Project download failed."
-    tar -xzf "$a" --strip-components=1 -C "$SOURCE_DIR"
-  fi
-  for f in compose.yml docker-app/Dockerfile docker-app/package.json docker-app/server/main.mjs scripts/build-module-registry.py; do [[ -e "$SOURCE_DIR/$f" ]] || fail "Required file missing: $f"; done
-  validate_modules "$SOURCE_DIR"
+read_default(){
+  local __var="$1" __prompt="$2" __default="$3" __value=""
+  read -r -p "$__prompt [$__default]: " __value <"$TTY_DEVICE" || fail "Unable to read terminal input."
+  printf -v "$__var" '%s' "${__value:-$__default}"
 }
 
-ensure_module_flags(){ local root="$1" envfile="$2" d f id flag default val; while IFS= read -r d; do f="$d/module.env"; id="$(module_value "$f" EMS_MODULE_ID)"; flag="$(module_value "$f" EMS_MODULE_ENV_FLAG)"; flag="${flag:-EMS_MODULE_${id^^}_ENABLED}"; flag="${flag//-/_}"; default="$(module_value "$f" EMS_MODULE_DEFAULT)"; val=false; [[ "${default^^}" =~ ^(ON|TRUE|YES|1)$ ]] && val=true; grep -q "^${flag}=" "$envfile" || printf "%s='%s'\n" "$flag" "$val" >>"$envfile"; done < <(module_dirs "$root"); }
+read_secret_twice(){
+  local __var="$1" __prompt="$2" a="" b=""
+  while true; do
+    read -r -s -p "$__prompt: " a <"$TTY_DEVICE" || fail "Unable to read password."
+    printf '\n'
+    [[ -n "$a" ]] || { printf 'Password cannot be empty.\n' >&2; continue; }
+    [[ "$a" != *"'"* ]] || { printf "Do not use apostrophe (') in the password.\n" >&2; continue; }
+    read -r -s -p "Confirm password: " b <"$TTY_DEVICE" || fail "Unable to read password confirmation."
+    printf '\n'
+    [[ "$a" == "$b" ]] || { printf 'Passwords do not match.\n' >&2; continue; }
+    printf -v "$__var" '%s' "$a"
+    return
+  done
+}
 
-select_modules(){ local root="$1" envfile="$2" d f id name flag default defbool selected; while IFS= read -r d; do f="$d/module.env"; id="$(module_value "$f" EMS_MODULE_ID)"; name="$(module_value "$f" EMS_MODULE_NAME)"; flag="$(module_value "$f" EMS_MODULE_ENV_FLAG)"; flag="${flag:-EMS_MODULE_${id^^}_ENABLED}"; flag="${flag//-/_}"; default="$(module_value "$f" EMS_MODULE_DEFAULT)"; defbool=false; [[ "${default^^}" =~ ^(ON|TRUE|YES|1)$ ]] && defbool=true; read_yes_no selected "Enable module: ${name:-$id}" "$defbool"; printf "%s='%s'\n" "$flag" "$selected" >>"$envfile"; done < <(module_dirs "$root"); }
+confirm(){
+  local prompt="$1" default="${2:-no}" answer="" suffix='[y/N]'
+  [[ "$default" == yes ]] && suffix='[Y/n]'
+  read -r -p "$prompt $suffix: " answer <"$TTY_DEVICE" || return 1
+  answer="${answer:-$([[ "$default" == yes ]] && printf y || printf n)}"
+  [[ "${answer,,}" =~ ^(y|yes)$ ]]
+}
+
+need_root(){ (( EUID == 0 )) || fail "Run this installer with sudo/root."; }
+
+install_prerequisites(){
+  log "Checking prerequisites"
+  local missing=()
+  for c in curl tar awk grep sed ss python3 openssl; do command -v "$c" >/dev/null 2>&1 || missing+=("$c"); done
+
+  if (( ${#missing[@]} > 0 )); then
+    command -v apt-get >/dev/null 2>&1 || fail "Automatic prerequisite installation currently supports Ubuntu/Debian only."
+    log "Installing base packages: ${missing[*]}"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y
+    apt-get install -y ca-certificates curl tar gzip coreutils iproute2 gawk grep sed python3 openssl
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+    log "Installing Docker Engine and Docker Compose"
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    sh /tmp/get-docker.sh
+    rm -f /tmp/get-docker.sh
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now docker >/dev/null 2>&1 || true
+  fi
+  docker info >/dev/null 2>&1 || fail "Docker is installed but the daemon is not running."
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is not available."
+
+  if ! docker inspect portainer >/dev/null 2>&1; then
+    log "Installing Portainer CE"
+    docker volume create portainer_data >/dev/null
+    docker run -d \
+      -p 8000:8000 \
+      -p 9443:9443 \
+      --name portainer \
+      --restart=always \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v portainer_data:/data \
+      portainer/portainer-ce:latest >/dev/null
+  else
+    local running
+    running="$(docker inspect -f '{{.State.Running}}' portainer 2>/dev/null || printf false)"
+    [[ "$running" == true ]] || docker start portainer >/dev/null
+  fi
+  log "Prerequisites are ready"
+}
+
+is_valid_source(){
+  local root="$1"
+  [[ -f "$root/compose.yml" && -f "$root/docker-app/Dockerfile" && -f "$root/docker-app/package.json" && -f "$root/docker-app/server/main.mjs" && -f "$root/scripts/build-module-registry.py" ]]
+}
+
+download_source(){
+  TEMP_DIR="$(mktemp -d /tmp/ems-ipam-setup.XXXXXX)"
+  SOURCE_DIR="$TEMP_DIR/source"
+  mkdir -p "$SOURCE_DIR"
+
+  if [[ -n "${EMS_INSTALL_SOURCE_DIR:-}" ]]; then
+    [[ -d "$EMS_INSTALL_SOURCE_DIR" ]] || fail "EMS_INSTALL_SOURCE_DIR does not exist."
+    cp -a "$EMS_INSTALL_SOURCE_DIR/." "$SOURCE_DIR/"
+  elif [[ -n "$SCRIPT_DIR" ]] && is_valid_source "$SCRIPT_DIR"; then
+    log "Using project files next to install.sh"
+    cp -a "$SCRIPT_DIR/." "$SOURCE_DIR/"
+  else
+    log "Downloading project from GitHub: ${REPOSITORY}@${REPOSITORY_REF}"
+    local archive="$TEMP_DIR/source.tar.gz"
+    curl -fsSL --retry 3 --connect-timeout 15 \
+      -o "$archive" \
+      "https://github.com/${REPOSITORY}/archive/refs/heads/${REPOSITORY_REF}.tar.gz" \
+      || fail "Could not download project from GitHub."
+    tar -tzf "$archive" >/dev/null 2>&1 || fail "Downloaded GitHub archive is invalid."
+    tar -xzf "$archive" --strip-components=1 -C "$SOURCE_DIR"
+  fi
+
+  is_valid_source "$SOURCE_DIR" || fail "Downloaded source is incomplete. Required core files are missing."
+
+  # Legacy module folders from older releases are intentionally ignored unless
+  # they contain the new module.env + compose.module.yml contract.
+  if [[ -d "$SOURCE_DIR/modules" ]]; then
+    while IFS= read -r d; do
+      [[ -f "$d/module.env" ]] || warn "Ignoring legacy/incomplete module folder: ${d#$SOURCE_DIR/}"
+    done < <(find "$SOURCE_DIR/modules" -mindepth 1 -maxdepth 1 -type d ! -name '_*' -print 2>/dev/null | sort)
+  fi
+}
+
+module_dirs(){
+  local root="$1"
+  [[ -d "$root/modules" ]] || return 0
+  find "$root/modules" -mindepth 1 -maxdepth 1 -type d ! -name '_*' -exec test -f '{}/module.env' ';' -print 2>/dev/null | sort
+}
+
+module_value(){
+  local file="$1" key="$2"
+  sed -n "s/^${key}=//p" "$file" | tail -n1 | sed -e "s/^['\"]//" -e "s/['\"]$//"
+}
+
+build_module_registry(){
+  mkdir -p "$INSTALL_DIR/runtime"
+  python3 "$INSTALL_DIR/scripts/build-module-registry.py" "$INSTALL_DIR" "$INSTALL_DIR/.env" "$INSTALL_DIR/runtime/modules.json"
+}
 
 load_installation(){
-  [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yml" ]] || fail "EMS IPAM is not installed in $INSTALL_DIR"
-  set -a; source "$INSTALL_DIR/.env"; set +a
+  [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yml" ]] || fail "EMS IPAM is not installed correctly in $INSTALL_DIR."
+  set -a
+  # shellcheck disable=SC1090
+  source "$INSTALL_DIR/.env"
+  set +a
   compose=(docker compose --project-name ems-ipam --env-file "$INSTALL_DIR/.env" -f "$INSTALL_DIR/compose.yml")
-  local d f id cf flag enabled
-  while IFS= read -r d; do f="$d/module.env"; id="$(module_value "$f" EMS_MODULE_ID)"; cf="$(module_value "$f" EMS_MODULE_COMPOSE)"; cf="${cf:-compose.module.yml}"; compose+=(-f "$d/$cf"); flag="$(module_value "$f" EMS_MODULE_ENV_FLAG)"; flag="${flag:-EMS_MODULE_${id^^}_ENABLED}"; flag="${flag//-/_}"; enabled="${!flag:-false}"; [[ "${enabled,,}" == true ]] && compose+=(--profile "$id"); done < <(module_dirs "$INSTALL_DIR")
-  python3 "$INSTALL_DIR/scripts/build-module-registry.py" "$INSTALL_DIR" "$INSTALL_DIR/.env" "$INSTALL_DIR/runtime/modules.json"
+  local d meta compose_file id flag enabled
+  while IFS= read -r d; do
+    meta="$d/module.env"
+    id="$(module_value "$meta" EMS_MODULE_ID)"
+    compose_file="$(module_value "$meta" EMS_MODULE_COMPOSE)"
+    compose_file="${compose_file:-compose.module.yml}"
+    [[ -n "$id" && -f "$d/$compose_file" ]] || { warn "Skipping invalid module folder: ${d#$INSTALL_DIR/}"; continue; }
+    compose+=(-f "$d/$compose_file")
+    flag="$(module_value "$meta" EMS_MODULE_ENV_FLAG)"
+    flag="${flag:-EMS_MODULE_${id^^}_ENABLED}"
+    flag="${flag//-/_}"
+    enabled="${!flag:-false}"
+    [[ "${enabled,,}" == true ]] && compose+=(--profile "$id")
+  done < <(module_dirs "$INSTALL_DIR")
+  build_module_registry
+}
+
+find_previous_env(){
+  local candidate
+  for candidate in "$STATE_DIR/.env" "$INSTALL_DIR/.env" /opt/ems-ipam-old/.env /opt/ems-ipam.previous*/.env /opt/ems-ipam.failed*/.env; do
+    [[ -f "$candidate" ]] && { printf '%s\n' "$candidate"; return 0; }
+  done
+  return 1
+}
+
+prepare_env_for_install(){
+  local target="$1" old_env=""
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR"
+
+  if docker volume inspect ems_ipam_database >/dev/null 2>&1; then
+    old_env="$(find_previous_env 2>/dev/null || true)"
+    if [[ -n "$old_env" ]]; then
+      log "Existing EMS IPAM database volume found; reusing saved database credentials"
+      cp "$old_env" "$target"
+      chmod 600 "$target"
+      return 0
+    fi
+    fail "An existing EMS IPAM database volume was found, but its saved credentials were not found. Use Update if this is an existing installation, or use option 4 only if you intentionally want to delete the database."
+  fi
+
+  local POSTGRES_PASSWORD EMS_ADMIN_USERNAME EMS_ADMIN_PASSWORD EMS_HTTP_PORT COOKIE_SECURE
+  POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+  read_default EMS_ADMIN_USERNAME "Admin username" "admin"
+  read_secret_twice EMS_ADMIN_PASSWORD "Admin password"
+  read_default EMS_HTTP_PORT "Web port" "8080"
+  [[ "$EMS_HTTP_PORT" =~ ^[0-9]+$ ]] && (( EMS_HTTP_PORT >= 1 && EMS_HTTP_PORT <= 65535 )) || fail "Web port must be between 1 and 65535."
+  read_default COOKIE_SECURE "COOKIE_SECURE (false for HTTP, true for HTTPS)" "false"
+  [[ "${COOKIE_SECURE,,}" =~ ^(true|false)$ ]] || fail "COOKIE_SECURE must be true or false."
+
+  umask 077
+  cat > "$target" <<ENVEOF
+POSTGRES_PASSWORD='$POSTGRES_PASSWORD'
+EMS_ADMIN_USERNAME='$EMS_ADMIN_USERNAME'
+EMS_ADMIN_PASSWORD='$EMS_ADMIN_PASSWORD'
+EMS_HTTP_PORT='$EMS_HTTP_PORT'
+COOKIE_SECURE='$COOKIE_SECURE'
+EMS_BACKUP_PATH='$INSTALL_DIR/backups'
+ENVEOF
+}
+
+save_state(){
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR"
+  [[ -f "$INSTALL_DIR/.env" ]] && install -m 600 "$INSTALL_DIR/.env" "$STATE_DIR/.env"
+  if [[ -d "$INSTALL_DIR/backups" ]]; then
+    mkdir -p "$STATE_DIR/backups"
+    cp -a "$INSTALL_DIR/backups/." "$STATE_DIR/backups/" 2>/dev/null || true
+  fi
 }
 
 start_and_check(){
   load_installation
-  log "Pulling database image"; "${compose[@]}" pull db
-  log "Building services"; "${compose[@]}" build --pull
-  log "Starting services"; "${compose[@]}" up -d --remove-orphans
-  log "Checking application health"
-  for _ in $(seq 1 60); do if curl -fsS --max-time 2 "http://127.0.0.1:${EMS_HTTP_PORT}/health" >/dev/null 2>&1; then local ip; ip="$(hostname -I 2>/dev/null | awk '{print $1}')"; printf '\nOperation completed successfully.\nPanel URL: http://%s:%s\nInstallation directory: %s\n' "${ip:-SERVER-IP}" "$EMS_HTTP_PORT" "$INSTALL_DIR"; return 0; fi; sleep 2; done
-  "${compose[@]}" ps >&2 || true; "${compose[@]}" logs --tail 120 app db >&2 || true; return 1
+  log "Pulling database image"
+  "${compose[@]}" pull db
+  log "Building EMS IPAM"
+  "${compose[@]}" build --pull
+  log "Starting EMS IPAM"
+  "${compose[@]}" up -d --remove-orphans
+
+  log "Waiting for application health check"
+  local attempt ip
+  for attempt in $(seq 1 60); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${EMS_HTTP_PORT}/health" >/dev/null 2>&1; then
+      ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+      save_state
+      printf '\nEMS IPAM started successfully.\n'
+      printf 'Panel: http://%s:%s\n' "${ip:-SERVER-IP}" "$EMS_HTTP_PORT"
+      printf 'Portainer: https://%s:9443\n' "${ip:-SERVER-IP}"
+      printf 'Install directory: %s\n' "$INSTALL_DIR"
+      return 0
+    fi
+    sleep 2
+  done
+
+  printf '\nApplication health check failed. Current status:\n' >&2
+  "${compose[@]}" ps >&2 || true
+  printf '\nRecent logs:\n' >&2
+  "${compose[@]}" logs --tail 150 app db >&2 || true
+  return 1
 }
 
 install_app(){
-  [[ ! -e "$INSTALL_DIR" ]] || fail "Installation directory already exists: $INSTALL_DIR"
-  read_secret_twice POSTGRES_PASSWORD "POSTGRES_PASSWORD"
-  read_default EMS_ADMIN_USERNAME "EMS_ADMIN_USERNAME" admin
-  read_secret_twice EMS_ADMIN_PASSWORD "EMS_ADMIN_PASSWORD"
-  read_default EMS_HTTP_PORT "EMS_HTTP_PORT" 8080
-  [[ "$EMS_HTTP_PORT" =~ ^[0-9]+$ ]] && (( EMS_HTTP_PORT>=1 && EMS_HTTP_PORT<=65535 )) || fail "Invalid port."
-  read_default COOKIE_SECURE "COOKIE_SECURE (true/false)" false
-  download_source; mkdir -p "$SOURCE_DIR/backups" "$SOURCE_DIR/runtime"; printf '[]\n' >"$SOURCE_DIR/runtime/modules.json"
-  umask 077; { printf "POSTGRES_PASSWORD='%s'\nEMS_ADMIN_USERNAME='%s'\nEMS_ADMIN_PASSWORD='%s'\nEMS_HTTP_PORT='%s'\nCOOKIE_SECURE='%s'\nEMS_BACKUP_PATH='%s'\n" "$POSTGRES_PASSWORD" "$EMS_ADMIN_USERNAME" "$EMS_ADMIN_PASSWORD" "$EMS_HTTP_PORT" "$COOKIE_SECURE" "$INSTALL_DIR/backups"; select_modules "$SOURCE_DIR" /dev/stdout; } >"$SOURCE_DIR/.env"
-  mkdir -p "$(dirname "$INSTALL_DIR")"; mv "$SOURCE_DIR" "$INSTALL_DIR"; chmod 600 "$INSTALL_DIR/.env"; chmod 700 "$INSTALL_DIR/backups"; chown -R 1000:1000 "$INSTALL_DIR/backups"
-  start_and_check || fail "The application did not become healthy. Logs are shown above."
+  install_prerequisites
+
+  if [[ -e "$INSTALL_DIR" ]]; then
+    if [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yml" ]]; then
+      fail "A valid installation already exists in $INSTALL_DIR. Choose option 2 (Update)."
+    fi
+    local failed_dir="${INSTALL_DIR}.failed.$(date +%Y%m%d-%H%M%S)"
+    warn "Incomplete old installation found. Moving it to $failed_dir"
+    mv "$INSTALL_DIR" "$failed_dir"
+  fi
+
+  download_source
+  mkdir -p "$SOURCE_DIR/backups" "$SOURCE_DIR/runtime"
+  printf '[]\n' > "$SOURCE_DIR/runtime/modules.json"
+  prepare_env_for_install "$SOURCE_DIR/.env"
+
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  mv "$SOURCE_DIR" "$INSTALL_DIR"
+  SOURCE_DIR=""
+  chmod 600 "$INSTALL_DIR/.env"
+  chmod 700 "$INSTALL_DIR/backups"
+  chown -R 1000:1000 "$INSTALL_DIR/backups" 2>/dev/null || true
+
+  if ! start_and_check; then
+    fail "Installation did not become healthy. The logs above show the failing service."
+  fi
 }
 
-backup_database(){ load_installation; mkdir -p "$INSTALL_DIR/backups"; "${compose[@]}" up -d db; local f="$INSTALL_DIR/backups/ems-ipam-$(date -u +%Y%m%dT%H%M%SZ).dump"; "${compose[@]}" exec -T db pg_dump -U ems_ipam -d ems_ipam -Fc >"$f"; chmod 600 "$f"; printf 'Backup created: %s\n' "$f"; }
+backup_database(){
+  load_installation
+  mkdir -p "$INSTALL_DIR/backups"
+  "${compose[@]}" up -d db
+  local file="$INSTALL_DIR/backups/ems-ipam-$(date -u +%Y%m%dT%H%M%SZ).dump"
+  "${compose[@]}" exec -T db pg_dump -U ems_ipam -d ems_ipam -Fc > "$file"
+  chmod 600 "$file"
+  save_state
+  printf 'Database backup: %s\n' "$file"
+}
 
 update_app(){
-  load_installation; backup_database; download_source; ensure_module_flags "$SOURCE_DIR" "$INSTALL_DIR/.env"; cp -a "$INSTALL_DIR/.env" "$SOURCE_DIR/.env"; mkdir -p "$SOURCE_DIR/backups" "$SOURCE_DIR/runtime"; cp -a "$INSTALL_DIR/backups/." "$SOURCE_DIR/backups/" 2>/dev/null || true
-  local old="${INSTALL_DIR}.previous.$$"; "${compose[@]}" down --remove-orphans; mv "$INSTALL_DIR" "$old"; mv "$SOURCE_DIR" "$INSTALL_DIR"; chmod 600 "$INSTALL_DIR/.env"
-  if start_and_check; then rm -rf "$old"; else rm -rf "$INSTALL_DIR"; mv "$old" "$INSTALL_DIR"; load_installation; "${compose[@]}" up -d || true; fail "Update failed; previous version restored."; fi
+  install_prerequisites
+  load_installation
+  backup_database
+  download_source
+
+  cp "$INSTALL_DIR/.env" "$SOURCE_DIR/.env"
+  mkdir -p "$SOURCE_DIR/backups" "$SOURCE_DIR/runtime"
+  cp -a "$INSTALL_DIR/backups/." "$SOURCE_DIR/backups/" 2>/dev/null || true
+  printf '[]\n' > "$SOURCE_DIR/runtime/modules.json"
+
+  local old_dir="${INSTALL_DIR}.previous.$(date +%Y%m%d-%H%M%S)"
+  "${compose[@]}" down --remove-orphans
+  mv "$INSTALL_DIR" "$old_dir"
+  mv "$SOURCE_DIR" "$INSTALL_DIR"
+  SOURCE_DIR=""
+  chmod 600 "$INSTALL_DIR/.env"
+
+  if start_and_check; then
+    rm -rf "$old_dir"
+    log "Update completed successfully"
+  else
+    warn "Update failed; restoring previous application files"
+    rm -rf "$INSTALL_DIR"
+    mv "$old_dir" "$INSTALL_DIR"
+    load_installation
+    "${compose[@]}" up -d --remove-orphans || true
+    fail "Update failed and the previous version was restored."
+  fi
 }
 
-configure_modules(){ load_installation; local d f id name flag cur req; while IFS= read -r d; do f="$d/module.env"; id="$(module_value "$f" EMS_MODULE_ID)"; name="$(module_value "$f" EMS_MODULE_NAME)"; flag="$(module_value "$f" EMS_MODULE_ENV_FLAG)"; flag="${flag:-EMS_MODULE_${id^^}_ENABLED}"; flag="${flag//-/_}"; cur="${!flag:-false}"; read_yes_no req "Enable module: ${name:-$id}" "$cur"; set_env_value "$flag" "$req"; done < <(module_dirs "$INSTALL_DIR"); load_installation; "${compose[@]}" up -d --build --remove-orphans; }
+uninstall_keep_db(){
+  install_prerequisites
+  if [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yml" ]]; then
+    load_installation
+    backup_database || warn "Automatic backup failed; continuing only after confirmation."
+    save_state
+    "${compose[@]}" down --remove-orphans
+  else
+    warn "No complete installation directory was found."
+  fi
 
-restore_database(){ load_installation; local f="${2:-}"; [[ -n "$f" ]] || read -r -p "Backup .dump path: " f <"$TTY_DEVICE"; [[ -f "$f" ]] || fail "Backup not found."; backup_database; "${compose[@]}" stop app; "${compose[@]}" exec -T db pg_restore -U ems_ipam -d ems_ipam --clean --if-exists --no-owner --no-privileges <"$f"; "${compose[@]}" up -d; }
-uninstall_app(){ load_installation; "${compose[@]}" down --remove-orphans; printf 'Containers removed; database volume and files were kept.\n'; }
-uninstall_all(){ load_installation; local x; read -r -p "Type DELETE to remove app, database and backups: " x <"$TTY_DEVICE"; [[ "$x" == DELETE ]] || exit 0; "${compose[@]}" down --volumes --remove-orphans; [[ "$INSTALL_DIR" == /opt/* ]] || fail "Unsafe install path."; rm -rf "$INSTALL_DIR"; }
-show_menu(){ printf '\nEMS IPAM Setup\n1) Install\n2) Update\n3) Backup Database\n4) Restore Database\n5) Enable/Disable Modules\n6) Uninstall App (keep DB)\n7) Uninstall All\n'; read -r -p 'Select [1-7]: ' ACTION <"$TTY_DEVICE"; }
+  if confirm "Remove EMS IPAM application files but KEEP the database volume and saved recovery settings?" no; then
+    rm -rf "$INSTALL_DIR"
+    docker image rm ems-ipam:0.7.1 >/dev/null 2>&1 || true
+    printf '\nApplication removed. Database volume ems_ipam_database was kept.\nRecovery settings: %s\n' "$STATE_DIR"
+  else
+    printf 'Cancelled.\n'
+  fi
+}
 
-(( EUID == 0 )) || fail "Run with sudo."
-[[ -r "$TTY_DEVICE" ]] || fail "Interactive terminal required."
-for c in docker curl tar ss awk grep sed install python3 seq; do need "$c"; done
-docker info >/dev/null 2>&1 || fail "Docker is not running."; docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is missing."
-ACTION="${1:-}"; [[ -n "$ACTION" ]] || show_menu
-case "${ACTION,,}" in 1|install) install_app;; 2|update) update_app;; 3|backup) backup_database;; 4|restore) restore_database "$@";; 5|modules) configure_modules;; 6|uninstall) uninstall_app;; 7|purge) uninstall_all;; *) fail "Invalid option.";; esac
+uninstall_all(){
+  install_prerequisites
+  printf '\nWARNING: This will permanently remove the EMS IPAM database and backups.\n'
+  local token=""
+  read -r -p "Type DELETE to continue: " token <"$TTY_DEVICE" || exit 1
+  [[ "$token" == DELETE ]] || { printf 'Cancelled.\n'; return 0; }
+
+  if [[ -f "$INSTALL_DIR/.env" && -f "$INSTALL_DIR/compose.yml" ]]; then
+    load_installation
+    "${compose[@]}" down --volumes --remove-orphans || true
+  else
+    docker rm -f ems-ipam-app-1 ems-ipam-db-1 >/dev/null 2>&1 || true
+    docker volume rm ems_ipam_database >/dev/null 2>&1 || true
+    docker network rm ems_ipam_internal >/dev/null 2>&1 || true
+  fi
+  rm -rf "$INSTALL_DIR" "$STATE_DIR"
+  docker image rm ems-ipam:0.7.1 >/dev/null 2>&1 || true
+  printf '\nEMS IPAM application, database and saved backups/settings were removed.\n'
+}
+
+show_menu(){
+  printf '\n========================================\n'
+  printf ' EMS IPAM Setup\n'
+  printf '========================================\n'
+  printf '1) Install\n'
+  printf '2) Update\n'
+  printf '3) Uninstall application (keep database)\n'
+  printf '4) Uninstall application + database\n'
+  printf '========================================\n'
+  read -r -p 'Select [1-4]: ' ACTION <"$TTY_DEVICE" || fail "Unable to read menu selection."
+}
+
+need_root
+[[ -r "$TTY_DEVICE" ]] || fail "Interactive terminal is required."
+[[ -n "$ACTION" ]] || show_menu
+
+case "${ACTION,,}" in
+  1|install) install_app ;;
+  2|update) update_app ;;
+  3|uninstall|remove) uninstall_keep_db ;;
+  4|purge|delete) uninstall_all ;;
+  *) fail "Invalid option. Choose 1, 2, 3 or 4." ;;
+esac

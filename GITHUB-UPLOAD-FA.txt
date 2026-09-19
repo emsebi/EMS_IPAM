@@ -1,11 +1,16 @@
-EMS IPAM Core v0.7.0
+EMS IPAM Core v0.7.1
+Repository: https://github.com/emsebi/EMS_IPAM
 
-این خروجی را در Root مخزن GitHub قرار دهید.
-هسته شامل IPAM و دیتابیس است.
-ماژول‌ها بعداً فقط به صورت پوشه جدید زیر modules/ اضافه می‌شوند.
+روش انتشار:
+1) محتوای این پوشه را در ریشه Repository قرار دهید.
+2) فایل‌های هم‌نام نسخه قبلی را Replace کنید.
+3) پوشه‌های Legacy قدیمی در modules در صورت باقی‌ماندن مانع نصب Core نمی‌شوند؛ Installer فقط ماژول‌هایی را می‌شناسد که module.env معتبر دارند.
 
-مراحل پیشنهادی:
-1) محتویات این پوشه را Commit کنید.
-2) روی سرور: sudo bash install.sh
-3) برای نسخه بعد: sudo /opt/ems-ipam/install.sh update
-4) پس از اضافه شدن ماژول: sudo /opt/ems-ipam/install.sh modules
+نصب با یک دستور:
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
+
+منو:
+1) Install
+2) Update
+3) Uninstall application (keep database)
+4) Uninstall application + database
