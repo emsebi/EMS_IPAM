@@ -1,0 +1,12 @@
+EMS_IPAM - روش قرار دادن خروجی در GitHub
+
+1) فایل ZIP مرحله را Extract کنید.
+2) محتویات ZIP را مستقیماً در ریشه Repository زیر قرار دهید:
+   https://github.com/emsebi/EMS_IPAM
+3) فایل‌های هم‌نام را Replace کنید.
+4) Commit changes را بزنید.
+5) برای نصب یا Update فقط این دستور را اجرا کنید:
+
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
+
+ZIP دارای پوشه اضافی بالادستی نیست؛ یعنی compose.yml و install.sh باید مستقیماً در ریشه Repository قرار بگیرند.

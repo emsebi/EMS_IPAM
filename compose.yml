@@ -1,66 +1,49 @@
 services:
   db:
     image: postgres:16-alpine
-    shm_size: 128mb
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ems_ipam
-      POSTGRES_USER: ems_ipam
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ:-Asia/Tehran}
     volumes:
-      - ems_ipam_database:/var/lib/postgresql/data
+      - ems_ipam_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ems_ipam -d ems_ipam"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
+      start_period: 10s
     networks:
-      - ems_internal
+      - internal
 
   app:
     build:
-      context: ./docker-app
-    image: ems-ipam:0.7.1
-    environment:
-      PGHOST: db
-      PGPORT: 5432
-      PGDATABASE: ems_ipam
-      PGUSER: ems_ipam
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
-      EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      EMS_MODULE_REGISTRY: /runtime/modules.json
-      PORT: 8080
-      BACKUP_DIR: /backups
-      BACKUP_DISPLAY_PATH: ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}
-      TZ: Asia/Tehran
-    ports:
-      - "${EMS_HTTP_PORT:-8080}:8080"
+      context: .
+      dockerfile: core/Dockerfile
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
+      EMS_ADMIN_PASSWORD_B64: ${EMS_ADMIN_PASSWORD_B64}
+      EMS_SESSION_SECRET: ${EMS_SESSION_SECRET}
+      TZ: ${TZ:-Asia/Tehran}
+    ports:
+      - "${EMS_HTTP_PORT:-8080}:8080"
     volumes:
-      - ./backups:/backups
-      - ./runtime:/runtime:ro
-    restart: unless-stopped
+      - ${EMS_STATE_DIR:-/var/lib/ems-ipam}:/state
     networks:
-      - ems_internal
-
-volumes:
-  ems_ipam_database:
-    name: ems_ipam_database
+      - internal
 
 networks:
-  ems_internal:
+  internal:
     name: ems_ipam_internal
-    driver: bridge
+
+volumes:
+  ems_ipam_db_data:
+    name: ems_ipam_db_data

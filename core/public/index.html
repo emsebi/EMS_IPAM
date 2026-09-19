@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fa" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMS_IPAM</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="loginView" class="login-shell hidden">
+    <div class="login-card">
+      <div class="brand-mark large">⌘</div>
+      <h1>EMS_IPAM</h1>
+      <p>Enterprise Network Management</p>
+      <form id="loginForm">
+        <label>Username<input id="loginUser" autocomplete="username" value="admin"></label>
+        <label>Password<input id="loginPass" type="password" autocomplete="current-password"></label>
+        <button class="btn primary wide" type="submit">Sign in</button>
+        <div id="loginError" class="form-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">⌘</div><span>EMS_IPAM</span><button id="collapseBtn" class="icon-btn">☰</button></div>
+      <nav id="mainNav" class="nav">
+        <button data-page="dashboard" class="nav-item active"><span>⌂</span><b>Dashboard</b></button>
+        <button data-page="companies" class="nav-item"><span>▦</span><b>Companies & Sites</b></button>
+        <button data-page="inventory" class="nav-item"><span>▣</span><b>Device Inventory</b></button>
+        <button data-page="personnel" class="nav-item"><span>♙</span><b>Personnel</b></button>
+        <div class="nav-separator">MODULES</div>
+        <div id="moduleNav"></div>
+        <div class="nav-separator">SYSTEM</div>
+        <button data-page="settings" class="nav-item"><span>⚙</span><b>Settings</b></button>
+        <button data-page="audit" class="nav-item"><span>≋</span><b>Audit & Logs</b></button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="health-line"><i></i><span>System Healthy</span></div>
+        <small>EMS_IPAM <span id="versionLabel">v1.0.0</span></small>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="hamburger">☰</button>
+        <div class="global-search-wrap">
+          <span class="search-icon">⌕</span>
+          <input id="globalSearch" placeholder="Search device, IP, MAC, employee..." autocomplete="off">
+          <kbd>Ctrl K</kbd>
+          <div id="searchResults" class="search-results hidden"></div>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn">⚙</button><button class="icon-btn badge">♢<em>0</em></button>
+          <div class="profile"><div class="avatar">A</div><div><strong id="profileName">Admin</strong><small id="profileRole">Administrator</small></div></div>
+        </div>
+      </header>
+
+      <section class="content">
+        <div class="breadcrumb">Network <span>›</span> <b id="crumbCurrent">Dashboard</b></div>
+
+        <section id="page-dashboard" class="page active">
+          <div class="page-head"><div><h1>Dashboard</h1><p>Core services, inventory and installed modules at a glance.</p></div><div class="status-pill"><i></i> All Systems Operational</div></div>
+          <div id="summaryCards" class="summary-grid"></div>
+          <div class="dashboard-grid">
+            <div class="panel module-panel">
+              <div class="panel-head"><div><h2>Installed Modules</h2><p>Capabilities are loaded independently from the Core.</p></div><button class="btn secondary" data-go="settings">Manage Modules</button></div>
+              <div id="moduleCards" class="module-cards"></div>
+            </div>
+            <div class="panel quick-panel">
+              <div class="panel-head"><div><h2>Quick Actions</h2><p>Common administrative tasks.</p></div></div>
+              <div class="quick-actions">
+                <button data-go="companies"><span>＋</span><b>Add Company</b><small>Company / Site structure</small></button>
+                <button data-go="inventory"><span>▣</span><b>Add Device</b><small>Central device inventory</small></button>
+                <button data-go="personnel"><span>♙</span><b>Add Personnel</b><small>Employee directory</small></button>
+                <button data-action="backup"><span>⇩</span><b>Backup Now</b><small>Database + application state</small></button>
+              </div>
+            </div>
+            <div class="panel activity-panel">
+              <div class="panel-head"><div><h2>Recent Activity</h2><p>Latest audited changes.</p></div><button class="link-btn" data-go="audit">View all</button></div>
+              <div id="recentAudit" class="activity-list"></div>
+            </div>
+            <div class="panel architecture-panel">
+              <div class="panel-head"><div><h2>Platform Architecture</h2><p>Stable Core with independently replaceable modules.</p></div></div>
+              <div class="architecture">
+                <div class="arch-core"><b>EMS Core</b><small>Auth · DB · Settings · Inventory · Audit</small></div>
+                <div class="arch-line"></div>
+                <div class="arch-mods"><span>IPAM</span><span>Radio</span><span>RADIUS</span><span>Network Map</span><span>MAC Finder</span><span>Network Access</span><span>Future Modules +</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-companies" class="page">
+          <div class="page-head"><div><h1>Companies & Sites</h1><p>Central company and branch structure used by every module.</p></div><button id="addCompanyBtn" class="btn primary">＋ Add Company</button></div>
+          <div class="panel"><div class="toolbar"><input id="companyFilter" class="field search-field" placeholder="Search companies..."><button class="btn secondary" id="addSiteBtn">＋ Add Site</button></div><div id="companiesTable" class="table-wrap"></div></div>
+        </section>
+
+        <section id="page-inventory" class="page">
+          <div class="page-head"><div><h1>Device Inventory</h1><p>One editable source of truth shared by IPAM, Radio, RADIUS and Network Map.</p></div><button id="addDeviceBtn" class="btn primary">＋ Add Device</button></div>
+          <div class="panel"><div class="toolbar"><input id="deviceFilter" class="field search-field" placeholder="Type any part of name, IP, MAC, serial or asset tag..."><span class="toolbar-note">Fast fuzzy lookup</span></div><div id="devicesTable" class="table-wrap"></div></div>
+        </section>
+
+        <section id="page-personnel" class="page">
+          <div class="page-head"><div><h1>Personnel</h1><p>Reusable employee directory for personal devices and asset ownership.</p></div><button id="addPersonBtn" class="btn primary">＋ Add Personnel</button></div>
+          <div class="panel"><div class="toolbar"><input id="personFilter" class="field search-field" placeholder="Employee code, name or phone..."></div><div id="personnelTable" class="table-wrap"></div></div>
+        </section>
+
+        <section id="page-settings" class="page">
+          <div class="page-head"><div><h1>Settings</h1><p>All platform settings are grouped in one place.</p></div></div>
+          <div class="settings-layout">
+            <div class="settings-nav" id="settingsNav">
+              <button class="active" data-tab="general">⚙ General</button><button data-tab="users">♙ Panel Users & Roles</button><button data-tab="modules">▦ Modules</button><button data-tab="backup">⇩ Backup & Restore</button><button data-tab="appearance">◐ Appearance</button><button data-tab="system">▣ System</button>
+            </div>
+            <div class="panel settings-body" id="settingsBody"></div>
+          </div>
+        </section>
+
+        <section id="page-module" class="page module-workspace">
+          <iframe id="moduleFrame" title="EMS module"></iframe>
+        </section>
+
+        <section id="page-audit" class="page">
+          <div class="page-head"><div><h1>Audit & Logs</h1><p>Administrative changes with user, source IP and timestamp.</p></div></div>
+          <div class="panel"><div id="auditTable" class="table-wrap"></div></div>
+        </section>
+      </section>
+      <footer class="footer"><span>Core v1.0.0-stage1</span><span>Modular architecture ready for future capabilities</span></footer>
+    </main>
+  </div>
+
+  <div id="modal" class="modal-backdrop hidden"><div class="modal"><div class="modal-head"><h2 id="modalTitle">Form</h2><button id="modalClose" class="icon-btn">×</button></div><form id="modalForm" class="modal-form"></form></div></div>
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

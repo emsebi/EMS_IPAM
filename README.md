@@ -1,54 +1,43 @@
-# EMS IPAM Core v0.7.1
+# EMS_IPAM
 
-هسته مستقل پروژه EMS IPAM برای مدیریت آدرس‌های IP و آماده برای اضافه‌شدن ماژول‌ها به شکل Drop-in.
+پلتفرم ماژولار مدیریت زیرساخت شبکه. هسته اصلی مستقل از ماژول‌های IPAM، Radio، RADIUS، Network Map، MAC Finder و Network Access طراحی شده است تا هر بخش جداگانه توسعه و جایگزین شود.
 
-Repository رسمی پروژه:
+مخزن رسمی: `https://github.com/emsebi/EMS_IPAM`
 
-```text
-https://github.com/emsebi/EMS_IPAM
-```
+## وضعیت این خروجی
 
-## این نسخه چه چیزی دارد؟
+این بسته **مرحله ۱** پروژه است و شامل موارد زیر است:
 
-- PostgreSQL مشترک و پایدار
-- Login و نقش‌های Admin / Editor / Viewer
-- شرکت، شعبه و دسترسی کاربران به شرکت یا Address Space
-- Address Space از `/16` تا `/24`
-- Prefix/Subnetهای فرزند تا `/32`
-- نمای تصویری، جدول عمودی و Tree تا IP نهایی
-- ثبت Hostname، MAC، VLAN، Owner، Location، Notes و وضعیت IP
-- جستجوی سراسری اطلاعات IPAM
-- Ping دستی
-- Import/Export یک Subnet
-- Backup دیتابیس قبل از Update
-- Audit Log و Trash/Restore
-- Dark/Light theme
-- زیرساخت ماژول‌های مستقل بدون وابستگی Core به ماژول‌ها
+- Core / پنل اصلی
+- PostgreSQL 16
+- Login و Session
+- نقش‌های Admin / Support / Helpdesk / Viewer
+- Company و Site / Branch
+- Personnel Directory
+- Device Inventory مرکزی و قابل ویرایش
+- Search سراسری با پیشنهاد سریع و انتخاب با کلیدهای جهت‌نما
+- Settings متمرکز
+- Audit Log
+- Backup دستی دیتابیس
+- Module Loader و قرارداد افزونه‌ها
+- Installer / Update / Uninstall پایدار
+- Docker / Docker Compose / Portainer prerequisite bootstrap
 
-## معماری ماژولار
+ماژول IPAM در **مرحله ۲** به صورت پوشه مستقل `modules/ipam/` اضافه می‌شود و بدون بازسازی Core در منوی اصلی ظاهر خواهد شد.
 
-هسته فقط سرویس‌های `db` و `app` را اجرا می‌کند. ماژول‌های جدید فقط زمانی شناسایی می‌شوند که پوشه آن‌ها دارای `module.env` معتبر باشد. پوشه‌های قدیمی یا ناقص در `modules/` باعث Fail شدن نصب Core نمی‌شوند.
+## تصویر مرحله ۱
 
-ماژول‌های برنامه‌ریزی‌شده:
+![EMS IPAM Core Dashboard](docs/screenshots/ems-ipam-core-stage1.png)
 
-- `network-map`
-- `device-access`
-- `mac-finder`
-- `radius-mab`
+## نصب سریع
 
-جزئیات قرارداد توسعه در `docs/MODULE-SDK-FA.md` آمده است.
-
-# نصب
-
-## روش پیشنهادی: یک دستور برای همه مراحل
-
-Installer ابتدا پیش‌نیازها را بررسی می‌کند. اگر Docker، Docker Compose یا Portainer وجود نداشته باشد، آن‌ها را نصب می‌کند و سپس منوی EMS IPAM را نمایش می‌دهد.
+فقط یک دستور روی Ubuntu/Debian اجرا کنید. اسکریپت وجود Docker Engine، Docker Compose و Portainer را بررسی می‌کند و در صورت نیاز نصب می‌کند:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 ```
 
-منوی Installer:
+سپس یکی از گزینه‌ها را انتخاب کنید:
 
 ```text
 1) Install
@@ -57,74 +46,61 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 4) Uninstall application + database
 ```
 
-## اجرای Installer از Clone یا فایل‌های Extract شده
+جزئیات کامل: [docs/INSTALL-FA.md](docs/INSTALL-FA.md)
 
-اگر Repository را Clone کرده‌اید یا فایل ZIP را Extract کرده‌اید، از داخل ریشه پروژه فقط این دستور را اجرا کنید:
+## معماری ماژولار
 
-```bash
-sudo bash install.sh
+```text
+EMS_IPAM/
+├── core/                  # هسته ثابت
+├── modules/               # افزونه‌های مستقل
+│   └── _template/         # نمونه قرارداد ماژول
+├── docs/
+├── scripts/
+├── backups/
+├── runtime/
+├── compose.yml
+├── install.sh
+└── VERSION
 ```
 
-Installer در این حالت فایل‌های همان پوشه را استفاده می‌کند.
+هر قابلیت جدید داخل `modules/<module-id>/` قرار می‌گیرد. Core پوشه‌هایی که `module.json` معتبر ندارند نادیده می‌گیرد؛ بنابراین فایل‌های قدیمی یا ناقص مانع بالا آمدن پنل نمی‌شوند.
 
-# پیش‌نیازها
+راهنمای ساخت ماژول: [docs/MODULE-SDK-FA.md](docs/MODULE-SDK-FA.md)
 
-پیش‌نیازهای اصلی:
+## State پایدار
 
-- Ubuntu / Debian
-- Docker Engine
-- Docker Compose Plugin
-- Portainer CE
+کد برنامه در:
 
-در نصب معمولی نیازی نیست پیش‌نیازها را جدا نصب کنید؛ `install.sh` این کار را خودکار انجام می‌دهد.
-
-اگر فقط قصد نصب یا تعمیر پیش‌نیازها را دارید:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/scripts/install-prerequisites.sh | sudo bash
+```text
+/opt/ems-ipam
 ```
 
-این اسکریپت Docker Engine، Docker Compose و Portainer CE را بررسی و در صورت نیاز نصب می‌کند.
-
-# رفتار Update
-
-گزینه Update قبل از جایگزینی فایل‌های برنامه از PostgreSQL Backup می‌گیرد، فایل `.env` و دیتابیس Docker را حفظ می‌کند، نسخه جدید را نصب و Health Check می‌کند. اگر نسخه جدید Healthy نشود، فایل‌های نسخه قبلی Restore می‌شوند.
-
-# حذف برنامه بدون دیتابیس
-
-گزینه 3 برنامه و Containerهای EMS IPAM را حذف می‌کند اما Docker Volume دیتابیس را نگه می‌دارد. اطلاعات Recovery در مسیر زیر نگهداری می‌شوند:
+و اطلاعات پایدار Installer در:
 
 ```text
 /var/lib/ems-ipam
 ```
 
-بنابراین نصب بعدی می‌تواند Credential دیتابیس قبلی را مجدداً استفاده کند.
+قرار می‌گیرد. دیتابیس در Docker Volume ثابت `ems_ipam_db_data` نگهداری می‌شود. حذف برنامه با گزینه ۳ دیتابیس و State را نگه می‌دارد و نصب مجدد آن‌ها را استفاده می‌کند.
 
-# حذف کامل
+## اصول پروژه
 
-گزینه 4 پس از درخواست عبارت تأیید `DELETE`، برنامه، Docker Volume دیتابیس و اطلاعات Recovery را حذف می‌کند.
+- Core به هیچ ماژول اختیاری وابسته نیست.
+- خراب شدن یک ماژول نباید Core را Down کند.
+- همه ماژول‌ها از User / Role / Company / Site / Personnel / Inventory مشترک استفاده می‌کنند.
+- اطلاعات تکراری Device بین ماژول‌ها ساخته نمی‌شود.
+- هر تغییر حساس در Audit ثبت می‌شود.
+- تاریخ‌ها در دیتابیس به صورت استاندارد ذخیره و در رابط کاربری قابل نمایش به تقویم شمسی هستند.
+- رمزهای تجهیزات در Core مرحله ۱ ذخیره نمی‌شوند.
 
-# ساختار اصلی
+## مراحل توسعه
 
-```text
-compose.yml
-docker-app/
-  server/
-  public/
-  tests/
-modules/
-  _template/
-scripts/
-  build-module-registry.py
-  install-prerequisites.sh
-docs/
-  MODULE-SDK-FA.md
-install.sh
-```
-
-# تست
-
-```bash
-cd docker-app
-npm test
-```
+1. Core + Database + Installer **(این بسته)**
+2. IPAM
+3. Radio Map
+4. RADIUS / AAA
+5. Network Map
+6. MAC Finder
+7. Network Access / MAB / 802.1X
+8. هر قابلیت آینده به عنوان Module مستقل
