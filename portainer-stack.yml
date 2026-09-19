@@ -14,13 +14,12 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
-    networks:
-      - ems_internal
+    networks: [ems_internal]
 
   app:
     build:
       context: ./docker-app
-    image: ems-ipam:0.6.0
+    image: ems-ipam:0.7.0
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -29,60 +28,90 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
       EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
+      EMS_SECRET_KEY: ${EMS_SECRET_KEY}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       EMS_NETWORK_MAP_ENABLED: ${EMS_NETWORK_MAP_ENABLED:-true}
       EMS_NETWORK_MAP_UPSTREAM: http://network-map:8090
+      EMS_RADIUS_ENABLED: ${EMS_RADIUS_ENABLED:-true}
+      EMS_RADIUS_UPSTREAM: http://radius:8091
+      PORT: 8080
       BACKUP_DIR: /backups
       BACKUP_DISPLAY_PATH: ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}
-      PORT: 8080
       TZ: Asia/Tehran
     ports:
       - "${EMS_HTTP_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW
-    security_opt:
-      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     volumes:
-      - ${EMS_BACKUP_PATH:-/opt/ems-ipam/backups}:/backups
+      - ./backups:/backups
     restart: unless-stopped
-    networks:
-      - ems_internal
+    networks: [ems_internal]
 
   network-map:
     build:
       context: ./modules/network-map
-    image: ems-network-map:0.6.0
+    image: ems-network-map:0.7.0
     environment:
       PGHOST: db
       PGPORT: 5432
       PGDATABASE: ems_ipam
       PGUSER: ems_ipam
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      EMS_SECRET_KEY: ${EMS_SECRET_KEY}
       PORT: 8090
       TZ: Asia/Tehran
     depends_on:
       db:
         condition: service_healthy
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_RAW
-    security_opt:
-      - no-new-privileges:true
+      app:
+        condition: service_healthy
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     restart: unless-stopped
-    networks:
-      - ems_internal
+    networks: [ems_internal]
+
+  radius:
+    build:
+      context: ./modules/radius
+    image: ems-radius:0.7.0
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ems_ipam
+      PGUSER: ems_ipam
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      EMS_SECRET_KEY: ${EMS_SECRET_KEY}
+      PORT: 8091
+      TZ: Asia/Tehran
+    ports:
+      - "${EMS_RADIUS_AUTH_PORT:-1812}:1812/udp"
+      - "${EMS_RADIUS_ACCT_PORT:-1813}:1813/udp"
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    networks: [ems_internal]
 
 volumes:
   ems_ipam_database:

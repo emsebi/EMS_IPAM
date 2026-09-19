@@ -4,7 +4,7 @@
   const spaceId = "space-demo";
   const bootstrap = {
     ok: true,
-    version: "0.6.0",
+    version: "0.7.0",
     user: { id: "admin-demo", username: "admin", displayName: "مدیر سیستم", role: "admin", active: true },
     companies: [
       { id: companyId, parentCompanyId: null, kind: "company", code: "HQ", name: "هلدینگ نمونه", description: "دفتر مرکزی و مدیریت زیرساخت", address: "تهران، خیابان سازمان", postalCode: "1111111111", phone: "021-88770000", managerName: "علی رضایی", latitude: 35.7219, longitude: 51.3347, notes: "ارتباط اضطراری از طریق لینک پشتیبان برقرار می‌شود.", contactCount: 3, connectionCount: 2 },
@@ -26,6 +26,8 @@
       { tool: "HTTP", label: "Web HTTP", defaultPort: 80, color: "#64748b" },
       { tool: "HTTPS", label: "Web HTTPS", defaultPort: 443, color: "#2b9ca8" },
     ],
+    appearance: { font: "Tahoma", fontSize: 14 },
+    networkMapper: { enabled: true, url: "http://network-map.local" },
   };
   const data = {
     ok: true,
@@ -40,7 +42,7 @@
     hosts: [
       { id: "h1", ip: "192.168.2.10", name: "ESXi-01", status: "active", type: "سرور", os: "VMware ESXi", mac: "00:50:56:AA:10:20", vlan: "50", username: "admin", owner: "زیرساخت", location: "دیتاسنتر", vendor: "HPE", model: "DL380", secretRef: "Vault/ESXi-01", hasPassword: true, notes: "", ports: { SSH: 2222, RDP: 3390 }, connectionMethods: [{ type: "SSH" }, { type: "RDP" }], devicePorts: [{ id: "port-h1", hostId: "h1", name: "vmnic0", description: "Uplink", portType: "ethernet", speed: "10G", vlan: "Trunk" }] },
       { id: "h2", ip: "192.168.2.20", name: "MikroTik-Core", status: "active", type: "روتر", os: "RouterOS", mac: "", vlan: "99", username: "", owner: "شبکه", location: "دفتر مرکزی", vendor: "MikroTik", model: "CCR", secretRef: "Vault/Router-Core", notes: "", ports: { MIK: 8291 }, connectionMethods: [{ type: "WINBOX" }], devicePorts: [{ id: "port-h2", hostId: "h2", name: "sfp-sfpplus1", description: "To Core Switch", portType: "fiber", speed: "10G", vlan: "Trunk" }] },
-      { id: "h3", ip: "192.168.3.11", name: "AP-Home", status: "active", type: "رادیو", os: "RouterOS", mac: "74:4D:28:10:20:30", vlan: "120", username: "admin", owner: "شبکه", location: "ساختمان مرکزی", vendor: "MikroTik", model: "NetMetal", radioMode: "ap", ssid: "EMS-Backhaul", frequency: "5805 MHz", channel: "40 MHz", signal: "", monitorEnabled: true, monitorState: { online: true, stations: [{ mac: "74:4D:28:AA:01:01" }, { mac: "74:4D:28:AA:01:02" }] }, monitorCheckedAt: new Date().toISOString(), monitorFailures: 0, notes: "", ports: { MIK: 8291 }, connectionMethods: [{ type: "WINBOX" }, { type: "SSH" }], devicePorts: [{ id: "port-h3", hostId: "h3", name: "ether1", description: "PoE", portType: "ethernet", speed: "1G", vlan: "120" }] },
+      { id: "h3", ip: "192.168.3.11", name: "AP-Home", status: "active", type: "رادیو", os: "RouterOS", mac: "74:4D:28:10:20:30", vlan: "120", username: "admin", owner: "شبکه", location: "ساختمان مرکزی", vendor: "MikroTik", model: "NetMetal", radioMode: "ap", ssid: "EMS-Backhaul", frequency: "5805 MHz", channel: "40 MHz", signal: "", monitorEnabled: true, monitorState: { online: true, identity: "AP-HQ-01", model: "NetMetal 5", version: "7.20.1", uptime: "2w4d05:12:44", cpuLoad: "8", freeMemory: "91.2MiB", stations: [{ mac: "74:4D:28:AA:01:01", address: "192.168.3.12", radioName: "Station-Warehouse", ssid: "EMS-Backhaul", interface: "wifi1", signal: "-58 dBm", txRate: "390Mbps", rxRate: "325Mbps", uptime: "6h12m", lastActivity: "20ms" }, { mac: "74:4D:28:AA:01:02", address: "192.168.3.13", radioName: "Station-Office-2", ssid: "EMS-Backhaul", interface: "wifi1", signal: "-66 dBm", txRate: "195Mbps", rxRate: "156Mbps", uptime: "5h48m", lastActivity: "40ms" }] }, monitorCheckedAt: new Date().toISOString(), monitorFailures: 0, notes: "", ports: { MIK: 8291, SSH: 22 }, connectionMethods: [{ type: "WINBOX", port: 8291 }, { type: "SSH", port: 22 }], devicePorts: [{ id: "port-h3", hostId: "h3", name: "ether1", description: "PoE", portType: "ethernet", speed: "1G", vlan: "120" }] },
       { id: "h4", ip: "192.168.3.12", name: "Station-Warehouse", status: "active", type: "رادیو", os: "RouterOS", mac: "74:4D:28:AA:01:01", vlan: "120", username: "admin", owner: "شبکه", location: "انبار", vendor: "MikroTik", model: "LHG", radioMode: "station", ssid: "EMS-Backhaul", radioParentHostId: "h3", frequency: "5805 MHz", signal: "-58 dBm", monitorState: { online: true }, monitorCheckedAt: new Date().toISOString(), monitorFailures: 0, notes: "", ports: { MIK: 8291 }, connectionMethods: [{ type: "WINBOX" }], devicePorts: [] },
       { id: "h5", ip: "192.168.3.13", name: "Station-Office-2", status: "active", type: "رادیو", os: "RouterOS", mac: "74:4D:28:AA:01:02", vlan: "120", username: "admin", owner: "شبکه", location: "ساختمان اداری", vendor: "MikroTik", model: "SXTsq", radioMode: "station", ssid: "EMS-Backhaul", radioParentHostId: "h3", frequency: "5805 MHz", channel: "40 MHz", signal: "-66 dBm", monitorState: { online: true }, monitorCheckedAt: new Date().toISOString(), monitorFailures: 0, notes: "", ports: { MIK: 8291, SSH: 22 }, connectionMethods: [{ type: "WINBOX" }, { type: "SSH" }], devicePorts: [] },
       { id: "h6", ip: "192.168.4.11", name: "AP-Branch", status: "active", type: "رادیو", os: "RouterOS", mac: "74:4D:28:20:30:40", vlan: "140", username: "admin", owner: "شبکه", location: "شعبه", vendor: "MikroTik", model: "NetBox", radioMode: "ap", ssid: "EMS-Branch", frequency: "5745 MHz", channel: "20 MHz", signal: "", monitorEnabled: true, monitorState: { online: true }, monitorCheckedAt: new Date().toISOString(), monitorFailures: 0, notes: "", ports: { MIK: 8291, SSH: 22 }, connectionMethods: [{ type: "WINBOX" }, { type: "SSH" }], devicePorts: [] },
@@ -70,6 +72,19 @@
     { id: "link-1", fromNodeId: "node-1", toNodeId: "node-2", fromPortName: "sfp-sfpplus1", toPortName: "vmnic0", color: "#3157d5", speed: "10G", medium: "fiber" },
     { id: "link-2", fromNodeId: "node-1", toNodeId: "node-3", fromPortName: "ether2", toPortName: "ether1", color: "#2fa36f", speed: "1G", medium: "ethernet" },
   ] };
+  const onlineReportsData = {
+    settings: { enabled: true, checkTime: "19:00", retentionDays: 10 },
+    targets: [
+      { id: "report-1", companyId, spaceId, targetType: "ip", target: "192.168.2.10", name: "ESXi-01", companyName: "هلدینگ نمونه", spaceName: "شبکه اصلی", enabled: true },
+      { id: "report-2", companyId, spaceId, targetType: "subnet", target: "192.168.3.0/29", name: "رادیوهای مرکزی", companyName: "هلدینگ نمونه", spaceName: "شبکه اصلی", enabled: true },
+    ],
+    runs: [{ id: "run-demo", target: "فهرست گزارش آنلاین‌بودن", scheduledDate: "2026-09-15", manual: false, status: "success", totalCount: 8, onlineCount: 5, offlineCount: 3, startedAt: "2026-09-15T15:30:00.000Z", completedAt: "2026-09-15T15:30:08.000Z" }],
+    results: [
+      { ip: "192.168.2.10", name: "ESXi-01", companyName: "هلدینگ نمونه", spaceName: "شبکه اصلی", online: true },
+      { ip: "192.168.3.11", name: "AP-Home", companyName: "هلدینگ نمونه", spaceName: "شبکه اصلی", online: true },
+      { ip: "192.168.3.12", name: "Station-Warehouse", companyName: "هلدینگ نمونه", spaceName: "شبکه اصلی", online: false },
+    ],
+  };
   const nativeFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const url = typeof input === "string" ? input : input.url;
@@ -83,6 +98,33 @@
     else if (url === "/api/maps") payload = { ok: true, items: [map] };
     else if (/^\/api\/maps\/[^/]+\/data$/.test(url)) payload = mapData;
     else if (url === "/api/backups") payload = { ok: true, path: "/opt/ems-ipam/backups", items: [], settings: { enabled: true, intervalDays: 1, hour: 2, retentionDays: 30 }, nextRunAt: new Date(Date.now() + 86400000).toISOString() };
+    else if (url.startsWith("/api/online-reports") && method === "GET") {
+      const runId = new URL(url, location.origin).searchParams.get("runId");
+      payload = { ok: true, retentionDays: 10, settings: onlineReportsData.settings, targets: onlineReportsData.targets, runs: onlineReportsData.runs, results: runId ? onlineReportsData.results : [] };
+    }
+    else if (url === "/api/online-reports/settings" && method === "PUT") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body || {};
+      onlineReportsData.settings = { ...onlineReportsData.settings, enabled: body.enabled !== false, checkTime: body.checkTime || "19:00" };
+      payload = { ok: true, settings: onlineReportsData.settings };
+    }
+    else if (url === "/api/online-reports/targets" && method === "POST") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body || {};
+      onlineReportsData.targets.push({ id: `report-${Date.now()}`, ...body, companyName: bootstrap.companies.find((item) => item.id === body.companyId)?.name || "", spaceName: bootstrap.spaces.find((item) => item.id === body.spaceId)?.name || "", enabled: true });
+      payload = { ok: true, id: onlineReportsData.targets.at(-1).id };
+    }
+    else if (/^\/api\/online-reports\/targets\/[^/]+$/.test(url) && method === "PUT") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body || {};
+      const id = url.split("/").at(-1); const item = onlineReportsData.targets.find((entry) => entry.id === id);
+      if (item) Object.assign(item, body);
+      payload = { ok: true };
+    }
+    else if (/^\/api\/online-reports\/targets\/[^/]+$/.test(url) && method === "DELETE") {
+      const id = url.split("/").at(-1); const index = onlineReportsData.targets.findIndex((entry) => entry.id === id);
+      if (index >= 0) onlineReportsData.targets.splice(index, 1);
+      payload = { ok: true };
+    }
+    else if (url === "/api/online-reports/run" && method === "POST") payload = { ok: true, results: [{ id: "run-demo", total: 8, online: 5, offline: 3 }] };
+    else if (/^\/api\/hosts\/[^/]+\/monitor\/test$/.test(url) && method === "POST") payload = { ok: true, state: data.hosts.find((item) => item.id === "h3")?.monitorState || { online: true, stations: [] } };
     else if (url.startsWith("/api/search")) {
       const query = new URL(url, location.origin).searchParams.get("q")?.trim() || "";
       const matches = inventory.filter((item) => [item.ip, item.name, item.mac, item.owner, item.ssid].some((value) => String(value || "").toLowerCase().includes(query.toLowerCase())));

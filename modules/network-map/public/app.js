@@ -58,8 +58,8 @@ async function request(url, options = {}) {
 
 function canWrite(companyId = "") {
   const role = state.bootstrap?.user?.role;
-  if (role === "admin") return true;
-  if (role !== "editor") return false;
+  if (["admin", "technical", "editor"].includes(role)) return true;
+  return false;
   if (!companyId) return (state.bootstrap?.companies || []).some((item) => item.manageable);
   return Boolean((state.bootstrap?.companies || []).find((item) => item.id === companyId)?.manageable);
 }
@@ -75,6 +75,23 @@ function clearCredentialFields(prefix) {
     const node = $(`${prefix}${suffix}`);
     if (node) node.value = "";
   }
+}
+
+function fillSystemAccounts(prefix) {
+  const select = $(`${prefix}SystemAccount`);
+  if (!select) return;
+  const accounts = state.bootstrap?.systemAccounts || [];
+  select.innerHTML = `<option value="">ورود دستی</option>${accounts.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.username)}${item.displayName ? ` — ${escapeHtml(item.displayName)}` : ""}</option>`).join("")}`;
+}
+
+function updateCredentialMode(prefix) {
+  const systemAccount = $(`${prefix}SystemAccount`)?.value || "";
+  const username = $(`${prefix}Username`);
+  const password = $(`${prefix}Password`);
+  if (username) { username.disabled = Boolean(systemAccount); username.required = !systemAccount; }
+  if (password) { password.disabled = Boolean(systemAccount); password.required = !systemAccount; }
+  const enable = $(`${prefix}EnablePassword`);
+  if (enable) enable.disabled = Boolean(systemAccount);
 }
 
 async function boot() {
@@ -122,6 +139,9 @@ function openScanDialog(existing = null) {
   $("scanCommandTimeout").value = "90";
   $("scanRetries").value = "2";
   $("scanConcurrency").value = "4";
+  fillSystemAccounts("scan");
+  $("scanSystemAccount").value = state.bootstrap?.systemAccounts?.[0]?.id || "";
+  updateCredentialMode("scan");
   $("scanMapId").value = existing?.id || "";
   $("scanTitle").textContent = existing ? "ساخت نسخه جدید نقشه" : "ایجاد نقشه جدید";
   $("scanCompany").innerHTML = (state.bootstrap.companies || []).filter((item) => item.manageable).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
@@ -141,11 +161,12 @@ function scanBody(formPrefix, extra = {}) {
   const protocol = $(`${formPrefix}Protocol`).value;
   return {
     ...extra,
+    systemAccountId: $(`${formPrefix}SystemAccount`)?.value || "",
     protocol,
     port: Number($(`${formPrefix}Port`).value || (protocol === "ssh" ? 22 : 23)),
-    username: $(`${formPrefix}Username`).value,
-    password: $(`${formPrefix}Password`).value,
-    enablePassword: $(`${formPrefix}EnablePassword`).value,
+    username: $(`${formPrefix}Username`).disabled ? "" : $(`${formPrefix}Username`).value,
+    password: $(`${formPrefix}Password`).disabled ? "" : $(`${formPrefix}Password`).value,
+    enablePassword: $(`${formPrefix}EnablePassword`).disabled ? "" : $(`${formPrefix}EnablePassword`).value,
     connectTimeout: Number($("scanConnectTimeout")?.value || 30) * 1000,
     commandTimeout: Number($("scanCommandTimeout")?.value || 90) * 1000,
     retries: Number($("scanRetries")?.value ?? 2),
@@ -280,9 +301,9 @@ function renderMap() {
   const writable = canWrite(state.map.companyId);
   const snapshotHistory = state.snapshots.map((item) => `<div class="history-row"><button class="snapshot-button ${item.id === state.snapshot.id ? "active" : ""}" data-id="${escapeHtml(item.id)}">نسخه ${formatNumber(item.version)}<small>${formatDate(item.createdAt)} · ${formatNumber(item.deviceCount)} سوئیچ</small></button>${writable && item.id !== state.snapshot.id ? `<button class="btn sm danger delete-snapshot" data-id="${escapeHtml(item.id)}" title="انتقال نسخه به سطل بازیافت">×</button>` : ""}</div>`).join("");
   const deletedHistory = state.deletedSnapshots.map((item) => `<div class="trash-row compact"><span><b>نسخه ${formatNumber(item.version)}</b><small>${formatDate(item.deletedAt)}</small></span><button class="btn sm restore-snapshot" data-id="${escapeHtml(item.id)}">بازیابی</button></div>`).join("");
-  $("page").innerHTML = `<div class="headline"><div><div class="actions"><button id="backMaps" class="btn sm">بازگشت به نقشه‌ها</button><span class="badge">${escapeHtml(state.map.companyName)}</span></div><h1>${escapeHtml(state.map.name)}</h1><p>${escapeHtml(state.map.description || "آخرین توپولوژی ذخیره‌شده")}</p></div><div class="actions">${writable ? `<button id="editMap" class="btn">ویرایش</button><button id="rescanMap" class="btn primary">بررسی مجدد و نسخه جدید</button><button id="openBackup" class="btn">بکاپ کانفیگ</button><button id="deleteMap" class="btn danger">حذف نقشه</button>` : ""}</div></div>
-    <div class="map-shell"><section class="map-panel"><div class="map-toolbar"><label class="online-toggle"><input id="onlineToggle" type="checkbox"> نمایش آنلاین</label><input id="mapSearch" placeholder="جست‌وجو با نام یا IP…" autocomplete="off"><button id="fitMap" class="btn sm">نمایش کامل</button><button id="zoomIn" class="btn sm">＋</button><button id="zoomOut" class="btn sm">−</button><span class="spacer"></span><span>${formatNumber(topology.devices.length)} سوئیچ · ${formatNumber(topology.links.length)} اتصال</span></div><div id="canvasWrap" class="canvas-wrap"><div id="stage" class="stage" style="width:${layout.width}px;height:${layout.height}px"><svg class="links" width="${layout.width}" height="${layout.height}">${lines}</svg>${cards}</div></div></section>
-    <aside class="side-panel"><h3>نسخه‌های ذخیره‌شده</h3><div class="history">${snapshotHistory}</div>${writable && deletedHistory ? `<details class="trash compact-trash"><summary>نسخه‌های حذف‌شده (${formatNumber(state.deletedSnapshots.length)})</summary>${deletedHistory}</details>` : ""}<div class="legend-list"><h3>راهنما</h3><span><i class="green"></i>پاسخ پینگ</span><span><i class="red"></i>بدون پاسخ پینگ</span><span><i></i>بررسی آنلاین خاموش</span><span><i class="blue"></i>نتیجه جست‌وجو</span><p>وضعیت آنلاین فقط تا زمان بازبودن این صفحه بررسی می‌شود.</p></div></aside></div>`;
+  $("page").innerHTML = `<div class="headline"><div><div class="actions"><button id="backMaps" class="btn sm">بازگشت به نقشه‌ها</button><span class="badge">${escapeHtml(state.map.companyName)}</span></div><h1>${escapeHtml(state.map.name)}</h1><p>${escapeHtml(state.map.description || "آخرین توپولوژی ذخیره‌شده")}</p></div><div class="actions">${writable ? `<button id="editMap" class="btn">ویرایش</button><button id="addManualDevice" class="btn">افزودن دستی سوئیچ</button><button id="rescanMap" class="btn primary">بررسی مجدد و نسخه جدید</button>${state.bootstrap?.user?.role === "admin" ? `<button id="importMacBaseline" class="btn">ثبت MACهای فعلی</button>` : ""}<button id="openBackup" class="btn">بکاپ کانفیگ</button><button id="deleteMap" class="btn danger">حذف نقشه</button>` : ""}</div></div>
+    <div class="map-shell"><section class="map-panel"><div class="map-toolbar"><label class="online-toggle"><input id="onlineToggle" type="checkbox"> نمایش آنلاین</label><input id="mapSearch" placeholder="جست‌وجو: نام، IP، VLAN 100 یا MAC" autocomplete="off"><button id="fitMap" class="btn sm">نمایش کامل</button><button id="zoomIn" class="btn sm">＋</button><button id="zoomOut" class="btn sm">−</button><span class="spacer"></span><span>${formatNumber(topology.devices.length)} سوئیچ · ${formatNumber(topology.links.length)} اتصال</span></div><div id="canvasWrap" class="canvas-wrap"><div id="stage" class="stage" style="width:${layout.width}px;height:${layout.height}px"><svg class="links" width="${layout.width}" height="${layout.height}">${lines}</svg>${cards}</div></div></section>
+    <aside class="side-panel"><h3>نسخه‌های ذخیره‌شده</h3><div class="history">${snapshotHistory}</div>${writable && deletedHistory ? `<details class="trash compact-trash"><summary>نسخه‌های حذف‌شده (${formatNumber(state.deletedSnapshots.length)})</summary>${deletedHistory}</details>` : ""}<div id="searchInfo" class="search-info hidden"></div><div class="legend-list"><h3>راهنما</h3><span><i class="green"></i>پاسخ پینگ</span><span><i class="red"></i>بدون پاسخ پینگ</span><span><i></i>بررسی آنلاین خاموش</span><span><i class="blue"></i>نتیجه جست‌وجو</span><p>وضعیت آنلاین فقط تا زمان بازبودن این صفحه بررسی می‌شود.</p></div></aside></div>`;
   bindMapEvents(layout);
   requestAnimationFrame(() => fitMap(layout));
 }
@@ -307,8 +328,17 @@ function fitMap(layout = null) {
 function bindMapEvents(layout) {
   $("backMaps").addEventListener("click", renderHome);
   $("rescanMap")?.addEventListener("click", () => openScanDialog(state.map));
+  $("addManualDevice")?.addEventListener("click", () => { $("manualDeviceForm").reset(); $("manualDeviceDialog").showModal(); });
   $("editMap")?.addEventListener("click", () => { $("editName").value = state.map.name; $("editDescription").value = state.map.description || ""; $("editDialog").showModal(); });
   $("openBackup")?.addEventListener("click", openBackupDialog);
+  $("importMacBaseline")?.addEventListener("click", async () => {
+    if (!confirm("MACهای انتهایی دیده‌شده در این نسخه به‌عنوان Baseline مجاز ثبت شوند؟ MACهای روی Uplink وارد نمی‌شوند.")) return;
+    try {
+      const result = await request(`/api/network-map/maps/${encodeURIComponent(state.map.id)}/import-macs`, { method: "POST", body: { snapshotId: state.snapshot.id } });
+      try { await request("/api/radius/apply", { method: "POST", body: {} }); } catch {}
+      toast(`${formatNumber(result.imported)} MAC جدید ثبت شد؛ ${formatNumber(result.existing)} مورد از قبل وجود داشت.`);
+    } catch (error) { toast(error.message); }
+  });
   $("deleteMap")?.addEventListener("click", async () => {
     if (!confirm(`نقشه «${state.map.name}» به سطل بازیافت منتقل شود؟ نسخه‌ها و بکاپ‌ها فوراً پاک نمی‌شوند.`)) return;
     try { await request(`/api/network-map/maps/${encodeURIComponent(state.map.id)}`, { method: "DELETE" }); await reloadBootstrap(); toast("نقشه به سطل بازیافت منتقل شد."); }
@@ -352,21 +382,56 @@ function bindMapEvents(layout) {
   $("onlineToggle").addEventListener("change", (event) => event.target.checked ? startOnlineStatus() : stopOnlineStatus());
 }
 
-function focusSearch(value) {
-  document.querySelectorAll(".switch-node").forEach((node) => node.classList.remove("highlight"));
-  const query = String(value || "").trim().toLowerCase();
-  if (!query) return;
-  const device = state.snapshot.topology.devices.find((item) => String(item.hostname || "").toLowerCase().includes(query) || String(item.ip || "").includes(query));
+function normalizedMac(value) {
+  const raw = String(value || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+  return /^[0-9a-f]{12}$/.test(raw) ? raw : "";
+}
+
+function focusDevice(device, highlightAll = false) {
   if (!device) return;
   const node = document.querySelector(`.switch-node[data-key="${CSS.escape(device.key)}"]`);
   const pos = state.positions.get(device.key);
   const wrap = $("canvasWrap");
-  if (node && pos) {
-    node.classList.add("highlight");
+  if (node) node.classList.add("highlight");
+  if (!highlightAll && node && pos && wrap) {
     state.panX = wrap.clientWidth / 2 - (pos.x + 105) * state.zoom;
     state.panY = wrap.clientHeight / 2 - (pos.y + 46) * state.zoom;
     applyTransform();
   }
+}
+
+function focusSearch(value) {
+  document.querySelectorAll(".switch-node").forEach((node) => node.classList.remove("highlight"));
+  const info = $("searchInfo");
+  if (info) { info.classList.add("hidden"); info.innerHTML = ""; }
+  const query = String(value || "").trim();
+  if (!query) return;
+  const topology = state.snapshot.topology;
+  const vlanMatch = query.match(/^(?:vlan\s*)?(\d{1,4})$/i);
+  if (vlanMatch && /vlan/i.test(query)) {
+    const vlan = Number(vlanMatch[1]);
+    const devices = topology.devices.filter((item) => (item.vlans || []).some((v) => Number(v.id) === vlan) || (item.ports || []).some((p) => Number(p.vlan) === vlan));
+    devices.forEach((d) => focusDevice(d, true));
+    if (info) { info.innerHTML = `<b>VLAN ${vlan}</b><span>${formatNumber(devices.length)} سوئیچ پیدا شد.</span>`; info.classList.remove("hidden"); }
+    return;
+  }
+  const mac = normalizedMac(query);
+  if (mac) {
+    const uplinks = new Map();
+    const mark = (key, port) => { if (!uplinks.has(key)) uplinks.set(key, new Set()); uplinks.get(key).add(String(port || "").replace(/-T$/,"")); };
+    for (const link of topology.links || []) { mark(link.from, link.fromPort?.name || link.fromLabel); mark(link.to, link.toPort?.name || link.toLabel); }
+    const hits = [];
+    for (const device of topology.devices) for (const entry of device.macTable || []) if (normalizedMac(entry.mac) === mac) hits.push({ device, entry, uplink: uplinks.get(device.key)?.has(entry.port) });
+    const selected = hits.find((x) => !x.uplink && x.device.reachable !== false) || hits.find((x) => x.device.reachable !== false) || hits[0];
+    if (selected) {
+      focusDevice(selected.device);
+      if (info) { info.innerHTML = `<b>${escapeHtml(query)}</b><span>${escapeHtml(selected.device.hostname || selected.device.ip)} / ${escapeHtml(selected.entry.port)} / VLAN ${escapeHtml(selected.entry.vlan || "-")}</span>`; info.classList.remove("hidden"); }
+    } else if (info) { info.innerHTML = `<b>${escapeHtml(query)}</b><span>MAC در Snapshot فعلی پیدا نشد.</span>`; info.classList.remove("hidden"); }
+    return;
+  }
+  const q = query.toLowerCase();
+  const device = topology.devices.find((item) => String(item.hostname || "").toLowerCase().includes(q) || String(item.ip || "").includes(q));
+  if (device) focusDevice(device);
 }
 
 async function updateOnlineStatus() {
@@ -397,12 +462,17 @@ function openBackupDialog() {
   $("backupDevices").innerHTML = devices.map((item) => `<label class="device-check"><input type="checkbox" value="${escapeHtml(item.key)}"><span><b>${escapeHtml(item.hostname || "بدون نام")}</b><small>${escapeHtml(item.ip)}</small></span></label>`).join("");
   $("backupCount").textContent = `${formatNumber(devices.length)} سوئیچ`;
   $("backupAll").checked = false;
+  fillSystemAccounts("backup");
+  $("backupSystemAccount").value = state.bootstrap?.systemAccounts?.[0]?.id || "";
+  updateCredentialMode("backup");
   $("backupProtocol").value = "ssh";
   $("backupPort").value = "22";
   clearCredentialFields("backup");
   $("backupDialog").showModal();
 }
 
+$("scanSystemAccount").addEventListener("change", () => updateCredentialMode("scan"));
+$("backupSystemAccount").addEventListener("change", () => updateCredentialMode("backup"));
 $("scanProtocol").addEventListener("change", () => {
   const telnet = $("scanProtocol").value === "telnet";
   $("scanPort").value = telnet ? "23" : "22";
@@ -437,6 +507,11 @@ $("editForm").addEventListener("submit", async (event) => {
     await openMap(state.map.id, state.snapshot.id);
     toast("مشخصات نقشه ذخیره شد.");
   } catch (error) { toast(error.message); }
+});
+
+$("manualDeviceForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try { await request(`/api/network-map/maps/${encodeURIComponent(state.map.id)}/manual-devices`, { method:"POST", body:{ ip:$("manualDeviceIp").value, hostname:$("manualDeviceName").value, notes:$("manualDeviceNotes").value } }); $("manualDeviceDialog").close(); await openMap(state.map.id,state.snapshot.id); toast("سوئیچ دستی به نقشه اضافه شد."); } catch(error){ toast(error.message); }
 });
 
 $("backupForm").addEventListener("submit", async (event) => {

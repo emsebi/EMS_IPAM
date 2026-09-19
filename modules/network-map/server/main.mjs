@@ -10,11 +10,12 @@ import { currentUser, requireAdmin, requireWriter, canAccessCompany, canManageCo
 import { discoverNetwork, mergeRefreshedDevice, readRunningConfiguration, readSingleDevice } from "./discovery.mjs";
 import { diffLines } from "./diff.mjs";
 import { assertNoSubmittedSecrets, sanitizeConfiguration } from "./sanitize.mjs";
-import { validIpv4 } from "./parsers.mjs";
+import { normalizeInterface, normalizeMac, validIpv4 } from "./parsers.mjs";
+import { decryptSecret } from "./secret.mjs";
 
 const { Pool } = pg;
 const PORT = Number(process.env.PORT || 8090);
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.7.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL || undefined, max: 12, idleTimeoutMillis: 30_000 });
 const execFileAsync = promisify(execFile);
@@ -81,7 +82,7 @@ async function audit(user, action, entityType, entityId, { companyId = null, det
 }
 
 async function listCompanies(user) {
-  if (user.role === "admin") return (await pool.query(
+  if (["admin", "technical", "helpdesk", "editor"].includes(user.role)) return (await pool.query(
     "SELECT id,name,kind,true AS manageable FROM companies WHERE deleted_at IS NULL ORDER BY name",
   )).rows;
   return (await pool.query(
@@ -125,7 +126,9 @@ async function getSnapshot(user, mapId, snapshotId = "") {
       [map.id],
     );
   if (!result.rowCount) throw Object.assign(new Error("نسخه‌ای برای این نقشه وجود ندارد."), { status: 404 });
-  return { map, snapshot: result.rows[0] };
+  const snapshot = result.rows[0];
+  snapshot.topology = await applyManualDevices(map, snapshot.topology);
+  return { map, snapshot };
 }
 
 async function attachIpam(companyId, topology) {
@@ -145,6 +148,76 @@ async function attachIpam(companyId, topology) {
     return match ? { ...item, ipamHostId: match.id, ipamSpaceId: match.spaceId, ipamSpaceName: match.spaceName, ipamSpaceCidr: match.spaceCidr } : { ...item, ipamHostId: null };
   });
   return topology;
+}
+
+async function applyManualDevices(map, topology) {
+  const copy = structuredClone(topology || { devices: [], links: [] });
+  copy.devices ||= []; copy.links ||= [];
+  const rows = (await pool.query(`SELECT id,ip,hostname,notes FROM network_map_manual_devices WHERE map_id=$1 ORDER BY ip`, [map.id])).rows;
+  const manualIps = new Set(rows.map((x) => x.ip));
+  const removedKeys = new Set(copy.devices.filter((d) => d.manual && !manualIps.has(d.ip)).map((d) => d.key));
+  copy.devices = copy.devices.filter((d) => !removedKeys.has(d.key));
+  copy.links = copy.links.filter((l) => !removedKeys.has(l.from) && !removedKeys.has(l.to));
+  const existingIps = new Set(copy.devices.map((d) => d.ip));
+  for (const row of rows) {
+    if (existingIps.has(row.ip)) {
+      const d = copy.devices.find((x) => x.ip === row.ip);
+      if (d) { d.manual = true; if (!d.hostname && row.hostname) d.hostname = row.hostname; d.manualNotes = row.notes || ""; }
+      continue;
+    }
+    const key = `manual:${crypto.createHash("sha256").update(`${map.id}|${row.ip}`).digest("hex").slice(0,20)}`;
+    copy.devices.push({ key, ip: row.ip, hostname: row.hostname || row.ip, model: "", platform: "Manual", osVersion: "", serial: "", uptime: "", ports: [], vlans: [], macTable: [], portCounts: { total:0,up:0,free:0,adminDown:0,error:0 }, neighbors: [], reachable: null, manual: true, manualNotes: row.notes || "", lastScanAt: null });
+  }
+  await attachIpam(map.companyId, copy);
+  return copy;
+}
+
+function resolveMacLocations(topology) {
+  const devices = new Map((topology?.devices || []).map((d) => [d.key, d]));
+  const uplinks = new Map();
+  const addUplink = (key, port) => { if (!key || !port) return; if (!uplinks.has(key)) uplinks.set(key, new Set()); uplinks.get(key).add(normalizeInterface(port)); };
+  for (const link of topology?.links || []) {
+    addUplink(link.from, link.fromPort?.name || link.fromLabel);
+    addUplink(link.to, link.toPort?.name || link.toLabel);
+  }
+  const candidates = new Map();
+  for (const device of topology?.devices || []) {
+    for (const entry of device.macTable || []) {
+      const mac = normalizeMac(entry.mac);
+      if (!mac) continue;
+      const item = { mac, device, port: normalizeInterface(entry.port), vlan: entry.vlan || null, uplink: uplinks.get(device.key)?.has(normalizeInterface(entry.port)) || false };
+      if (!candidates.has(mac)) candidates.set(mac, []);
+      candidates.get(mac).push(item);
+    }
+  }
+  const result = new Map();
+  for (const [mac, items] of candidates) {
+    const selected = items.find((x) => !x.uplink && x.device.reachable !== false) || items.find((x) => x.device.reachable !== false) || items[0];
+    if (selected) result.set(mac, selected);
+  }
+  return result;
+}
+
+async function syncKnownMacLocations(topology) {
+  try {
+    const exists = (await pool.query("SELECT to_regclass('public.radius_mac_clients') AS name")).rows[0]?.name;
+    if (!exists) return;
+    const locations = resolveMacLocations(topology);
+    if (!locations.size) return;
+    const settings = (await pool.query("SELECT keep_mac_history FROM radius_settings WHERE singleton=true")).rows[0] || { keep_mac_history: 5 };
+    const keep = Math.max(0, Math.min(20, Number(settings.keep_mac_history || 5)));
+    for (const [mac, item] of locations) {
+      const current = (await pool.query("SELECT id,last_switch_ip,last_port,last_vlan FROM radius_mac_clients WHERE mac=$1", [mac])).rows[0];
+      if (!current) continue;
+      const switchIp = item.device.ip || "";
+      const switchName = item.device.hostname || "";
+      await pool.query(`UPDATE radius_mac_clients SET last_switch_ip=$1,last_switch_name=$2,last_port=$3,last_vlan=$4,last_seen_at=now(),updated_at=updated_at WHERE id=$5`, [switchIp, switchName, item.port || "", item.vlan || null, current.id]);
+      if (keep > 0 && (current.last_switch_ip !== switchIp || current.last_port !== item.port || Number(current.last_vlan || 0) !== Number(item.vlan || 0))) {
+        await pool.query(`INSERT INTO radius_mac_history(mac_id,switch_ip,switch_name,port,vlan) VALUES($1,$2,$3,$4,$5)`, [current.id, switchIp, switchName, item.port || "", item.vlan || null]);
+        await pool.query(`DELETE FROM radius_mac_history WHERE id IN (SELECT id FROM radius_mac_history WHERE mac_id=$1 ORDER BY seen_at DESC OFFSET $2)`, [current.id, keep]);
+      }
+    }
+  } catch (error) { console.error("MAC location sync", error.message); }
 }
 
 async function saveSnapshot(user, map, { seedIp, protocol, topology, summary }) {
@@ -173,13 +246,22 @@ async function saveSnapshot(user, map, { seedIp, protocol, topology, summary }) 
   } finally { client.release(); }
 }
 
-function normalizeConnection(body, signal) {
+async function normalizeConnection(body, signal) {
   const protocol = body.protocol === "telnet" ? "telnet" : "ssh";
   const port = Number(body.port || (protocol === "ssh" ? 22 : 23));
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("پورت ارتباط معتبر نیست.");
-  const username = cleanText(body.username, 120);
-  const password = String(body.password ?? "");
+  let username = cleanText(body.username, 120);
+  let password = String(body.password ?? "");
   const enablePassword = String(body.enablePassword ?? "");
+  const systemAccountId = cleanText(body.systemAccountId, 100);
+  if (systemAccountId) {
+    const exists = (await pool.query("SELECT to_regclass('public.radius_users') AS name")).rows[0]?.name;
+    if (!exists) throw new Error("ماژول RADIUS یا حساب سیستمی آماده نیست.");
+    const account = (await pool.query(`SELECT username,password_ciphertext FROM radius_users WHERE id=$1 AND enabled=true AND account_type='system'`, [systemAccountId])).rows[0];
+    if (!account) throw new Error("حساب سیستمی RADIUS پیدا نشد.");
+    username = account.username;
+    password = decryptSecret(account.password_ciphertext);
+  }
   if (!username) throw new Error("نام کاربری تجهیز الزامی است.");
   if (!password) throw new Error("رمز ورود تجهیز الزامی است.");
   return {
@@ -195,6 +277,15 @@ function normalizeConnection(body, signal) {
     maxDevices: Math.max(1, Math.min(500, Number(body.maxDevices || 200))),
     signal,
   };
+}
+
+async function listSystemAccounts(user) {
+  if (!user || !["admin", "technical", "editor"].includes(user.role)) return [];
+  try {
+    const exists = (await pool.query("SELECT to_regclass('public.radius_users') AS name")).rows[0]?.name;
+    if (!exists) return [];
+    return (await pool.query(`SELECT id,username,display_name AS "displayName" FROM radius_users WHERE enabled=true AND account_type='system' ORDER BY username`)).rows;
+  } catch { return []; }
 }
 
 function scrubConnection(connection, body) {
@@ -317,7 +408,7 @@ async function api(req, res, url, user) {
   if (!user) return errorResponse(res, 401, "ابتدا از صفحه اصلی وارد سامانه شوید.");
 
   if (req.method === "GET" && pathname === "/api/network-map/bootstrap") {
-    return json(res, 200, { ok: true, version: APP_VERSION, user, companies: await listCompanies(user), maps: await listMaps(user), trash: await listMaps(user, true) });
+    return json(res, 200, { ok: true, version: APP_VERSION, user, companies: await listCompanies(user), maps: await listMaps(user), trash: await listMaps(user, true), systemAccounts: await listSystemAccounts(user) });
   }
 
   if (req.method === "GET" && pathname === "/api/network-map/maps") return json(res, 200, { ok: true, maps: await listMaps(user) });
@@ -391,14 +482,39 @@ async function api(req, res, url, user) {
     let connection;
     const job = startJob(user, { type: "scan", mapId: map.id }, async (signal, update) => {
       try {
-        connection = normalizeConnection(body, signal);
+        connection = await normalizeConnection(body, signal);
         const result = await discoverNetwork({ ...connection, seedIp }, update);
         await attachIpam(map.companyId, result.topology);
+        await syncKnownMacLocations(result.topology);
         const snapshot = await saveSnapshot(user, map, { seedIp, protocol: connection.protocol, topology: result.topology, summary: result.summary });
         return { mapId: map.id, snapshotId: snapshot.id, version: snapshot.version, summary: result.summary };
       } finally { scrubConnection(connection, body); }
     });
     return json(res, 202, { ok: true, job: publicJob(job), mapId: map.id });
+  }
+
+  const importMacsMatch = pathname.match(/^\/api\/network-map\/maps\/([^/]+)\/import-macs$/);
+  if (importMacsMatch && req.method === "POST") {
+    requireAdmin(user);
+    const { map, snapshot } = await getSnapshot(user, importMacsMatch[1], cleanText((await readBody(req)).snapshotId, 80));
+    const exists = (await pool.query("SELECT to_regclass('public.radius_mac_clients') AS name")).rows[0]?.name;
+    if (!exists) throw new Error("ماژول RADIUS / Network Access هنوز آماده نیست.");
+    const locations = resolveMacLocations(snapshot.topology);
+    let imported = 0, existing = 0, skippedUplink = 0;
+    for (const [mac, item] of locations) {
+      if (item.uplink) { skippedUplink += 1; continue; }
+      const id = crypto.randomUUID();
+      const result = await pool.query(
+        `INSERT INTO radius_mac_clients(id,mac,name,description,device_type,company_id,access_mode,vlan,enabled,last_switch_ip,last_switch_name,last_port,last_vlan,last_seen_at,created_by,updated_by)
+         VALUES($1,$2,'','Imported from network discovery','other',$3,'allow',NULL,true,$4,$5,$6,$7,now(),$8,$8)
+         ON CONFLICT(mac) DO NOTHING RETURNING id`,
+        [id, mac, map.companyId, item.device.ip || "", item.device.hostname || "", item.port || "", item.vlan || null, user.id],
+      );
+      if (result.rowCount) imported += 1; else existing += 1;
+    }
+    await syncKnownMacLocations(snapshot.topology);
+    await audit(user, "import", "radius_mac_baseline", map.id, { companyId: map.companyId, detail: { imported, existing, skippedUplink } });
+    return json(res, 200, { ok: true, imported, existing, skippedUplink });
   }
 
   const jobMatch = pathname.match(/^\/api\/network-map\/jobs\/([^/]+)$/);
@@ -442,6 +558,24 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true });
   }
 
+  const manualDeviceCreate = pathname.match(/^\/api\/network-map\/maps\/([^/]+)\/manual-devices$/);
+  if (manualDeviceCreate && req.method === "POST") {
+    requireWriter(user);
+    const map = await getMap(user, manualDeviceCreate[1], { write: true });
+    const b = await readBody(req); const ip = cleanText(b.ip,64);
+    if (!validIpv4(ip)) throw new Error("IP مدیریتی معتبر نیست.");
+    await pool.query(`INSERT INTO network_map_manual_devices(id,map_id,ip,hostname,notes,created_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(map_id,ip) DO UPDATE SET hostname=EXCLUDED.hostname,notes=EXCLUDED.notes,updated_at=now()`, [crypto.randomUUID(),map.id,ip,cleanText(b.hostname,120),cleanText(b.notes,500),user.id]);
+    await audit(user,"create","network_map_manual_device",ip,{companyId:map.companyId,detail:{mapId:map.id}});
+    return json(res,201,{ok:true});
+  }
+  const manualDeviceDelete = pathname.match(/^\/api\/network-map\/maps\/([^/]+)\/manual-devices\/([^/]+)$/);
+  if (manualDeviceDelete && req.method === "DELETE") {
+    requireWriter(user); const map=await getMap(user,manualDeviceDelete[1],{write:true}); const ip=decodeURIComponent(manualDeviceDelete[2]);
+    await pool.query(`DELETE FROM network_map_manual_devices WHERE map_id=$1 AND ip=$2`,[map.id,ip]);
+    await audit(user,"delete","network_map_manual_device",ip,{companyId:map.companyId,detail:{mapId:map.id}});
+    return json(res,200,{ok:true});
+  }
+
   if (req.method === "POST" && pathname === "/api/network-map/status") {
     const body = await readBody(req);
     const { snapshot } = await getSnapshot(user, cleanText(body.mapId, 80), cleanText(body.snapshotId, 80));
@@ -467,7 +601,7 @@ async function api(req, res, url, user) {
         WHERE device_key=$1 AND map_id=$2 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC`,
       [device.key, map.id],
     )).rows;
-    return json(res, 200, { ok: true, map, snapshot: { ...snapshot, topology: undefined }, device, backups, deletedBackups });
+    return json(res, 200, { ok: true, map, snapshot: { ...snapshot, topology: undefined }, device, backups, deletedBackups, systemAccounts: await listSystemAccounts(user), canWrite: ["admin","technical","editor"].includes(user.role) });
   }
 
   const refreshMatch = pathname.match(/^\/api\/network-map\/maps\/([^/]+)\/devices\/([^/]+)\/refresh$/);
@@ -482,10 +616,11 @@ async function api(req, res, url, user) {
     let connection;
     const job = startJob(user, { type: "refresh", mapId: map.id }, async (signal, update) => {
       try {
-        connection = normalizeConnection(body, signal);
+        connection = await normalizeConnection(body, signal);
         const refreshed = await readSingleDevice(connection, device.ip, update);
         const topology = mergeRefreshedDevice(snapshot.topology, refreshed);
         await attachIpam(map.companyId, topology);
+        await syncKnownMacLocations(topology);
         const saved = await saveSnapshot(user, map, { seedIp: snapshot.seedIp, protocol: connection.protocol, topology, summary: { refreshOnly: device.ip } });
         return { mapId: map.id, snapshotId: saved.id, version: saved.version, deviceKey: refreshed.key };
       } finally { scrubConnection(connection, body); }
@@ -505,7 +640,7 @@ async function api(req, res, url, user) {
     const job = startJob(user, { type: "backup", mapId: map.id }, async (signal, update) => {
       const results = [];
       try {
-        connection = normalizeConnection(body, signal);
+        connection = await normalizeConnection(body, signal);
         for (let index = 0; index < devices.length; index += 1) {
           const device = devices[index];
           update({ message: `بکاپ ${device.hostname || device.ip}`, processed: index, discovered: devices.length, currentIp: device.ip });
@@ -543,7 +678,7 @@ async function api(req, res, url, user) {
     res.once("close", onClose);
     let connection;
     try {
-      connection = normalizeConnection(body, controller.signal);
+      connection = await normalizeConnection(body, controller.signal);
       const config = await readRunningConfiguration(connection, device.ip);
       const payload = Buffer.from(config);
       res.writeHead(200, {

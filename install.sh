@@ -195,6 +195,7 @@ start_and_check() {
       printf 'Panel URL: http://%s:%s\n' "${server_ip:-SERVER-IP}" "$EMS_HTTP_PORT"
       printf 'Installation directory: %s\n' "$INSTALL_DIR"
       if [[ " ${enabled_modules[*]} " == *" network-map "* ]]; then printf 'Network Map: http://%s:%s/network-map/\n' "${server_ip:-SERVER-IP}" "$EMS_HTTP_PORT"; fi
+      if [[ " ${enabled_modules[*]} " == *" radius "* ]]; then printf 'RADIUS Panel: http://%s:%s/radius/\n' "${server_ip:-SERVER-IP}" "$EMS_HTTP_PORT"; fi
       return 0
     fi
     sleep 2
@@ -230,6 +231,7 @@ install_app() {
   if port_is_busy "$EMS_HTTP_PORT"; then
     fail "Port $EMS_HTTP_PORT is already in use. No containers were created. Run setup again and choose another port."
   fi
+  EMS_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
   EMS_BACKUP_PATH="$INSTALL_DIR/backups"
   log "Downloading project files"
   download_source
@@ -239,6 +241,7 @@ install_app() {
     printf "POSTGRES_PASSWORD='%s'\n" "$POSTGRES_PASSWORD"
     printf "EMS_ADMIN_USERNAME='%s'\n" "$EMS_ADMIN_USERNAME"
     printf "EMS_ADMIN_PASSWORD='%s'\n" "$EMS_ADMIN_PASSWORD"
+    printf "EMS_SECRET_KEY='%s'\n" "$EMS_SECRET_KEY"
     printf "EMS_HTTP_PORT='%s'\n" "$EMS_HTTP_PORT"
     printf "COOKIE_SECURE='%s'\n" "$COOKIE_SECURE"
     printf "EMS_BACKUP_PATH='%s'\n" "$EMS_BACKUP_PATH"
@@ -258,11 +261,14 @@ install_app() {
 
 update_app() {
   load_installation
+  if [[ -z "${EMS_SECRET_KEY:-}" ]]; then
+    EMS_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+    printf "EMS_SECRET_KEY='%s'\n" "$EMS_SECRET_KEY" >> "$INSTALL_DIR/.env"
+  fi
   if [[ -z "${EMS_BACKUP_PATH:-}" ]]; then
     EMS_BACKUP_PATH="$INSTALL_DIR/backups"
     printf "EMS_BACKUP_PATH='%s'\n" "$EMS_BACKUP_PATH" >> "$INSTALL_DIR/.env"
   fi
-  purge_device_credentials
   backup_database
   load_installation
   log "Downloading the latest project files"
@@ -280,9 +286,7 @@ update_app() {
   load_installation
   if start_and_check; then
     rm -rf -- "$previous_dir"
-    printf 'Database volume and clean backups were preserved.\n'
-    printf 'Stored equipment passwords were permanently removed by the security migration.\n'
-    printf 'Older backup archives made before this version may still contain encrypted legacy credentials.\n'
+    printf 'Database volume, encryption key and backups were preserved.\n'
   else
     "${compose[@]}" down --remove-orphans || true
     mv "$INSTALL_DIR" "${INSTALL_DIR}.failed.$$"
@@ -291,19 +295,6 @@ update_app() {
     "${compose[@]}" up -d || true
     fail "Update failed and the previous installation was restored."
   fi
-}
-
-purge_device_credentials() {
-  load_installation
-  "${compose[@]}" up -d db
-  for (( attempt=1; attempt<=30; attempt+=1 )); do
-    if "${compose[@]}" exec -T db pg_isready -U ems_ipam -d ems_ipam >/dev/null 2>&1; then break; fi
-    (( attempt == 30 )) && fail "Database did not become ready for the security migration."
-    sleep 2
-  done
-  log "Permanently removing stored equipment credentials and automatic monitoring access"
-  "${compose[@]}" exec -T db psql -v ON_ERROR_STOP=1 -U ems_ipam -d ems_ipam -c \
-    "UPDATE hosts SET secret_ciphertext='',monitor_secret_ciphertext='',monitor_enabled=false,monitor_driver='',monitor_username='',monitor_ca_pem='',monitor_state='{}'::jsonb,monitor_checked_at=NULL,monitor_last_ok_at=NULL,monitor_failures=0,monitor_error=''"
 }
 
 backup_database() {
@@ -322,9 +313,10 @@ backup_database() {
   log "Creating PostgreSQL backup"
   "${compose[@]}" exec -T db pg_dump -U ems_ipam -d ems_ipam -Fc > "$work_dir/database.dump"
   {
-    printf "EMS_BACKUP_VERSION='2'\n"
+    printf "EMS_BACKUP_VERSION='1'\n"
     printf "EMS_APP_VERSION='%s'\n" "$(tr -d '\r\n' < "$INSTALL_DIR/VERSION" 2>/dev/null || printf unknown)"
     printf "EMS_CREATED_AT='%s'\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf "EMS_SECRET_KEY='%s'\n" "${EMS_SECRET_KEY:-}"
   } > "$work_dir/metadata.env"
   tar -czf "$backup_file" -C "$work_dir" database.dump metadata.env
   rm -rf -- "$work_dir"
@@ -336,7 +328,7 @@ backup_database() {
 
 restore_database() {
   load_installation
-  local backup_file="${2:-}" work_dir
+  local backup_file="${2:-}" work_dir restored_key="" updated_env=""
   if [[ -z "$backup_file" ]]; then
     read -r -p "Backup file path: " backup_file <"$TTY_DEVICE" || fail "Unable to read the backup path."
   fi
@@ -345,6 +337,8 @@ restore_database() {
   work_dir="$(mktemp -d /tmp/ems-ipam-restore.XXXXXX)"
   tar -xzf "$backup_file" -C "$work_dir"
   [[ -s "$work_dir/database.dump" && -f "$work_dir/metadata.env" ]] || fail "Backup archive does not contain the required files."
+  restored_key="$(awk -F= '/^EMS_SECRET_KEY=/{sub(/^EMS_SECRET_KEY=/,""); gsub(/^\047|\047$/,""); print; exit}' "$work_dir/metadata.env")"
+  [[ "$restored_key" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Backup encryption key is missing or invalid."
   printf '\nWARNING: Restore replaces the current EMS IPAM database.\n'
   local confirmation=""
   read -r -p "Type RESTORE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
@@ -352,17 +346,21 @@ restore_database() {
   backup_database
   load_installation
   log "Stopping the application"
-  "${compose[@]}" stop app network-map >/dev/null 2>&1 || "${compose[@]}" stop app
+  "${compose[@]}" stop app "${enabled_modules[@]}" >/dev/null 2>&1 || "${compose[@]}" stop app
   log "Restoring PostgreSQL database"
   if ! "${compose[@]}" exec -T db pg_restore -U ems_ipam -d ems_ipam --clean --if-exists --no-owner --no-privileges < "$work_dir/database.dump"; then
     "${compose[@]}" up -d app || true
     rm -rf -- "$work_dir"
     fail "Database restore failed. A safety backup was created before restore."
   fi
+  updated_env="$(mktemp /tmp/ems-ipam-env.XXXXXX)"
+  awk -v key="$restored_key" 'BEGIN{done=0} /^EMS_SECRET_KEY=/{print "EMS_SECRET_KEY=\047" key "\047"; done=1; next} {print} END{if(!done) print "EMS_SECRET_KEY=\047" key "\047"}' "$INSTALL_DIR/.env" > "$updated_env"
+  install -m 600 "$updated_env" "$INSTALL_DIR/.env"
+  rm -f -- "$updated_env"
   rm -rf -- "$work_dir"
   load_installation
   start_and_check || fail "Database was restored, but the application did not become healthy."
-  printf 'Database was restored. Stored equipment credentials are removed automatically when version 0.6 starts.\n'
+  printf 'Database and encrypted credentials were restored successfully.\n'
 }
 
 configure_modules() {
@@ -396,9 +394,9 @@ uninstall_app() {
   load_installation
   log "Stopping and removing application containers"
   "${compose[@]}" down --remove-orphans
-  docker image rm ems-ipam:0.6.0 ems-network-map:0.6.0 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.7.0 ems-network-map:0.7.0 ems-radius:0.7.0 ems-ipam:0.6.0 ems-network-map:0.6.0 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   printf '\nApplication containers were removed.\n'
-  printf 'Database volume, configuration and backups were kept.\n'
+  printf 'Database volume, configuration, encryption key and backups were kept.\n'
   printf 'Use Update to install the application again.\n'
 }
 
@@ -409,7 +407,7 @@ uninstall_all() {
   read -r -p "Type DELETE to continue: " confirmation <"$TTY_DEVICE" || fail "Unable to read confirmation."
   [[ "$confirmation" == "DELETE" ]] || fail "Full uninstall cancelled."
   "${compose[@]}" down --volumes --remove-orphans
-  docker image rm ems-ipam:0.6.0 ems-network-map:0.6.0 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
+  docker image rm ems-ipam:0.7.0 ems-network-map:0.7.0 ems-radius:0.7.0 ems-ipam:0.6.0 ems-network-map:0.6.0 ems-ipam:0.5.1 ems-ipam:0.5.0 ems-ipam:0.4.1 ems-ipam:0.4.0 ems-ipam:0.3.0 ems-ipam:0.2.0 ems-ipam:0.1.0 >/dev/null 2>&1 || true
   [[ "$INSTALL_DIR" == /opt/* && "$INSTALL_DIR" != "/opt" ]] || fail "Unsafe installation directory. Files were not removed."
   rm -rf -- "$INSTALL_DIR"
   printf '\nEMS IPAM and its database were permanently removed.\n'

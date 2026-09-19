@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — مدیریت تصویری شبکه</title>
-  <link rel="stylesheet" href="/styles.css?v=0.6.0">
+  <link rel="stylesheet" href="/styles.css?v=0.7.0">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -31,9 +31,10 @@
       <nav class="primary-nav" aria-label="بخش‌های اصلی">
         <button id="companiesButton" class="navbtn active" type="button">شرکت‌ها</button>
         <button id="ipamButton" class="navbtn" type="button">مدیریت IP</button>
-        <button id="inventoryButton" class="navbtn" type="button">تجهیزات</button>
         <button id="radiosButton" class="navbtn" type="button">رادیوها</button>
+        <button id="onlineReportsButton" class="navbtn admin-only" type="button">گزارش آنلاین‌بودن</button>
         <button id="networkMapButton" class="navbtn" type="button">نقشه شبکه</button>
+        <button id="radiusButton" class="navbtn" type="button">RADIUS / MAC</button>
       </nav>
       <div class="context-selectors">
         <select id="companySelect" aria-label="شرکت"></select>
@@ -47,9 +48,11 @@
       <div class="top-actions">
         <span id="liveBadge" class="live-badge"><i></i><span>اتصال زنده</span></span>
         <button id="topologyButton" class="iconbtn" title="نقشه شبکه" aria-label="نقشه شبکه">⌘</button>
+        <button id="mapperButton" class="iconbtn admin-only" title="تنظیمات یکپارچه‌سازی نقشه" aria-label="تنظیمات یکپارچه‌سازی نقشه">↗</button>
         <button id="exportButton" class="iconbtn" title="خروجی قابل انتقال" aria-label="خروجی قابل انتقال">⇩</button>
         <button id="importButton" class="iconbtn" title="ورود بسته زیرشبکه" aria-label="ورود بسته زیرشبکه">⇧</button>
         <button id="backupsButton" class="iconbtn admin-only" title="پشتیبان‌گیری" aria-label="پشتیبان‌گیری">⛁</button>
+        <button id="configBackupsButton" class="iconbtn admin-only" title="بکاپ کانفیگ میکروتیک" aria-label="بکاپ کانفیگ میکروتیک">▣</button>
         <button id="trashButton" class="iconbtn admin-only" title="سطل بازیافت" aria-label="سطل بازیافت">♲</button>
         <button id="usersButton" class="iconbtn admin-only" title="کاربران" aria-label="کاربران">♙</button>
         <button id="settingsButton" class="iconbtn admin-only" title="تنظیمات ابزارها" aria-label="تنظیمات ابزارها">⚙</button>
@@ -134,7 +137,7 @@
           <label class="field">MAC Address<input id="hostMac" class="ltr mono"></label>
           <label class="field">VLAN<input id="hostVlan" class="ltr"></label>
           <label class="field">نام کاربری<input id="hostUsername"></label>
-          <div class="field notice"><b>رمز تجهیزات در سامانه ذخیره نمی‌شود.</b><span>رمز فقط در عملیات دستی نقشه شبکه و تا زمان بازبودن همان صفحه استفاده می‌شود.</span></div>
+          <label class="field">رمز تجهیز<input id="hostPassword" type="password" autocomplete="new-password" placeholder="برای حفظ رمز فعلی خالی بماند"><span class="inline-actions"><button id="revealHostPassword" class="btn sm hidden" type="button">نمایش رمز فعلی</button><span id="clearHostPasswordWrap" class="check-field hidden"><input id="clearHostPassword" type="checkbox"> حذف رمز ذخیره‌شده</span></span></label>
           <label class="field">مسئول / مالک<input id="hostOwner"></label>
           <label class="field">موقعیت<input id="hostLocation"></label>
           <label class="field">سازنده<input id="hostVendor" placeholder="MikroTik, Cisco, HPE…"></label>
@@ -149,18 +152,51 @@
               <label class="field">SSID<input id="hostSsid" list="ssidSuggestions"></label>
               <datalist id="ssidSuggestions"></datalist>
               <label id="radioParentField" class="field full hidden">اتصال به AP
-                <input id="hostRadioParentSearch" placeholder="جست‌وجو با نام، IP، SSID، MAC، شرکت یا شعبه…" autocomplete="off">
-                <select id="hostRadioParent"></select>
-                <small id="hostRadioParentHint">برای کوتاه‌شدن فهرست، بخشی از مشخصات AP را بنویسید.</small>
+                <div class="ap-combobox">
+                  <input id="hostRadioParentSearch" role="combobox" aria-expanded="false" aria-controls="hostRadioParentResults" placeholder="نام، IP، SSID، MAC، شرکت یا شعبه را بنویسید…" autocomplete="off">
+                  <input id="hostRadioParent" type="hidden">
+                  <div id="hostRadioParentSelected" class="ap-selected hidden"></div>
+                  <div id="hostRadioParentResults" class="ap-search-results hidden" role="listbox"></div>
+                </div>
+                <small id="hostRadioParentHint">نتیجه‌ها هم‌زمان با نوشتن نمایش داده می‌شوند؛ با ماوس یا کلیدهای بالا، پایین و Enter انتخاب کنید.</small>
               </label>
               <label class="field">فرکانس<input id="hostFrequency"></label>
               <label class="field">کانال<input id="hostChannel"></label>
               <label class="field">سیگنال<input id="hostSignal" placeholder="مثلاً -58 dBm"></label>
             </div>
+            <p id="stationMonitorHint" class="notice hidden">اطلاعات اتصال Station از آخرین بررسی دستی AP خوانده می‌شود.</p>
+          </fieldset>
+          <fieldset id="mikrotikMonitorFields" class="field full ports-fieldset hidden">
+            <legend>بررسی دستی رادیو میکروتیک</legend>
+            <input id="hostMonitorEnabled" class="hidden" type="checkbox" checked>
+            <p class="notice">هیچ اتصال خودکاری انجام نمی‌شود. نام کاربری ذخیره می‌شود؛ رمز فقط هنگام زدن دکمه بررسی استفاده شده و در هیچ قسمتی ذخیره نمی‌گردد. Certificate لازم نیست.</p>
+            <div class="form-grid compact-grid">
+              <select id="hostMonitorDriver" class="hidden"><option value="mikrotik-api">API</option></select>
+              <label class="field">پورت ارتباط<input id="hostMonitorPort" class="ltr" type="number" min="1" max="65535" value="8728"></label>
+              <label class="field">نام کاربری<input id="hostMonitorUsername" autocomplete="off"></label>
+              <label class="field">رمز موقت<input id="hostMonitorPassword" type="password" autocomplete="new-password" placeholder="فقط برای همین بررسی"></label>
+              <input id="clearMonitorPassword" class="hidden" type="checkbox">
+              <span id="clearMonitorPasswordWrap" class="hidden"></span>
+              <input id="hostMonitorInterval" class="hidden" type="number" value="300">
+              <textarea id="hostMonitorCaPem" class="hidden"></textarea>
+              <span id="monitorCertificateField" class="hidden"></span>
+            </div>
+            <div class="inline-actions"><button id="testMikrotikMonitor" class="btn primary" type="button">دریافت و ذخیره اطلاعات رادیو</button><button id="openMikrotikScript" class="btn sm hidden" type="button">ساخت اسکریپت</button><span id="monitorStatusText" class="subtitle"></span></div>
           </fieldset>
           <fieldset class="field full ports-fieldset">
-            <legend>وضعیت رادیو و میکروتیک</legend>
-            <p class="notice">پایش خودکار غیرفعال است. سامانه فقط زمانی به تجهیز متصل می‌شود که کاربر در صفحه مربوطه رمز را وارد و عملیات دستی را اجرا کند.</p>
+            <legend>بکاپ کانفیگ میکروتیک</legend>
+            <label class="check-field"><input id="hostBackupEnabled" type="checkbox"> افزودن این IP به لیست بکاپ‌گیری</label>
+            <div id="hostBackupFields" class="form-grid compact-grid hidden">
+              <label class="field">پورت SSH<input id="hostBackupSshPort" class="ltr" type="number" min="1" max="65535" value="22"></label>
+              <label class="field">نام کاربری SSH<input id="hostBackupUsername" autocomplete="off"></label>
+              <label class="field">نسخه RouterOS<select id="hostBackupRouterosVersion"><option value="auto">تشخیص خودکار</option><option value="7">نسخه ۷</option><option value="6">نسخه ۶</option></select></label>
+            </div>
+            <p>رمز عبور فقط هنگام اجرای بکاپ در صفحه بکاپ وارد می‌شود و اینجا ذخیره نمی‌گردد.</p>
+          </fieldset>
+          <fieldset class="field full ports-fieldset">
+            <legend>گزارش آنلاین‌بودن</legend>
+            <label class="check-field"><input id="hostReportEnabled" type="checkbox"> افزودن این IP به فهرست گزارش دوره‌ای پینگ</label>
+            <p>زمان مشترک بررسی از تب «گزارش آنلاین‌بودن» تعیین می‌شود.</p>
           </fieldset>
           <fieldset class="field full ports-fieldset">
             <legend>روش‌های مجاز اتصال</legend>
@@ -181,7 +217,7 @@
           <label class="field full">توضیحات<textarea id="hostNotes"></textarea></label>
         </div>
       </div>
-      <div class="modal-foot split"><button id="deleteHostButton" class="btn danger hidden" type="button">حذف اطلاعات</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
+      <div class="modal-foot host-modal-actions"><button id="deleteHostButton" class="btn danger hidden" type="button">حذف اطلاعات</button><button id="hostPrevButton" class="btn" type="button">IP قبلی</button><span></span><button class="btn" type="button" data-close>انصراف</button><button id="hostSaveButton" class="btn primary" type="submit">ذخیره</button><button id="hostSaveCloseButton" class="btn" type="button">ذخیره و بستن</button><button id="hostNextButton" class="btn" type="button">IP بعدی</button></div>
     </form>
   </dialog>
 
@@ -194,7 +230,7 @@
         <label class="field">نام کاربری<input id="userUsername" required autocomplete="off"></label>
         <label class="field">نام نمایشی<input id="userDisplayName"></label>
         <label class="field">رمز عبور<input id="userPassword" type="password" autocomplete="new-password"><small id="passwordHint">هر رمز دلخواه؛ برای کاربر جدید خالی نباشد</small></label>
-        <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="editor">ویرایشگر</option><option value="admin">مدیر کل</option></select></label>
+        <label class="field">نقش<select id="userRole"><option value="branch">شعبه</option><option value="helpdesk">Helpdesk</option><option value="technical">Technical</option><option value="admin">مدیر کل</option><option value="viewer">Viewer قدیمی</option><option value="editor">Editor قدیمی</option></select></label>
         <label id="userActiveWrap" class="check-field hidden"><input id="userActive" type="checkbox" checked> کاربر فعال باشد</label>
         <fieldset id="companyAccessField" class="company-access"><legend>شرکت‌های قابل دسترسی</legend><div id="companyAccessList"></div></fieldset>
         <fieldset id="spaceAccessField" class="company-access"><legend>شبکه‌های قابل دسترسی</legend><div id="spaceAccessList"></div></fieldset>
@@ -205,12 +241,45 @@
     </div>
   </dialog>
 
-  <dialog id="settingsDialog">
+  <dialog id="settingsDialog" class="wide-dialog">
     <form id="settingsForm">
-      <div class="modal-head"><div><h3>پورت‌های پیش‌فرض</h3><p>هر IP می‌تواند این مقادیر را جداگانه تغییر دهد.</p></div><button class="close" type="button" data-close>×</button></div>
-      <div id="toolsSettings" class="modal-body tool-settings"></div>
+      <div class="modal-head"><div><h3>تنظیمات سامانه</h3><p>ابزارهای اتصال، فونت و ارتباط با نقشه شبکه</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body settings-sections">
+        <section><h4>پورت‌های پیش‌فرض ابزارها</h4><div id="toolsSettings" class="tool-settings"></div></section>
+        <section><h4>فونت برنامه</h4><div class="form-grid"><label class="field">نوع فونت<select id="appearanceFont"><option value="Tahoma">Tahoma</option><option value="Segoe UI">Segoe UI</option><option value="Arial">Arial</option><option value="system-ui">فونت پیش‌فرض سیستم</option></select></label><label class="field">اندازه فونت<input id="appearanceFontSize" type="number" min="12" max="20" value="14"></label></div><div id="fontPreview" class="font-preview">پیش‌نمایش نوشته‌های سامانه — EMS IPAM</div><button id="resetFontButton" class="btn sm" type="button">بازگشت به پیش‌فرض</button></section>
+        <section><h4>اتصال به پروژه مستقل نقشه شبکه</h4><label class="check-field"><input id="mapperEnabled" type="checkbox"> پیوند نقشه شبکه فعال باشد</label><label class="field">نشانی وب پروژه نقشه<input id="mapperUrl" class="ltr" placeholder="http://192.168.1.10:8090"></label><div class="inline-actions"><button id="createMapperToken" class="btn sm" type="button">ساخت توکن اتصال</button><button id="openMapperFromSettings" class="btn sm" type="button">آزمایش بازشدن نقشه</button></div><label class="field">توکن جدید؛ فقط همین یک‌بار نمایش داده می‌شود<textarea id="mapperTokenOutput" class="ltr mono" readonly></textarea></label><small>پروژه نقشه بعداً از مسیر نسخه‌بندی‌شده API اطلاعات شرکت‌ها، رنج‌ها و تجهیزات را همگام می‌کند.</small></section>
+      </div>
       <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره تنظیمات</button></div>
     </form>
+  </dialog>
+
+  <dialog id="configBackupsDialog" class="full-dialog">
+    <div class="modal-head"><div><h3>بکاپ کانفیگ میکروتیک</h3><p>دریافت Export از طریق SSH؛ رمزها ذخیره نمی‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body">
+      <p class="notice">پسوردها جهت موارد امنیتی فقط در زمان اجرا استفاده شده و در هیچ قسمتی ذخیره نمیگردد</p>
+      <form id="manualBackupTargetForm" class="inline-form">
+        <input id="manualBackupName" placeholder="نام دستگاه">
+        <input id="manualBackupIp" class="ltr mono" required placeholder="IP">
+        <input id="manualBackupPort" class="ltr" type="number" min="1" max="65535" value="22" placeholder="پورت">
+        <input id="manualBackupUsername" required placeholder="نام کاربری">
+        <select id="manualBackupVersion"><option value="auto">نسخه خودکار</option><option value="7">نسخه ۷</option><option value="6">نسخه ۶</option></select>
+        <button class="btn" type="submit">افزودن دستگاه</button>
+      </form>
+      <div class="toolbar compact-toolbar"><div class="row-actions"><button id="selectAllConfigBackups" class="btn sm" type="button">انتخاب همه</button><button id="clearAllConfigBackups" class="btn sm" type="button">لغو انتخاب همه</button></div><button id="runSelectedConfigBackups" class="btn primary" type="button">بکاپ گزینه‌های انتخاب‌شده</button></div>
+      <div id="configBackupSummary" class="backup-run-summary hidden"></div>
+      <div id="configBackupTargets" class="config-backup-table-wrap"></div>
+    </div>
+  </dialog>
+
+  <dialog id="configHistoryDialog" class="wide-dialog">
+    <div class="modal-head"><div><h3 id="configHistoryTitle">فهرست بکاپ‌ها</h3><p>تاریخ‌ها بر اساس تقویم شمسی نمایش داده می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body"><div id="configHistoryList" class="table-list"></div></div>
+  </dialog>
+
+  <dialog id="configViewerDialog" class="wide-dialog">
+    <div class="modal-head"><div><h3 id="configViewerTitle">متن کانفیگ</h3><p id="configViewerDate"></p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-body"><textarea id="configViewerText" class="ltr mono config-viewer" readonly></textarea></div>
+    <div class="modal-foot"><button class="btn" type="button" data-close>بستن</button><button id="copyConfigText" class="btn primary" type="button">کپی متن</button></div>
   </dialog>
 
   <dialog id="backupsDialog" class="wide-dialog">
@@ -239,7 +308,7 @@
           <label class="field">فضای آدرس مقصد<select id="importSpace" required></select></label>
           <label class="field full">رفتار در تداخل<select id="importMode"><option value="skip">حفظ اطلاعات مقصد و رد موارد تکراری</option><option value="replace">به‌روزرسانی موارد تکراری با بسته</option></select></label>
         </div>
-        <div class="notice">رمزهای تجهیزات و میکروتیک عمداً داخل بسته قابل انتقال قرار نمی‌گیرند و در مقصد نیز ذخیره نمی‌شوند.</div>
+        <div class="notice">رمزهای تجهیزات و میکروتیک عمداً داخل بسته قابل انتقال قرار نمی‌گیرند و باید در مقصد جداگانه ثبت شوند.</div>
       </div>
       <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">بررسی و ورود اطلاعات</button></div>
     </form>
@@ -317,6 +386,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=0.6.0"></script>
+  <script type="module" src="/app.js?v=0.7.0"></script>
 </body>
 </html>

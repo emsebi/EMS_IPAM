@@ -27,19 +27,25 @@ import {
   validateRootCidr,
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
+import { createSecretBox } from "./secrets.mjs";
 import { buildSubnetPackage, importSubnetPackage } from "./portable.mjs";
-import { buildMikrotikScript } from "./mikrotik.mjs";
+import { buildMikrotikScript, pollMikrotik, saveMikrotikPoll } from "./mikrotik.mjs";
+import { runMikrotikBackup } from "./mikrotik-backup.mjs";
+import { jalaliDateTime } from "./jalali.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
 const DATABASE_URL = process.env.DATABASE_URL || undefined;
 const ADMIN_USERNAME = process.env.EMS_ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
+const SECRET_KEY = process.env.EMS_SECRET_KEY || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const NETWORK_MAP_ENABLED = String(process.env.EMS_NETWORK_MAP_ENABLED || "true").toLowerCase() === "true";
 const NETWORK_MAP_UPSTREAM = new URL(process.env.EMS_NETWORK_MAP_UPSTREAM || "http://network-map:8090");
+const RADIUS_ENABLED = String(process.env.EMS_RADIUS_ENABLED || "true").toLowerCase() === "true";
+const RADIUS_UPSTREAM = new URL(process.env.EMS_RADIUS_UPSTREAM || "http://radius:8091");
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.7.0";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
@@ -51,6 +57,7 @@ function cleanTextEnvironment(value) {
 
 if (!DATABASE_URL && !process.env.PGHOST) throw new Error("تنظیمات اتصال PostgreSQL تعریف نشده است.");
 if (ADMIN_PASSWORD.length < 1) throw new Error("EMS_ADMIN_PASSWORD نمی‌تواند خالی باشد.");
+const secretBox = createSecretBox(SECRET_KEY);
 
 const database = createDatabase(DATABASE_URL);
 await database.initialize({ adminUsername: ADMIN_USERNAME, adminPassword: ADMIN_PASSWORD });
@@ -104,14 +111,14 @@ function validColor(value, fallback = COLORS[0]) {
 }
 
 function safeRole(value) {
-  if (!["admin", "editor", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
+  if (!["admin", "technical", "helpdesk", "branch", "editor", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
   return value;
 }
 
 function normalizePorts(value) {
   const result = {};
   const input = value && typeof value === "object" ? value : {};
-  for (const tool of ["VNC", "MIK", "RDP", "SSH", "TELNET", "HTTP", "HTTPS"]) {
+  for (const tool of ["VNC", "MIK", "RDP", "SSH", "HTTP", "HTTPS"]) {
     const port = validatePort(input[tool]);
     if (port !== null) result[tool] = port;
   }
@@ -177,9 +184,37 @@ function normalizeCompanyConnections(value) {
       deviceName: cleanText(item?.deviceName, 160),
       username: cleanText(item?.username, 120),
       connectionMethods: normalizeConnections(item?.connectionMethods),
+      backupEnabled: item?.backupEnabled === true,
+      backupSshPort: validatePort(item?.backupSshPort || item?.connectionMethods?.find?.((method) => String(method?.type).toUpperCase() === "SSH")?.port || 22, { allowZero: false }) || 22,
+      backupRouterosVersion: ["auto", "6", "7"].includes(String(item?.backupRouterosVersion)) ? String(item.backupRouterosVersion) : "auto",
       notes: cleanText(item?.notes, 1000),
     };
   });
+}
+
+function normalizeAppearanceSettings(value, current = {}) {
+  const allowedFonts = ["Tahoma", "Segoe UI", "Arial", "system-ui"];
+  const font = allowedFonts.includes(String(value?.font)) ? String(value.font) : (allowedFonts.includes(String(current.font)) ? String(current.font) : "Tahoma");
+  const fontSize = Math.max(12, Math.min(20, Math.round(Number(value?.fontSize ?? current.fontSize ?? 14) || 14)));
+  return { font, fontSize };
+}
+
+function normalizeConfigBackupSettings(value, current = {}) {
+  return {
+    retentionVersions: Math.max(1, Math.min(500, Math.round(Number(value?.retentionVersions ?? current.retentionVersions ?? 30) || 30))),
+    concurrency: Math.max(1, Math.min(10, Math.round(Number(value?.concurrency ?? current.concurrency ?? 5) || 5))),
+    timeoutSeconds: Math.max(5, Math.min(120, Math.round(Number(value?.timeoutSeconds ?? current.timeoutSeconds ?? 20) || 20))),
+  };
+}
+
+function normalizeNetworkMapperSettings(value, current = {}) {
+  const url = cleanText(value?.url ?? current.url, 500).replace(/\/+$/, "");
+  if (url && !/^https?:\/\//i.test(url)) throw new Error("نشانی پروژه نقشه شبکه باید با http یا https شروع شود.");
+  return { enabled: value?.enabled === true, url };
+}
+
+function validRouterosVersion(value) {
+  return ["auto", "6", "7"].includes(String(value)) ? String(value) : "auto";
 }
 
 function normalizeBackupSettings(value, current = {}) {
@@ -199,6 +234,7 @@ function requesterIp(req) {
 function csrfAllowed(req) {
   if (!MUTATING.has(req.method)) return true;
   if (req.url.startsWith("/api/auth/login")) return true;
+  if (req.url.startsWith("/api/integration/v1/")) return true;
   return req.headers["x-ems-csrf"] === "1";
 }
 
@@ -215,7 +251,7 @@ async function currentUser(req) {
 }
 
 function requireWriter(user) {
-  if (!user || !["admin", "editor"].includes(user.role)) throw Object.assign(new Error("دسترسی ویرایش ندارید."), { status: 403 });
+  if (!user || !["admin", "technical", "editor"].includes(user.role)) throw Object.assign(new Error("دسترسی ویرایش ندارید."), { status: 403 });
 }
 
 function requireAdmin(user) {
@@ -347,7 +383,9 @@ async function listBootstrap(user) {
   const fullCompanyIds = user.role === "admin"
     ? ids
     : (await pool.query("SELECT company_id AS id FROM user_company_access WHERE user_id=$1", [user.id])).rows.map((item) => item.id);
-  return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds, modules: { networkMap: NETWORK_MAP_ENABLED } };
+  const appearance = normalizeAppearanceSettings(await getSetting("appearance", {}));
+  const networkMapper = normalizeNetworkMapperSettings(await getSetting("network_mapper", {}));
+  return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds, appearance, networkMapper, modules: { networkMap: NETWORK_MAP_ENABLED, radius: RADIUS_ENABLED } };
 }
 
 async function companyData(user, companyId) {
@@ -366,7 +404,8 @@ async function companyData(user, companyId) {
     ),
     pool.query(
       `SELECT id,title,ip,provider,link_role AS "linkRole",device_name AS "deviceName",username,
-              connection_methods AS "connectionMethods",notes
+              connection_methods AS "connectionMethods",notes,backup_enabled AS "backupEnabled",
+              backup_ssh_port AS "backupSshPort",backup_routeros_version AS "backupRouterosVersion"
          FROM company_connections WHERE company_id=$1 ORDER BY link_role,title`,
       [companyId],
     ),
@@ -403,10 +442,19 @@ async function replaceCompanyDetails(client, companyId, body) {
   await client.query("DELETE FROM company_connections WHERE company_id=$1", [companyId]);
   for (const item of connections) {
     await client.query(
-      `INSERT INTO company_connections(id,company_id,title,ip,provider,link_role,device_name,username,connection_methods,notes)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
-      [item.id, companyId, item.title, item.ip, item.provider, item.linkRole, item.deviceName, item.username, JSON.stringify(item.connectionMethods), item.notes],
+      `INSERT INTO company_connections(id,company_id,title,ip,provider,link_role,device_name,username,connection_methods,notes,
+                                       backup_enabled,backup_ssh_port,backup_routeros_version)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13)`,
+      [item.id, companyId, item.title, item.ip, item.provider, item.linkRole, item.deviceName, item.username, JSON.stringify(item.connectionMethods), item.notes,
+        item.backupEnabled, item.backupSshPort, item.backupRouterosVersion],
     );
+  }
+  await client.query("UPDATE mikrotik_backup_targets SET enabled=false,updated_at=now() WHERE source_type='company_connection' AND company_id=$1", [companyId]);
+  for (const item of connections.filter((connection) => connection.backupEnabled)) {
+    await upsertBackupTarget(client, {
+      sourceType: "company_connection", sourceId: item.id, companyId, name: item.deviceName || item.title,
+      ip: item.ip, sshPort: item.backupSshPort, username: item.username, routerosVersion: item.backupRouterosVersion,
+    });
   }
 }
 
@@ -427,6 +475,8 @@ async function spaceData(user, spaceId) {
               monitor_ca_pem AS "monitorCaPem",
               monitor_interval AS "monitorInterval",monitor_state AS "monitorState",monitor_checked_at AS "monitorCheckedAt",
               monitor_last_ok_at AS "monitorLastOkAt",monitor_failures AS "monitorFailures",monitor_error AS "monitorError",
+              backup_enabled AS "backupEnabled",backup_ssh_port AS "backupSshPort",backup_username AS "backupUsername",
+              backup_routeros_version AS "backupRouterosVersion",report_enabled AS "reportEnabled",
               secret_ref AS "secretRef",(secret_ciphertext <> '') AS "hasPassword",
               notes,ports,updated_at AS "updatedAt"
          FROM hosts WHERE space_id=$1 AND deleted_at IS NULL ORDER BY ip`,
@@ -499,6 +549,8 @@ async function inventoryData(user) {
               h.monitor_ca_pem AS "monitorCaPem",
               h.monitor_interval AS "monitorInterval",h.monitor_state AS "monitorState",h.monitor_checked_at AS "monitorCheckedAt",
               h.monitor_last_ok_at AS "monitorLastOkAt",h.monitor_failures AS "monitorFailures",h.monitor_error AS "monitorError",
+              h.backup_enabled AS "backupEnabled",h.backup_ssh_port AS "backupSshPort",h.backup_username AS "backupUsername",
+              h.backup_routeros_version AS "backupRouterosVersion",h.report_enabled AS "reportEnabled",
               (h.secret_ciphertext <> '') AS "hasPassword",s.name AS "spaceName",s.cidr AS "spaceCidr",
               c.id AS "companyId",c.name AS "companyName"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
@@ -566,6 +618,20 @@ async function searchData(user, query) {
   items.push(...companies.rows.map((item) => ({ kind: "company", companyId: item.id, ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
+  try {
+    const radiusTable = (await pool.query("SELECT to_regclass('public.radius_mac_clients') AS name")).rows[0]?.name;
+    if (radiusTable && ["admin", "technical", "helpdesk", "editor"].includes(user.role)) {
+      const macQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
+      const macs = await pool.query(
+        `SELECT id,mac,name,device_type AS "deviceType",access_mode AS "accessMode",vlan,enabled,last_switch_ip AS "lastSwitchIp",last_switch_name AS "lastSwitchName",last_port AS "lastPort",last_vlan AS "lastVlan"
+           FROM radius_mac_clients
+          WHERE mac ILIKE $1 OR name ILIKE $2 OR last_switch_ip ILIKE $2 OR last_switch_name ILIKE $2
+          ORDER BY name,mac LIMIT 15`,
+        [`%${macQuery || q}%`, `%${q}%`],
+      );
+      items.push(...macs.rows.map((item) => ({ kind: "mac-client", ...item })));
+    }
+  } catch {}
   if (exactIp && !hosts.rows.some((item) => item.ip === exactIp)) {
     const address = parseCidr(`${exactIp}/32`);
     const containing = spaces.map((item) => ({ item, info: parseCidr(item.cidr) }))
@@ -606,9 +672,10 @@ async function createBackupFile() {
   try {
     await execFileAsync("pg_dump", ["--format=custom", "--file", path.join(workDir, "database.dump")], { env: process.env, timeout: 300_000 });
     const metadata = [
-      `EMS_BACKUP_VERSION='2'`,
+      `EMS_BACKUP_VERSION='1'`,
       `EMS_APP_VERSION='${APP_VERSION}'`,
       `EMS_CREATED_AT='${new Date().toISOString()}'`,
+      `EMS_SECRET_KEY='${SECRET_KEY}'`,
       "",
     ].join("\n");
     await fs.writeFile(path.join(workDir, "metadata.env"), metadata, { mode: 0o600 });
@@ -634,6 +701,180 @@ async function listBackupFiles() {
 async function getSetting(key, fallback = {}) {
   const found = await pool.query("SELECT value FROM app_settings WHERE key=$1", [key]);
   return found.rows[0]?.value || fallback;
+}
+
+async function saveSetting(key, value, userId = null) {
+  await pool.query(
+    `INSERT INTO app_settings(key,value,updated_by,updated_at) VALUES($1,$2::jsonb,$3,now())
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=now()`,
+    [key, JSON.stringify(value), userId],
+  );
+}
+
+async function upsertBackupTarget(client, item) {
+  const sourceType = ["host", "company_connection", "manual"].includes(item.sourceType) ? item.sourceType : "manual";
+  const ip = validateHostIp(item.ip, "0.0.0.0/0");
+  const sshPort = validatePort(item.sshPort || 22, { allowZero: false }) || 22;
+  const values = [
+    crypto.randomUUID(), sourceType, cleanText(item.sourceId, 80) || null, cleanText(item.companyId, 80) || null,
+    cleanText(item.spaceId, 80) || null, cleanText(item.name, 160), ip, sshPort, cleanText(item.username, 120),
+    validRouterosVersion(item.routerosVersion), item.createdBy || null,
+  ];
+  const saved = await client.query(
+    `INSERT INTO mikrotik_backup_targets(id,source_type,source_id,company_id,space_id,name,ip,ssh_port,username,routeros_version,enabled,created_by)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11)
+     ON CONFLICT(ip,ssh_port) DO UPDATE SET source_type=excluded.source_type,source_id=excluded.source_id,
+       company_id=excluded.company_id,space_id=excluded.space_id,name=excluded.name,username=excluded.username,
+       routeros_version=excluded.routeros_version,enabled=true,updated_at=now()
+     RETURNING id`,
+    values,
+  );
+  return saved.rows[0].id;
+}
+
+async function listConfigBackupTargets() {
+  const settings = normalizeConfigBackupSettings(await getSetting("config_backup", {}));
+  const result = await pool.query(
+    `SELECT t.id,t.source_type AS "sourceType",t.source_id AS "sourceId",t.company_id AS "companyId",t.space_id AS "spaceId",
+            t.name,t.ip,t.ssh_port AS "sshPort",t.username,t.routeros_version AS "routerosVersion",t.last_status AS "lastStatus",
+            t.last_error AS "lastError",t.last_run_at AS "lastRunAt",c.name AS "companyName",s.name AS "spaceName",
+            (SELECT count(*)::int FROM mikrotik_config_backups b WHERE b.target_id=t.id) AS "backupCount"
+       FROM mikrotik_backup_targets t
+       LEFT JOIN companies c ON c.id=t.company_id
+       LEFT JOIN address_spaces s ON s.id=t.space_id
+      WHERE t.enabled=true ORDER BY COALESCE(c.name,''),COALESCE(NULLIF(t.name,''),t.ip),t.ip,t.ssh_port`,
+  );
+  return { settings, items: result.rows };
+}
+
+async function runConfigBackupItem({ target, password, user, settings }) {
+  try {
+    const result = await runMikrotikBackup({
+      target,
+      password,
+      timeoutSeconds: settings.timeoutSeconds,
+      knownHostsPath: path.join(BACKUP_DIR, "ssh-known-hosts"),
+    });
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO mikrotik_config_backups(id,target_id,target_name,identity,ip,ssh_port,routeros_version,filename,content_ciphertext,size_bytes,created_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, target.id, target.name, result.identity, target.ip, target.sshPort, result.version, result.filename,
+        secretBox.encrypt(result.content), result.sizeBytes, user.id],
+    );
+    await pool.query("UPDATE mikrotik_backup_targets SET last_status='success',last_error='',last_run_at=now(),updated_at=now() WHERE id=$1", [target.id]);
+    await pool.query(
+      `DELETE FROM mikrotik_config_backups WHERE id IN (
+         SELECT id FROM mikrotik_config_backups WHERE target_id=$1 ORDER BY created_at DESC OFFSET $2
+       )`,
+      [target.id, settings.retentionVersions],
+    );
+    await audit(user, "create", "mikrotik_config_backup", id, { companyId: target.companyId, spaceId: target.spaceId, detail: { ip: target.ip, filename: result.filename } });
+    return { id: target.id, ok: true, backupId: id, filename: result.filename, identity: result.identity, version: result.version, sizeBytes: result.sizeBytes };
+  } catch (error) {
+    const message = cleanText(error.message || "بکاپ ناموفق بود.", 500);
+    await pool.query("UPDATE mikrotik_backup_targets SET last_status='failed',last_error=$1,last_run_at=now(),updated_at=now() WHERE id=$2", [message, target.id]);
+    return { id: target.id, ok: false, error: message };
+  }
+}
+
+function onlineTargetAddresses(target) {
+  if (target.targetType === "ip") return [validateHostIp(target.target, "0.0.0.0/0")];
+  const info = parseCidr(target.target);
+  if (!info || !info.canonical) throw new Error("زیرشبکه معتبر و به‌صورت Network/CIDR وارد نشده است.");
+  if (info.size > 4096) throw new Error("برای جلوگیری از فشار شبکه، هر هدف گزارش حداکثر می‌تواند ۴۰۹۶ آدرس داشته باشد.");
+  const start = info.prefix <= 30 ? info.start + 1 : info.start;
+  const end = info.prefix <= 30 ? info.end - 1 : info.end;
+  return Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => intToIpv4(start + index));
+}
+
+async function runOnlineReportTargets(targets, { manual = false } = {}) {
+  const ips = [...new Set(targets.flatMap((target) => onlineTargetAddresses(target)))];
+  if (!ips.length) throw new Error("فهرست گزارش IP فعالی ندارد.");
+  const runId = crypto.randomUUID();
+  const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  await pool.query(
+    `INSERT INTO online_report_runs(id,target_id,target,scheduled_date,manual,total_count)
+     VALUES($1,NULL,$2,$3::date,$4,$5)`,
+    [runId, "فهرست گزارش آنلاین‌بودن", localDate, manual, ips.length],
+  );
+  try {
+    const results = await pingMany(ips, { concurrency: 32, timeoutSeconds: 1, attempts: 3 });
+    const known = ips.length ? await pool.query(
+      `SELECT h.id,h.ip,h.name,c.name AS "companyName",s.name AS "spaceName"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+        WHERE h.ip=ANY($1::text[]) AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,
+      [ips],
+    ) : { rows: [] };
+    const knownByIp = new Map(known.rows.map((item) => [item.ip, item]));
+    const rows = [...results.entries()];
+    for (let offset = 0; offset < rows.length; offset += 250) {
+      const chunk = rows.slice(offset, offset + 250);
+      const params = [];
+      const values = chunk.map(([ip, online], index) => {
+        const item = knownByIp.get(ip);
+        params.push(runId, ip, item?.id || null, item?.name || "", item?.companyName || "", item?.spaceName || "", online);
+        const base = index * 7;
+        return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7})`;
+      });
+      if (values.length) await pool.query(
+        `INSERT INTO online_report_results(run_id,ip,host_id,name,company_name,space_name,online) VALUES ${values.join(",")}`,
+        params,
+      );
+    }
+    const onlineCount = rows.filter(([, online]) => online).length;
+    await pool.query(
+      "UPDATE online_report_runs SET status='success',online_count=$1,offline_count=$2,completed_at=now() WHERE id=$3",
+      [onlineCount, rows.length - onlineCount, runId],
+    );
+    const targetIds = targets.map((target) => target.id).filter(Boolean);
+    if (targetIds.length) await pool.query("UPDATE online_report_targets SET last_run_date=$1::date,updated_at=now() WHERE id=ANY($2::text[])", [localDate, targetIds]);
+    broadcast({ type: "online_report", entityId: runId });
+    return { id: runId, total: rows.length, online: onlineCount, offline: rows.length - onlineCount };
+  } catch (error) {
+    await pool.query("UPDATE online_report_runs SET status='failed',completed_at=now() WHERE id=$1", [runId]);
+    throw error;
+  }
+}
+
+let onlineReportCycleRunning = false;
+async function runOnlineReportCycle() {
+  if (onlineReportCycleRunning) return;
+  onlineReportCycleRunning = true;
+  try {
+    const now = new Date();
+    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const localTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+    const rawSettings = await getSetting("online_report", { enabled: true, checkTime: "19:00", retentionDays: 10, lastRunDate: null });
+    const checkTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(rawSettings.checkTime || "")) ? rawSettings.checkTime : "19:00";
+    if (rawSettings.enabled !== false && localTime >= checkTime && rawSettings.lastRunDate !== localDate) {
+      const targets = await pool.query(`SELECT id,target_type AS "targetType",target,name FROM online_report_targets WHERE enabled=true ORDER BY target`);
+      if (targets.rowCount) {
+        await runOnlineReportTargets(targets.rows);
+        await pool.query(
+          `INSERT INTO app_settings(key,value,updated_at) VALUES('online_report',$1::jsonb,now())
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()`,
+          [JSON.stringify({ ...rawSettings, enabled: true, checkTime, retentionDays: 10, lastRunDate: localDate })],
+        );
+      }
+    }
+    await pool.query("DELETE FROM online_report_runs WHERE started_at < now() - interval '10 days'");
+  } finally {
+    onlineReportCycleRunning = false;
+  }
+}
+
+function tokenDigest(value) {
+  return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+}
+
+async function integrationAccess(req) {
+  const match = String(req.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const found = await pool.query("SELECT id,name FROM integration_tokens WHERE token_hash=$1 AND active=true", [tokenDigest(match[1])]);
+  if (!found.rowCount) return null;
+  await pool.query("UPDATE integration_tokens SET last_used_at=now() WHERE id=$1", [found.rows[0].id]);
+  return found.rows[0];
 }
 
 function nextBackupAt(settings) {
@@ -680,6 +921,71 @@ async function runAutomaticBackup() {
   }
 }
 
+async function integrationApi(req, res, url, integration) {
+  if (!integration) return errorResponse(res, 401, "توکن ارتباط نقشه شبکه معتبر نیست.");
+  if (req.method === "GET" && url.pathname === "/api/integration/v1/snapshot") {
+    const [companies, spaces, hosts] = await Promise.all([
+      pool.query("SELECT id,parent_company_id AS \"parentCompanyId\",kind,name,code FROM companies WHERE deleted_at IS NULL ORDER BY name"),
+      pool.query("SELECT id,company_id AS \"companyId\",name,cidr,color FROM address_spaces WHERE deleted_at IS NULL ORDER BY cidr"),
+      pool.query(
+        `SELECT h.id,h.space_id AS "spaceId",s.company_id AS "companyId",h.ip,h.name,h.type,h.vendor,h.model,h.serial,h.firmware,h.mac,h.vlan,
+                h.location,h.status,h.updated_at AS "updatedAt"
+           FROM hosts h
+           JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+          WHERE h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL ORDER BY h.ip`,
+      ),
+    ]);
+    const ports = await pool.query(
+      `SELECT p.id,p.host_id AS "hostId",p.name,p.description,p.port_type AS "portType",p.speed,p.vlan_mode AS "vlanMode",p.vlan,p.enabled
+         FROM device_ports p JOIN hosts h ON h.id=p.host_id WHERE h.deleted_at IS NULL ORDER BY p.name`,
+    );
+    const byHost = new Map();
+    for (const item of ports.rows) {
+      if (!byHost.has(item.hostId)) byHost.set(item.hostId, []);
+      byHost.get(item.hostId).push(item);
+    }
+    return json(res, 200, { ok: true, version: 1, generatedAt: new Date().toISOString(), companies: companies.rows, spaces: spaces.rows, hosts: hosts.rows.map((item) => ({ ...item, devicePorts: byHost.get(item.id) || [] })) });
+  }
+  if (req.method === "POST" && url.pathname === "/api/integration/v1/hosts/sync") {
+    const body = await readBody(req);
+    const items = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+    const spaces = await pool.query("SELECT id,company_id AS \"companyId\",cidr FROM address_spaces WHERE deleted_at IS NULL");
+    const parsedSpaces = spaces.rows.map((item) => ({ ...item, info: parseCidr(item.cidr) })).filter((item) => item.info);
+    const results = [];
+    for (const input of items) {
+      let ip;
+      try { ip = validateHostIp(input?.ip, "0.0.0.0/0"); }
+      catch { results.push({ ip: cleanText(input?.ip, 64), status: "invalid" }); continue; }
+      const address = parseCidr(`${ip}/32`);
+      const requestedSpace = parsedSpaces.find((item) => item.id === cleanText(input?.spaceId, 80));
+      const space = requestedSpace && contains(requestedSpace.info, address)
+        ? requestedSpace
+        : parsedSpaces.filter((item) => contains(item.info, address)).sort((a, b) => b.info.prefix - a.info.prefix)[0];
+      if (!space) { results.push({ ip, status: "outside_range" }); continue; }
+      const existing = (await pool.query("SELECT id,name,type,vendor,model,mac FROM hosts WHERE space_id=$1 AND ip=$2 AND deleted_at IS NULL", [space.id, ip])).rows[0];
+      if (existing) {
+        await pool.query(
+          `UPDATE hosts SET name=CASE WHEN name='' THEN $1 ELSE name END,type=CASE WHEN type='' THEN $2 ELSE type END,
+             vendor=CASE WHEN vendor='' THEN $3 ELSE vendor END,model=CASE WHEN model='' THEN $4 ELSE model END,
+             mac=CASE WHEN mac='' THEN $5 ELSE mac END,updated_at=now() WHERE id=$6`,
+          [cleanText(input?.name, 160), cleanText(input?.type, 100) || "سوئیچ", cleanText(input?.vendor, 100), cleanText(input?.model, 120), cleanText(input?.mac, 32), existing.id],
+        );
+        results.push({ ip, id: existing.id, status: "matched", name: existing.name || cleanText(input?.name, 160) });
+      } else {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO hosts(id,space_id,ip,name,type,vendor,model,mac,status,created_at,updated_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,'active',now(),now())`,
+          [id, space.id, ip, cleanText(input?.name, 160), cleanText(input?.type, 100) || "سوئیچ", cleanText(input?.vendor, 100), cleanText(input?.model, 120), cleanText(input?.mac, 32)],
+        );
+        results.push({ ip, id, status: "created", name: cleanText(input?.name, 160) });
+      }
+    }
+    return json(res, 200, { ok: true, results });
+  }
+  return errorResponse(res, 404, "مسیر ارتباط نقشه شبکه پیدا نشد.");
+}
+
 async function api(req, res, url, user) {
   const pathname = url.pathname;
 
@@ -708,6 +1014,8 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true }, { "Set-Cookie": sessionCookie(token, COOKIE_SECURE) });
   }
 
+  if (pathname.startsWith("/api/integration/v1/")) return integrationApi(req, res, url, await integrationAccess(req));
+
   if (!user) return errorResponse(res, 401, "ابتدا وارد سامانه شوید.");
 
   if (req.method === "POST" && pathname === "/api/auth/logout") {
@@ -717,6 +1025,55 @@ async function api(req, res, url, user) {
   }
 
   if (req.method === "GET" && pathname === "/api/bootstrap") return json(res, 200, await listBootstrap(user));
+
+  if (req.method === "PUT" && pathname === "/api/settings/appearance") {
+    requireAdmin(user);
+    const settings = normalizeAppearanceSettings(await readBody(req), await getSetting("appearance", {}));
+    await saveSetting("appearance", settings, user.id);
+    await audit(user, "update", "appearance_settings", null, { detail: settings });
+    broadcast({ type: "appearance" });
+    return json(res, 200, { ok: true, settings });
+  }
+
+  if (pathname === "/api/integrations/network-map" && req.method === "GET") {
+    requireAdmin(user);
+    const settings = normalizeNetworkMapperSettings(await getSetting("network_mapper", {}));
+    const tokens = await pool.query(
+      `SELECT id,name,active,created_at AS "createdAt",last_used_at AS "lastUsedAt"
+         FROM integration_tokens ORDER BY created_at DESC`,
+    );
+    return json(res, 200, { ok: true, settings, tokens: tokens.rows, apiPath: "/api/integration/v1/snapshot" });
+  }
+
+  if (pathname === "/api/integrations/network-map" && req.method === "PUT") {
+    requireAdmin(user);
+    const settings = normalizeNetworkMapperSettings(await readBody(req), await getSetting("network_mapper", {}));
+    await saveSetting("network_mapper", settings, user.id);
+    await audit(user, "update", "network_mapper_settings", null, { detail: settings });
+    broadcast({ type: "network_mapper" });
+    return json(res, 200, { ok: true, settings });
+  }
+
+  if (pathname === "/api/integrations/network-map/token" && req.method === "POST") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const token = `emsmap_${crypto.randomBytes(32).toString("base64url")}`;
+    const id = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO integration_tokens(id,name,token_hash,created_by) VALUES($1,$2,$3,$4)",
+      [id, cleanText(body.name, 120) || "EMS Network Mapper", tokenDigest(token), user.id],
+    );
+    await audit(user, "create", "integration_token", id, { detail: { name: cleanText(body.name, 120) || "EMS Network Mapper" } });
+    return json(res, 201, { ok: true, id, token });
+  }
+
+  const integrationTokenMutation = pathname.match(/^\/api\/integrations\/network-map\/token\/([^/]+)$/);
+  if (integrationTokenMutation && req.method === "DELETE") {
+    requireAdmin(user);
+    await pool.query("UPDATE integration_tokens SET active=false WHERE id=$1", [integrationTokenMutation[1]]);
+    await audit(user, "disable", "integration_token", integrationTokenMutation[1]);
+    return json(res, 200, { ok: true });
+  }
 
   if (req.method === "GET" && pathname === "/api/search") {
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
@@ -757,6 +1114,239 @@ async function api(req, res, url, user) {
     const filename = await createBackupFile();
     await audit(user, "create", "backup", filename);
     return json(res, 201, { ok: true, filename });
+  }
+
+  if (req.method === "GET" && pathname === "/api/config-backups") {
+    requireAdmin(user);
+    return json(res, 200, { ok: true, ...(await listConfigBackupTargets()) });
+  }
+
+  if (req.method === "PUT" && pathname === "/api/config-backups/settings") {
+    requireAdmin(user);
+    const settings = normalizeConfigBackupSettings(await readBody(req), await getSetting("config_backup", {}));
+    await saveSetting("config_backup", settings, user.id);
+    return json(res, 200, { ok: true, settings });
+  }
+
+  if (req.method === "POST" && pathname === "/api/config-backups/targets") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const id = await upsertBackupTarget(pool, {
+      sourceType: "manual", name: body.name, ip: body.ip, sshPort: body.sshPort,
+      username: body.username, routerosVersion: body.routerosVersion, companyId: body.companyId,
+      spaceId: body.spaceId, createdBy: user.id,
+    });
+    await audit(user, "create", "mikrotik_backup_target", id, { detail: { ip: cleanText(body.ip, 64) } });
+    return json(res, 201, { ok: true, id });
+  }
+
+  const configTargetMutation = pathname.match(/^\/api\/config-backups\/targets\/([^/]+)$/);
+  if (configTargetMutation && req.method === "PUT") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const ip = validateHostIp(body.ip, "0.0.0.0/0");
+    const sshPort = validatePort(body.sshPort || 22, { allowZero: false }) || 22;
+    const result = await pool.query(
+      `UPDATE mikrotik_backup_targets SET name=$1,ip=$2,ssh_port=$3,username=$4,routeros_version=$5,enabled=true,updated_at=now()
+        WHERE id=$6 RETURNING id`,
+      [cleanText(body.name, 160), ip, sshPort, cleanText(body.username, 120), validRouterosVersion(body.routerosVersion), configTargetMutation[1]],
+    );
+    if (!result.rowCount) throw Object.assign(new Error("هدف بکاپ پیدا نشد."), { status: 404 });
+    return json(res, 200, { ok: true });
+  }
+
+  if (configTargetMutation && req.method === "DELETE") {
+    requireAdmin(user);
+    const result = await pool.query("UPDATE mikrotik_backup_targets SET enabled=false,updated_at=now() WHERE id=$1 RETURNING id", [configTargetMutation[1]]);
+    if (!result.rowCount) throw Object.assign(new Error("هدف بکاپ پیدا نشد."), { status: 404 });
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "POST" && pathname === "/api/config-backups/run") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const supplied = Array.isArray(body.items) ? body.items.slice(0, 100) : [];
+    const ids = [...new Set(supplied.map((item) => cleanText(item?.id, 80)).filter(Boolean))];
+    if (!ids.length) throw new Error("حداقل یک دستگاه را برای بکاپ انتخاب کنید.");
+    const found = await pool.query(
+      `SELECT id,source_type AS "sourceType",source_id AS "sourceId",company_id AS "companyId",space_id AS "spaceId",
+              name,ip,ssh_port AS "sshPort",username,routeros_version AS "routerosVersion"
+         FROM mikrotik_backup_targets WHERE id=ANY($1::text[]) AND enabled=true`,
+      [ids],
+    );
+    const byId = new Map(found.rows.map((item) => [item.id, item]));
+    const passwordById = new Map(supplied.map((item) => [cleanText(item?.id, 80), String(item?.password ?? "")]));
+    const settings = normalizeConfigBackupSettings(await getSetting("config_backup", {}));
+    const results = [];
+    let cursor = 0;
+    async function worker() {
+      while (cursor < ids.length) {
+        const index = cursor; cursor += 1;
+        const id = ids[index];
+        const target = byId.get(id);
+        if (!target) results[index] = { id, ok: false, error: "هدف بکاپ پیدا نشد یا غیرفعال است." };
+        else results[index] = await runConfigBackupItem({ target, password: passwordById.get(id), user, settings });
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(settings.concurrency, ids.length) }, () => worker()));
+    const successful = results.filter((item) => item.ok).length;
+    return json(res, 200, { ok: true, results, successful, failed: results.length - successful });
+  }
+
+  const configHistory = pathname.match(/^\/api\/config-backups\/targets\/([^/]+)\/history$/);
+  if (configHistory && req.method === "GET") {
+    requireAdmin(user);
+    const rows = await pool.query(
+      `SELECT id,target_id AS "targetId",target_name AS "targetName",identity,ip,ssh_port AS "sshPort",routeros_version AS "routerosVersion",
+              filename,size_bytes AS "sizeBytes",status,error,created_at AS "createdAt"
+         FROM mikrotik_config_backups WHERE target_id=$1 ORDER BY created_at DESC`,
+      [configHistory[1]],
+    );
+    return json(res, 200, { ok: true, items: rows.rows });
+  }
+
+  const configFileView = pathname.match(/^\/api\/config-backups\/files\/([^/]+)$/);
+  if (configFileView && req.method === "GET") {
+    requireAdmin(user);
+    const found = await pool.query(
+      `SELECT id,filename,content_ciphertext AS content,created_at AS "createdAt" FROM mikrotik_config_backups WHERE id=$1`,
+      [configFileView[1]],
+    );
+    if (!found.rowCount) throw Object.assign(new Error("فایل کانفیگ پیدا نشد."), { status: 404 });
+    return json(res, 200, { ok: true, id: found.rows[0].id, filename: found.rows[0].filename, content: secretBox.decrypt(found.rows[0].content), createdAt: found.rows[0].createdAt });
+  }
+
+  const configFileDownload = pathname.match(/^\/api\/config-backups\/files\/([^/]+)\/download$/);
+  if (configFileDownload && req.method === "GET") {
+    requireAdmin(user);
+    const found = await pool.query("SELECT filename,content_ciphertext AS content FROM mikrotik_config_backups WHERE id=$1", [configFileDownload[1]]);
+    if (!found.rowCount) throw Object.assign(new Error("فایل کانفیگ پیدا نشد."), { status: 404 });
+    const content = Buffer.from(secretBox.decrypt(found.rows[0].content), "utf8");
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8", "Content-Length": content.length, "Cache-Control": "no-store",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(found.rows[0].filename)}`, "X-Content-Type-Options": "nosniff",
+    });
+    res.end(content); return;
+  }
+
+  if (configFileView && req.method === "DELETE") {
+    requireAdmin(user);
+    await pool.query("DELETE FROM mikrotik_config_backups WHERE id=$1", [configFileView[1]]);
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "GET" && pathname === "/api/online-reports") {
+    requireAdmin(user);
+    const [targets, runs, settings] = await Promise.all([
+      pool.query(
+        `SELECT t.id,t.company_id AS "companyId",t.space_id AS "spaceId",t.target_type AS "targetType",t.target,t.name,
+                t.check_time AS "checkTime",t.enabled,t.last_run_date AS "lastRunDate",c.name AS "companyName",s.name AS "spaceName"
+           FROM online_report_targets t LEFT JOIN companies c ON c.id=t.company_id LEFT JOIN address_spaces s ON s.id=t.space_id
+          ORDER BY t.check_time,t.target`,
+      ),
+      pool.query(
+        `SELECT r.id,r.target_id AS "targetId",r.target,r.scheduled_date AS "scheduledDate",r.manual,r.status,
+                r.total_count AS "totalCount",r.online_count AS "onlineCount",r.offline_count AS "offlineCount",
+                r.started_at AS "startedAt",r.completed_at AS "completedAt",t.name AS "targetName"
+           FROM online_report_runs r LEFT JOIN online_report_targets t ON t.id=r.target_id
+          WHERE r.started_at>=now()-interval '10 days' ORDER BY r.started_at DESC LIMIT 100`,
+      ),
+      getSetting("online_report", { enabled: true, checkTime: "19:00", retentionDays: 10, lastRunDate: null }),
+    ]);
+    let results = [];
+    const runId = cleanText(url.searchParams.get("runId"), 80);
+    if (runId) {
+      const rows = await pool.query(
+        `SELECT ip,host_id AS "hostId",name,company_name AS "companyName",space_name AS "spaceName",online,checked_at AS "checkedAt"
+           FROM online_report_results WHERE run_id=$1 ORDER BY online DESC,string_to_array(ip,'.')::int[]`,
+        [runId],
+      );
+      results = rows.rows;
+    }
+    return json(res, 200, { ok: true, retentionDays: 10, settings, targets: targets.rows, runs: runs.rows, results });
+  }
+
+  if (req.method === "PUT" && pathname === "/api/online-reports/settings") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const current = await getSetting("online_report", { enabled: true, checkTime: "19:00", retentionDays: 10, lastRunDate: null });
+    const checkTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.checkTime || "")) ? String(body.checkTime) : "19:00";
+    const saved = { ...current, enabled: body.enabled !== false, checkTime, retentionDays: 10 };
+    await pool.query(
+      `INSERT INTO app_settings(key,value,updated_by,updated_at) VALUES('online_report',$1::jsonb,$2,now())
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=now()`,
+      [JSON.stringify(saved), user.id],
+    );
+    await pool.query("UPDATE online_report_targets SET check_time=$1,updated_at=now()", [checkTime]);
+    return json(res, 200, { ok: true, settings: saved });
+  }
+
+  if (req.method === "POST" && pathname === "/api/online-reports/targets") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const targetType = body.targetType === "subnet" ? "subnet" : "ip";
+    const target = targetType === "ip" ? validateHostIp(body.target, "0.0.0.0/0") : parseCidr(body.target)?.cidr;
+    if (!target) throw new Error("آدرس هدف معتبر نیست.");
+    onlineTargetAddresses({ targetType, target });
+    const reportSettings = await getSetting("online_report", { checkTime: "19:00" });
+    const checkTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(reportSettings.checkTime || "")) ? String(reportSettings.checkTime) : "19:00";
+    const id = crypto.randomUUID();
+    const exists = await pool.query("SELECT id FROM online_report_targets WHERE target_type=$1 AND target=$2 LIMIT 1", [targetType, target]);
+    if (exists.rowCount) {
+      await pool.query("UPDATE online_report_targets SET name=$1,company_id=COALESCE($2,company_id),space_id=COALESCE($3,space_id),check_time=$4,enabled=true,updated_at=now() WHERE id=$5", [cleanText(body.name, 160), cleanText(body.companyId, 80) || null, cleanText(body.spaceId, 80) || null, checkTime, exists.rows[0].id]);
+      if (targetType === "ip") await pool.query("UPDATE hosts SET report_enabled=true WHERE ip=$1 AND deleted_at IS NULL", [target]);
+      return json(res, 200, { ok: true, id: exists.rows[0].id, existing: true });
+    }
+    await pool.query(`INSERT INTO online_report_targets(id,company_id,space_id,target_type,target,name,check_time,enabled,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,true,$8)`, [id, cleanText(body.companyId, 80) || null, cleanText(body.spaceId, 80) || null, targetType, target, cleanText(body.name, 160), checkTime, user.id]);
+    if (targetType === "ip") await pool.query("UPDATE hosts SET report_enabled=true WHERE ip=$1 AND deleted_at IS NULL", [target]);
+    return json(res, 201, { ok: true, id });
+  }
+
+  const onlineTargetMutation = pathname.match(/^\/api\/online-reports\/targets\/([^/]+)$/);
+  if (onlineTargetMutation && req.method === "PUT") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const updated = await pool.query(
+      "UPDATE online_report_targets SET name=$1,enabled=$2,updated_at=now() WHERE id=$3 RETURNING id",
+      [cleanText(body.name, 160), body.enabled !== false, onlineTargetMutation[1]],
+    );
+    if (!updated.rowCount) throw Object.assign(new Error("هدف گزارش پیدا نشد."), { status: 404 });
+    return json(res, 200, { ok: true });
+  }
+
+  if (onlineTargetMutation && req.method === "DELETE") {
+    requireAdmin(user);
+    const removed = await pool.query("DELETE FROM online_report_targets WHERE id=$1 RETURNING target_type AS \"targetType\",target", [onlineTargetMutation[1]]);
+    if (removed.rows[0]?.targetType === "ip") await pool.query("UPDATE hosts SET report_enabled=false WHERE ip=$1", [removed.rows[0].target]);
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "POST" && pathname === "/api/online-reports/run") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const ids = [...new Set((Array.isArray(body.targetIds) ? body.targetIds : []).map((item) => cleanText(item, 80)).filter(Boolean))];
+    if (!ids.length) throw new Error("حداقل یک هدف را انتخاب کنید.");
+    const found = await pool.query(
+      `SELECT id,target_type AS "targetType",target,name,check_time AS "checkTime" FROM online_report_targets WHERE id=ANY($1::text[])`,
+      [ids],
+    );
+    const result = await runOnlineReportTargets(found.rows, { manual: true });
+    return json(res, 200, { ok: true, results: [result] });
+  }
+
+  if (req.method === "GET" && pathname === "/api/online-reports/export") {
+    requireAdmin(user);
+    const runId = cleanText(url.searchParams.get("runId"), 80);
+    const rows = await pool.query(
+      `SELECT ip,name,company_name AS company,space_name AS space,online,checked_at
+         FROM online_report_results WHERE run_id=$1 ORDER BY online DESC,string_to_array(ip,'.')::int[]`,
+      [runId],
+    );
+    const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const csv = `\uFEFFIP,Name,Company,Range,Online,CheckedAt\n${rows.rows.map((item) => [item.ip,item.name,item.company,item.space,item.online ? "yes" : "no",jalaliDateTime(item.checked_at)].map(quote).join(",")).join("\n")}`;
+    const data = Buffer.from(csv, "utf8");
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Length": data.length, "Content-Disposition": `attachment; filename="online-report-${runId}.csv"`, "Cache-Control": "no-store" });
+    res.end(data); return;
   }
 
   if (req.method === "GET" && pathname === "/api/trash") {
@@ -1280,7 +1870,7 @@ async function api(req, res, url, user) {
     let current = null;
     if (requestedId) {
       current = (await pool.query(
-        "SELECT id,space_id AS \"spaceId\" FROM hosts WHERE id=$1 AND deleted_at IS NULL",
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret,monitor_secret_ciphertext AS \"monitorSecret\" FROM hosts WHERE id=$1 AND deleted_at IS NULL",
         [requestedId],
       )).rows[0] || null;
       if (!current || !(await canAccessSpace(user, current.spaceId))) {
@@ -1288,12 +1878,14 @@ async function api(req, res, url, user) {
       }
     } else {
       current = (await pool.query(
-        "SELECT id,space_id AS \"spaceId\" FROM hosts WHERE space_id=$1 AND ip=$2",
+        "SELECT id,space_id AS \"spaceId\",secret_ciphertext AS secret,monitor_secret_ciphertext AS \"monitorSecret\" FROM hosts WHERE space_id=$1 AND ip=$2",
         [space.id, ip],
       )).rows[0] || null;
     }
     const id = current?.id || crypto.randomUUID();
-    const secretCiphertext = "";
+    let secretCiphertext = current?.secret || "";
+    if (body.clearPassword === true) secretCiphertext = "";
+    else if (String(body.password || "")) secretCiphertext = secretBox.encrypt(String(body.password));
     const monitorSecretCiphertext = "";
     const radioMode = ["", "ap", "station"].includes(String(body.radioMode || "").toLowerCase()) ? String(body.radioMode || "").toLowerCase() : "";
     let radioParentHostId = cleanText(body.radioParentHostId, 80) || null;
@@ -1307,10 +1899,19 @@ async function api(req, res, url, user) {
       if (parent.rows[0].id === id) throw new Error("یک رادیو نمی‌تواند والد خودش باشد.");
     }
     if (radioMode !== "station") radioParentHostId = null;
-    const monitorEnabled = false;
-    const monitorDriver = "";
-    const monitorPort = 8728;
-    const monitorInterval = 60;
+    const monitorEnabled = radioMode === "ap" && body.monitorEnabled === true;
+    const requestedMonitorDriver = ["mikrotik-api", "mikrotik-api-ssl", "mikrotik-rest"].includes(body.monitorDriver)
+      ? body.monitorDriver
+      : "mikrotik-api";
+    const monitorDriver = monitorEnabled ? requestedMonitorDriver : "";
+    const defaultMonitorPort = requestedMonitorDriver === "mikrotik-api" ? 8728 : requestedMonitorDriver === "mikrotik-api-ssl" ? 8729 : 443;
+    const monitorPort = validatePort(body.monitorPort || defaultMonitorPort, { allowZero: false }) || defaultMonitorPort;
+    const monitorInterval = Math.max(60, Math.min(3600, Math.round(Number(body.monitorInterval || 300)) || 300));
+    const backupEnabled = body.backupEnabled === true;
+    const backupSshPort = validatePort(body.backupSshPort || 22, { allowZero: false }) || 22;
+    const backupUsername = cleanText(body.backupUsername || body.monitorUsername || body.username, 120);
+    const backupRouterosVersion = validRouterosVersion(body.backupRouterosVersion);
+    const reportEnabled = body.reportEnabled === true;
     const values = [
       id, space.id, ip, cleanText(body.name, 160), cleanText(body.status, 40) || "active",
       cleanText(body.type, 100), cleanText(body.os, 160), cleanText(body.mac, 32), cleanText(body.vlan, 40),
@@ -1319,8 +1920,8 @@ async function api(req, res, url, user) {
       cleanText(body.vendor, 100), cleanText(body.model, 120), cleanText(body.serial, 120), cleanText(body.firmware, 120),
       radioMode, cleanText(body.ssid, 160), cleanText(body.frequency, 80), cleanText(body.channel, 80),
       cleanText(body.signal, 40), radioParentHostId, JSON.stringify(normalizeConnections(body.connectionMethods)),
-      monitorEnabled, monitorDriver, monitorPort, "", monitorSecretCiphertext,
-      "", monitorInterval,
+      monitorEnabled, monitorDriver, monitorPort, cleanText(body.monitorUsername, 120), monitorSecretCiphertext,
+      "", monitorInterval,backupEnabled,backupSshPort,backupUsername,backupRouterosVersion,reportEnabled,
     ];
     const client = await pool.connect();
     let savedId = id;
@@ -1329,9 +1930,10 @@ async function api(req, res, url, user) {
       const saved = await client.query(
         `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by,
                            vendor,model,serial,firmware,radio_mode,ssid,frequency,channel,signal,radio_parent_host_id,connection_methods,
-                           monitor_enabled,monitor_driver,monitor_port,monitor_username,monitor_secret_ciphertext,monitor_ca_pem,monitor_interval)
+                           monitor_enabled,monitor_driver,monitor_port,monitor_username,monitor_secret_ciphertext,monitor_ca_pem,monitor_interval,
+                           backup_enabled,backup_ssh_port,backup_username,backup_routeros_version,report_enabled)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,
-                $29,$30,$31,$32,$33,$34,$35)
+                $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
          ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id,ip=excluded.ip,name=excluded.name,status=excluded.status,type=excluded.type,
            os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
            location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
@@ -1340,7 +1942,9 @@ async function api(req, res, url, user) {
            channel=excluded.channel,signal=excluded.signal,radio_parent_host_id=excluded.radio_parent_host_id,
            connection_methods=excluded.connection_methods,monitor_enabled=excluded.monitor_enabled,monitor_driver=excluded.monitor_driver,
            monitor_port=excluded.monitor_port,monitor_username=excluded.monitor_username,monitor_secret_ciphertext=excluded.monitor_secret_ciphertext,
-           monitor_ca_pem=excluded.monitor_ca_pem,monitor_interval=excluded.monitor_interval,deleted_at=NULL,deleted_by=NULL,
+           monitor_ca_pem=excluded.monitor_ca_pem,monitor_interval=excluded.monitor_interval,
+           backup_enabled=excluded.backup_enabled,backup_ssh_port=excluded.backup_ssh_port,backup_username=excluded.backup_username,
+           backup_routeros_version=excluded.backup_routeros_version,report_enabled=excluded.report_enabled,deleted_at=NULL,deleted_by=NULL,
            updated_by=excluded.updated_by,updated_at=now()
          RETURNING id`,
         values,
@@ -1357,6 +1961,24 @@ async function api(req, res, url, user) {
           );
         }
       }
+      await client.query("UPDATE mikrotik_backup_targets SET enabled=false,updated_at=now() WHERE source_type='host' AND source_id=$1", [savedId]);
+      if (backupEnabled) {
+        await upsertBackupTarget(client, {
+          sourceType: "host", sourceId: savedId, companyId: space.companyId, spaceId: space.id,
+          name: cleanText(body.name, 160) || ip, ip, sshPort: backupSshPort, username: backupUsername,
+          routerosVersion: backupRouterosVersion, createdBy: user.id,
+        });
+      }
+      await client.query("DELETE FROM online_report_targets WHERE target_type='ip' AND target=$1", [ip]);
+      if (reportEnabled) {
+        const reportSettings = await client.query("SELECT value FROM app_settings WHERE key='online_report'");
+        const checkTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(reportSettings.rows[0]?.value?.checkTime || "")) ? reportSettings.rows[0].value.checkTime : "19:00";
+        await client.query(
+          `INSERT INTO online_report_targets(id,company_id,space_id,target_type,target,name,check_time,enabled,created_by)
+           VALUES($1,$2,$3,'ip',$4,$5,$6,true,$7)`,
+          [crypto.randomUUID(), space.companyId, space.id, ip, cleanText(body.name, 160) || ip, checkTime, user.id],
+        );
+      }
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1369,7 +1991,13 @@ async function api(req, res, url, user) {
 
   const hostSecret = pathname.match(/^\/api\/hosts\/([^/]+)\/([^/]+)\/secret$/);
   if (req.method === "GET" && hostSecret) {
-    return errorResponse(res, 410, "ذخیره و نمایش رمز تجهیزات برای حفظ امنیت غیرفعال شده است.");
+    requireWriter(user);
+    const space = await getSpaceForUser(user, hostSecret[1]);
+    const ip = validateHostIp(decodeURIComponent(hostSecret[2]), space.cidr);
+    const found = await pool.query("SELECT secret_ciphertext AS secret FROM hosts WHERE space_id=$1 AND ip=$2 AND deleted_at IS NULL", [space.id, ip]);
+    if (!found.rowCount) throw Object.assign(new Error("اطلاعات IP پیدا نشد."), { status: 404 });
+    await audit(user, "reveal_secret", "host", ip, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
+    return json(res, 200, { ok: true, password: secretBox.decrypt(found.rows[0].secret) });
   }
 
   const hostDelete = pathname.match(/^\/api\/hosts\/([^/]+)\/([^/]+)$/);
@@ -1379,6 +2007,8 @@ async function api(req, res, url, user) {
     const ip = validateHostIp(decodeURIComponent(hostDelete[2]), space.cidr);
     const found = await pool.query("UPDATE hosts SET deleted_at=now(),deleted_by=$1 WHERE space_id=$2 AND ip=$3 AND deleted_at IS NULL RETURNING id", [user.id, space.id, ip]);
     if (!found.rowCount) throw Object.assign(new Error("اطلاعات IP پیدا نشد."), { status: 404 });
+    await pool.query("UPDATE mikrotik_backup_targets SET enabled=false,updated_at=now() WHERE source_type='host' AND source_id=$1", [found.rows[0].id]);
+    await pool.query("DELETE FROM online_report_targets WHERE target_type='ip' AND target=$1", [ip]);
     await audit(user, "delete", "host", found.rows[0].id, { companyId: space.companyId, spaceId: space.id, detail: { ip } });
     broadcast({ type: "host", companyId: space.companyId, spaceId: space.id, entityId: found.rows[0].id });
     return json(res, 200, { ok: true });
@@ -1386,7 +2016,31 @@ async function api(req, res, url, user) {
 
   const hostMonitorTest = pathname.match(/^\/api\/hosts\/([^/]+)\/monitor\/test$/);
   if (req.method === "POST" && hostMonitorTest) {
-    return errorResponse(res, 410, "پایش خودکار تجهیزات غیرفعال است؛ عملیات فقط با حضور کاربر انجام می‌شود.");
+    requireWriter(user);
+    const host = (await pool.query(
+      `SELECT h.id,h.ip,h.name,h.space_id AS "spaceId",h.monitor_driver AS "monitorDriver",h.monitor_port AS "monitorPort",h.monitor_username AS "monitorUsername",
+              h.monitor_ca_pem AS "monitorCaPem"
+         FROM hosts h WHERE h.id=$1 AND h.deleted_at IS NULL AND h.radio_mode='ap'`,
+      [hostMonitorTest[1]],
+    )).rows[0];
+    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("رادیوی قابل پایش پیدا نشد."), { status: 404 });
+    const body = await readBody(req);
+    host.monitorDriver = "mikrotik-api";
+    host.monitorUsername = cleanText(body.username || host.monitorUsername, 120);
+    host.monitorPort = validatePort(body.port || host.monitorPort || 8728, { allowZero: false }) || 8728;
+    const password = String(body.password || "");
+    if (!host.monitorUsername) throw new Error("نام کاربری میکروتیک را وارد کنید.");
+    try {
+      const result = await pollMikrotik({ host, password });
+      await saveMikrotikPoll({ pool, host, result });
+      await pool.query("UPDATE hosts SET monitor_username=$1,monitor_port=$2,monitor_driver='mikrotik-api',monitor_enabled=true,monitor_secret_ciphertext='' WHERE id=$3", [host.monitorUsername, host.monitorPort, host.id]);
+      await audit(user, "test", "mikrotik_monitor", host.id, { spaceId: host.spaceId, detail: { stations: result.stations.length } });
+      broadcast({ type: "host", spaceId: host.spaceId, entityId: host.id });
+      return json(res, 200, { ok: true, state: result });
+    } catch (error) {
+      await pool.query("UPDATE hosts SET monitor_checked_at=now(),monitor_failures=monitor_failures+1,monitor_error=$1,monitor_secret_ciphertext='' WHERE id=$2", [cleanText(error.message, 500), host.id]);
+      throw error;
+    }
   }
 
   if (req.method === "POST" && pathname === "/api/mikrotik/script") {
@@ -1569,22 +2223,22 @@ async function staticFile(res, pathname) {
   }
 }
 
-function proxyNetworkMap(req, res) {
+function proxyModule(req, res, upstreamUrl, unavailableMessage) {
   return new Promise((resolve) => {
     const upstream = http.request({
-      protocol: NETWORK_MAP_UPSTREAM.protocol,
-      hostname: NETWORK_MAP_UPSTREAM.hostname,
-      port: NETWORK_MAP_UPSTREAM.port || 80,
+      protocol: upstreamUrl.protocol,
+      hostname: upstreamUrl.hostname,
+      port: upstreamUrl.port || 80,
       method: req.method,
       path: req.url,
-      headers: { ...req.headers, host: NETWORK_MAP_UPSTREAM.host },
+      headers: { ...req.headers, host: upstreamUrl.host },
     }, (response) => {
       res.writeHead(response.statusCode || 502, response.headers);
       response.pipe(res);
       response.on("end", resolve);
     });
     upstream.on("error", () => {
-      if (!res.headersSent) errorResponse(res, 503, "ماژول نقشه شبکه فعال نیست یا هنوز آماده نشده است.");
+      if (!res.headersSent) errorResponse(res, 503, unavailableMessage);
       else res.end();
       resolve();
     });
@@ -1597,7 +2251,11 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     if (url.pathname === "/network-map" || url.pathname.startsWith("/network-map/") || url.pathname.startsWith("/api/network-map/")) {
       if (!NETWORK_MAP_ENABLED) return errorResponse(res, 404, "ماژول نقشه شبکه در این نصب فعال نیست.");
-      return await proxyNetworkMap(req, res);
+      return await proxyModule(req, res, NETWORK_MAP_UPSTREAM, "ماژول نقشه شبکه فعال نیست یا هنوز آماده نشده است.");
+    }
+    if (url.pathname === "/radius" || url.pathname.startsWith("/radius/") || url.pathname.startsWith("/api/radius/")) {
+      if (!RADIUS_ENABLED) return errorResponse(res, 404, "ماژول RADIUS در این نصب فعال نیست.");
+      return await proxyModule(req, res, RADIUS_UPSTREAM, "ماژول RADIUS فعال نیست یا هنوز آماده نشده است.");
     }
     if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, version: APP_VERSION });
     if (url.pathname.startsWith("/api/")) {
@@ -1620,6 +2278,7 @@ server.listen(PORT, "0.0.0.0", () => {
 });
 
 const backupTimer = setInterval(() => runAutomaticBackup().catch((error) => console.error("automatic backup", error)), 60_000);
+const onlineReportTimer = setInterval(() => runOnlineReportCycle().catch((error) => console.error("online report cycle", error)), 60_000);
 const trashTimer = setInterval(async () => {
   try {
     await pool.query("DELETE FROM hosts WHERE deleted_at < now() - interval '30 days'");
@@ -1629,11 +2288,14 @@ const trashTimer = setInterval(async () => {
   } catch (error) { console.error("trash cleanup", error); }
 }, 6 * 60 * 60_000);
 backupTimer.unref();
+onlineReportTimer.unref();
 trashTimer.unref();
 setTimeout(() => runAutomaticBackup().catch((error) => console.error("automatic backup", error)), 5000).unref();
+setTimeout(() => runOnlineReportCycle().catch((error) => console.error("online report cycle", error)), 7000).unref();
 
 async function shutdown() {
   clearInterval(backupTimer);
+  clearInterval(onlineReportTimer);
   clearInterval(trashTimer);
   server.close();
   for (const client of eventClients) client.end();

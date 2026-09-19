@@ -16,6 +16,9 @@ export const DISCOVERY_COMMANDS = [
   "show etherchannel summary",
   "show port-channel summary",
   "show vpc brief",
+  "show mac address-table dynamic",
+  "show running-config | include aaa|radius|mab|dot1x",
+  "show authentication sessions",
 ];
 
 const CONFIG_COMMANDS = ["show running-config"];
@@ -230,7 +233,7 @@ export function mergeRefreshedDevice(topology, refreshed) {
   const copy = structuredClone(topology);
   const index = copy.devices.findIndex((item) => item.ip === refreshed.ip || item.key === refreshed.key);
   const previous = index >= 0 ? copy.devices[index] : null;
-  if (index >= 0) copy.devices[index] = { ...refreshed, ipamHostId: previous?.ipamHostId || null, ipamSpaceId: previous?.ipamSpaceId || null };
+  if (index >= 0) copy.devices[index] = { ...refreshed, manual: Boolean(previous?.manual), manualNotes: previous?.manualNotes || "", ipamHostId: previous?.ipamHostId || null, ipamSpaceId: previous?.ipamSpaceId || null };
   else copy.devices.push(refreshed);
   const key = previous?.key || refreshed.key;
   for (const link of copy.links) {

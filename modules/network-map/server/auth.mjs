@@ -27,7 +27,7 @@ export async function currentUser(pool, req) {
 }
 
 export function requireWriter(user) {
-  if (!user || !["admin", "editor"].includes(user.role)) {
+  if (!user || !["admin", "technical", "editor"].includes(user.role)) {
     throw Object.assign(new Error("دسترسی ویرایش ندارید."), { status: 403 });
   }
 }
@@ -42,7 +42,7 @@ export async function canAccessCompany(pool, user, companyId) {
   if (!user) return false;
   const active = await pool.query("SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyId]);
   if (!active.rowCount) return false;
-  if (user.role === "admin") return true;
+  if (["admin", "technical", "helpdesk", "editor"].includes(user.role)) return true;
   const found = await pool.query(
     `SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2
      UNION ALL
@@ -54,8 +54,8 @@ export async function canAccessCompany(pool, user, companyId) {
 }
 
 export async function canManageCompany(pool, user, companyId) {
-  if (!user || !["admin", "editor"].includes(user.role)) return false;
-  if (user.role === "admin") return true;
+  if (!user || !["admin", "technical", "editor"].includes(user.role)) return false;
+  if (["admin", "technical", "editor"].includes(user.role)) return true;
   return (await pool.query(
     "SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2",
     [user.id, companyId],

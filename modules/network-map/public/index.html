@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>نقشه شبکه — EMS</title>
-  <link rel="stylesheet" href="/network-map/styles.css?v=0.6.0">
-  <link rel="stylesheet" href="/network-map/recovery.css?v=0.6.0">
+  <link rel="stylesheet" href="/network-map/styles.css?v=0.7.0">
+  <link rel="stylesheet" href="/network-map/recovery.css?v=0.7.0">
 </head>
 <body>
   <header class="topbar">
@@ -25,9 +25,10 @@
           <label>شرکت یا سایت<select id="scanCompany" required></select></label>
           <label>نام نقشه<input id="scanName" required maxlength="120" placeholder="مثلاً شبکه دیتاسنتر کرج"></label>
           <label class="full">توضیحات<textarea id="scanDescription" maxlength="1000"></textarea></label>
-          <label>آدرس سوئیچ شروع<input id="scanSeedIp" class="ltr" required inputmode="decimal" placeholder="10.252.22.200"></label>
+          <label>آدرس سوئیچ شروع<input id="scanSeedIp" class="ltr" required inputmode="decimal" placeholder="10.10.22.200"></label>
         </div></section>
-        <section class="form-section"><h3>اتصال موقت</h3><div class="security-note"><b>رمز ذخیره نمی‌شود.</b><span>اطلاعات فقط در حافظه عملیات فعال است و با پایان کار، خروج یا بسته‌شدن صفحه حذف می‌شود.</span></div><div class="form-grid">
+        <section class="form-section"><h3>اتصال به تجهیزات</h3><div class="security-note"><b>حساب سیستمی EMS یا رمز موقت</b><span>اگر SYSTEM ACCOUNT در RADIUS ساخته شده باشد، همان حساب برای Discovery استفاده می‌شود. در غیر این صورت اطلاعات دستی فقط در حافظه عملیات فعال است.</span></div><div class="form-grid">
+          <label class="full">SYSTEM ACCOUNT<select id="scanSystemAccount"><option value="">ورود دستی</option></select></label>
           <label>روش اتصال<select id="scanProtocol"><option value="ssh">SSH — پیشنهادی</option><option value="telnet">Telnet — ناامن و فقط تجهیزات قدیمی</option></select></label>
           <label>پورت<input id="scanPort" class="ltr" type="number" min="1" max="65535" value="22"></label>
           <label>نام کاربری<input id="scanUsername" class="ltr" autocomplete="off" required></label>
@@ -58,6 +59,7 @@
     <form id="backupForm">
       <div class="dialog-head"><div><h2>بکاپ امن کانفیگ</h2><p>سوئیچ‌ها را انتخاب کنید؛ خطوط حساس پیش از ذخیره پاک می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="dialog-body"><div class="security-note"><b>رمز اتصال ذخیره نمی‌شود.</b><span>نسخه کامل کانفیگ نیز در بکاپ گروهی ذخیره نمی‌شود؛ نسخه پاک‌سازی‌شده برای مشاهده و مقایسه می‌ماند.</span></div><div class="backup-layout"><section><div class="select-head"><label><input id="backupAll" type="checkbox"> انتخاب همه</label><span id="backupCount"></span></div><div id="backupDevices" class="device-checks"></div></section><section class="form-grid one">
+        <label>SYSTEM ACCOUNT<select id="backupSystemAccount"><option value="">ورود دستی</option></select></label>
         <label>روش اتصال<select id="backupProtocol"><option value="ssh">SSH</option><option value="telnet">Telnet — ناامن</option></select></label>
         <label>پورت<input id="backupPort" type="number" min="1" max="65535" value="22"></label>
         <label>نام کاربری<input id="backupUsername" autocomplete="off" required></label>
@@ -74,7 +76,9 @@
     <div class="dialog-foot"><button id="cancelJob" class="btn danger" type="button">توقف عملیات</button><button id="closeJob" class="btn primary hidden" type="button">بستن</button></div>
   </dialog>
 
+  
+  <dialog id="manualDeviceDialog"><form id="manualDeviceForm"><div class="dialog-head"><div><h2>افزودن دستی سوئیچ</h2><p>برای تجهیزی که با CDP/LLDP کشف نشده است.</p></div><button class="close" type="button" data-close>×</button></div><div class="dialog-body form-grid one"><label>IP مدیریتی<input id="manualDeviceIp" class="ltr" required placeholder="10.10.20.31"></label><label>نام سوئیچ<input id="manualDeviceName" maxlength="120"></label><label>توضیحات<textarea id="manualDeviceNotes" maxlength="500"></textarea></label></div><div class="dialog-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">افزودن</button></div></form></dialog>
   <div id="toast" class="toast"></div>
-  <script type="module" src="/network-map/app.js?v=0.6.0"></script>
+  <script type="module" src="/network-map/app.js?v=0.7.0"></script>
 </body>
 </html>

@@ -37,11 +37,14 @@ CREATE TABLE IF NOT EXISTS users (
   username text NOT NULL UNIQUE,
   display_name text NOT NULL DEFAULT '',
   password_hash text NOT NULL,
-  role text NOT NULL CHECK (role IN ('admin','editor','viewer')),
+  role text NOT NULL CHECK (role IN ('admin','technical','helpdesk','branch','editor','viewer')),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','technical','helpdesk','branch','editor','viewer'));
 
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE address_spaces ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
@@ -74,6 +77,10 @@ CREATE TABLE IF NOT EXISTS company_connections (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE company_connections ADD COLUMN IF NOT EXISTS backup_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE company_connections ADD COLUMN IF NOT EXISTS backup_ssh_port integer NOT NULL DEFAULT 22;
+ALTER TABLE company_connections ADD COLUMN IF NOT EXISTS backup_routeros_version text NOT NULL DEFAULT 'auto';
 
 CREATE TABLE IF NOT EXISTS user_company_access (
   user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -196,11 +203,19 @@ ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_username text NOT NULL DEFAUL
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_secret_ciphertext text NOT NULL DEFAULT '';
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_ca_pem text NOT NULL DEFAULT '';
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_interval integer NOT NULL DEFAULT 60;
+ALTER TABLE hosts ALTER COLUMN monitor_interval SET DEFAULT 300;
+UPDATE hosts SET monitor_interval=300 WHERE monitor_interval<300;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_state jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_checked_at timestamptz;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_last_ok_at timestamptz;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_failures integer NOT NULL DEFAULT 0;
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS monitor_error text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS backup_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS backup_ssh_port integer NOT NULL DEFAULT 22;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS backup_username text NOT NULL DEFAULT '';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS backup_routeros_version text NOT NULL DEFAULT 'auto';
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS report_enabled boolean NOT NULL DEFAULT false;
+UPDATE hosts SET monitor_secret_ciphertext='' WHERE monitor_secret_ciphertext<>'';
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key text PRIMARY KEY,
@@ -210,23 +225,104 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 
 INSERT INTO app_settings(key,value) VALUES
-  ('backup', '{"enabled":true,"intervalDays":1,"hour":2,"retentionDays":30,"lastRunAt":null}'::jsonb)
+  ('backup', '{"enabled":true,"intervalDays":1,"hour":2,"retentionDays":30,"lastRunAt":null}'::jsonb),
+  ('monitoring', '{"enabled":false,"mode":"manual"}'::jsonb),
+  ('appearance', '{"font":"Tahoma","fontSize":14}'::jsonb),
+  ('config_backup', '{"retentionVersions":30,"concurrency":5,"timeoutSeconds":20}'::jsonb),
+  ('network_mapper', '{"enabled":false,"url":""}'::jsonb),
+  ('online_report', '{"enabled":true,"checkTime":"19:00","retentionDays":10,"lastRunDate":null}'::jsonb)
 ON CONFLICT(key) DO NOTHING;
 
--- سیاست امنیتی نسخه 0.6: رمز تجهیزات و پایش خودکار هرگز نگهداری نمی‌شود.
-UPDATE hosts SET
-  secret_ciphertext='',
-  monitor_secret_ciphertext='',
-  monitor_enabled=false,
-  monitor_driver='',
-  monitor_username='',
-  monitor_ca_pem='',
-  monitor_state='{}'::jsonb,
-  monitor_checked_at=NULL,
-  monitor_last_ok_at=NULL,
-  monitor_failures=0,
-  monitor_error='';
-DELETE FROM app_settings WHERE key='monitoring';
+CREATE TABLE IF NOT EXISTS mikrotik_backup_targets (
+  id text PRIMARY KEY,
+  source_type text NOT NULL DEFAULT 'manual',
+  source_id text,
+  company_id text REFERENCES companies(id) ON DELETE SET NULL,
+  space_id text REFERENCES address_spaces(id) ON DELETE SET NULL,
+  name text NOT NULL DEFAULT '',
+  ip text NOT NULL,
+  ssh_port integer NOT NULL DEFAULT 22 CHECK (ssh_port BETWEEN 1 AND 65535),
+  username text NOT NULL DEFAULT '',
+  routeros_version text NOT NULL DEFAULT 'auto' CHECK (routeros_version IN ('auto','6','7')),
+  enabled boolean NOT NULL DEFAULT true,
+  last_status text NOT NULL DEFAULT '',
+  last_error text NOT NULL DEFAULT '',
+  last_run_at timestamptz,
+  created_by text REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(ip, ssh_port)
+);
+
+CREATE TABLE IF NOT EXISTS mikrotik_config_backups (
+  id text PRIMARY KEY,
+  target_id text REFERENCES mikrotik_backup_targets(id) ON DELETE SET NULL,
+  target_name text NOT NULL DEFAULT '',
+  identity text NOT NULL DEFAULT '',
+  ip text NOT NULL,
+  ssh_port integer NOT NULL,
+  routeros_version text NOT NULL DEFAULT 'auto',
+  filename text NOT NULL,
+  content_ciphertext text NOT NULL,
+  size_bytes integer NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'success',
+  error text NOT NULL DEFAULT '',
+  created_by text REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS online_report_targets (
+  id text PRIMARY KEY,
+  company_id text REFERENCES companies(id) ON DELETE SET NULL,
+  space_id text REFERENCES address_spaces(id) ON DELETE SET NULL,
+  target_type text NOT NULL CHECK (target_type IN ('ip','subnet')),
+  target text NOT NULL,
+  name text NOT NULL DEFAULT '',
+  check_time text NOT NULL DEFAULT '19:00',
+  enabled boolean NOT NULL DEFAULT true,
+  last_run_date date,
+  created_by text REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(target, check_time)
+);
+
+CREATE TABLE IF NOT EXISTS online_report_runs (
+  id text PRIMARY KEY,
+  target_id text REFERENCES online_report_targets(id) ON DELETE SET NULL,
+  target text NOT NULL,
+  scheduled_date date NOT NULL DEFAULT CURRENT_DATE,
+  manual boolean NOT NULL DEFAULT false,
+  status text NOT NULL DEFAULT 'running',
+  total_count integer NOT NULL DEFAULT 0,
+  online_count integer NOT NULL DEFAULT 0,
+  offline_count integer NOT NULL DEFAULT 0,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS online_report_results (
+  id bigserial PRIMARY KEY,
+  run_id text NOT NULL REFERENCES online_report_runs(id) ON DELETE CASCADE,
+  ip text NOT NULL,
+  host_id text REFERENCES hosts(id) ON DELETE SET NULL,
+  name text NOT NULL DEFAULT '',
+  company_name text NOT NULL DEFAULT '',
+  space_name text NOT NULL DEFAULT '',
+  online boolean NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(run_id, ip)
+);
+
+CREATE TABLE IF NOT EXISTS integration_tokens (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  active boolean NOT NULL DEFAULT true,
+  created_by text REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz
+);
 
 CREATE TABLE IF NOT EXISTS device_ports (
   id text PRIMARY KEY,
@@ -301,3 +397,7 @@ CREATE INDEX IF NOT EXISTS address_spaces_deleted_idx ON address_spaces(deleted_
 CREATE INDEX IF NOT EXISTS prefixes_deleted_idx ON prefixes(deleted_at);
 CREATE INDEX IF NOT EXISTS hosts_deleted_idx ON hosts(deleted_at);
 CREATE INDEX IF NOT EXISTS hosts_monitor_idx ON hosts(monitor_enabled,monitor_checked_at);
+CREATE INDEX IF NOT EXISTS backup_targets_source_idx ON mikrotik_backup_targets(source_type,source_id);
+CREATE INDEX IF NOT EXISTS config_backups_target_idx ON mikrotik_config_backups(target_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS online_targets_due_idx ON online_report_targets(enabled,check_time,last_run_date);
+CREATE INDEX IF NOT EXISTS online_results_checked_idx ON online_report_results(checked_at DESC);

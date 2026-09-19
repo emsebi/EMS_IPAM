@@ -150,6 +150,45 @@ export function parseVlans(text) {
   return vlans;
 }
 
+
+export function normalizeMac(value) {
+  const raw = String(value || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+  return /^[0-9a-f]{12}$/.test(raw) ? raw : "";
+}
+
+export function parseMacTable(text) {
+  const items = [];
+  const seen = new Set();
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = cleanText(rawLine, 600);
+    const macMatch = line.match(/([0-9a-f]{4}[.:-][0-9a-f]{4}[.:-][0-9a-f]{4}|(?:[0-9a-f]{2}[:.-]){5}[0-9a-f]{2}|[0-9a-f]{12})/i);
+    if (!macMatch) continue;
+    const mac = normalizeMac(macMatch[1]);
+    if (!mac) continue;
+    const before = line.slice(0, macMatch.index).trim();
+    const vlanMatch = before.match(/(?:^|\s)(\d{1,4})(?:\s+\*?\s*)?$/);
+    const tokens = line.split(/\s+/);
+    const portToken = [...tokens].reverse().find((token) => portLike(token));
+    if (!portToken) continue;
+    const vlan = vlanMatch ? Number(vlanMatch[1]) : Number(tokens.find((token) => /^\d{1,4}$/.test(token)) || 0) || null;
+    const port = normalizeInterface(portToken);
+    const key = `${mac}|${port}|${vlan || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ mac, port, vlan, type: /static/i.test(line) ? "static" : "dynamic" });
+  }
+  return items;
+}
+
+export function parseAccessControl(outputs) {
+  const text = commandOutput(outputs, ["include radius", "include aaa", "include mab", "include dot1x", "access-session", "authentication sessions"]);
+  return {
+    radiusConfigured: /radius|aaa authentication|aaa authorization/i.test(text),
+    mabConfigured: /(^|\s)mab(\s|$)|authentication order.*mab|access-session.*mab/i.test(text),
+    dot1xConfigured: /dot1x|802\.1x/i.test(text),
+  };
+}
+
 export function parsePrivilege(text, prompt = "") {
   const match = String(text || "").match(/privilege (?:level )?is\s*(\d+)/i);
   if (match) return Number(match[1]);
@@ -162,6 +201,8 @@ export function buildDevice({ ip, prompt = "", outputs = {}, neighbors = [] }) {
   const trunkStatus = commandOutput(outputs, ["interface trunk", "interfaces trunk"]);
   const ports = parseInterfaces(interfaceStatus, trunkStatus);
   const vlans = parseVlans(commandOutput(outputs, ["show vlan"]));
+  const macTable = parseMacTable(commandOutput(outputs, ["mac address-table"]));
+  const accessControl = parseAccessControl(outputs);
   const counts = ports.reduce((result, port) => {
     result.total += 1;
     if (port.status === "up") result.up += 1;
@@ -178,6 +219,10 @@ export function buildDevice({ ip, prompt = "", outputs = {}, neighbors = [] }) {
     privilege: parsePrivilege(commandOutput(outputs, ["show privilege"]), prompt),
     ports,
     vlans,
+    macTable,
+    ...accessControl,
+    mabSupported: ["IOS", "IOS-XE", "NX-OS"].includes(identity.platform),
+    dot1xSupported: ["IOS", "IOS-XE", "NX-OS"].includes(identity.platform),
     portCounts: counts,
     neighbors,
     reachable: true,

@@ -19,7 +19,12 @@ async function request(url, options = {}) {
 }
 
 function clearCredentials() { for (const id of ["credentialUsername", "credentialPassword", "credentialEnable", "connectUsername"]) if ($(id)) $(id).value = ""; }
-function connectionBody() { return { protocol: $("credentialProtocol").value, port: Number($("credentialPort").value), username: $("credentialUsername").value, password: $("credentialPassword").value, enablePassword: $("credentialEnable").value, connectTimeout: 30000, commandTimeout: 90000, retries: 2, concurrency: 1, maxDevices: 1, snapshotId: state.snapshotId }; }
+function updateCredentialMode() {
+  const usingSystem = Boolean($("credentialSystemAccount")?.value);
+  for (const id of ["credentialUsername", "credentialPassword"]) { const node=$(id); if(node){ node.disabled=usingSystem; node.required=!usingSystem; } }
+  if ($("credentialEnable")) $("credentialEnable").disabled=usingSystem;
+}
+function connectionBody() { return { systemAccountId: $("credentialSystemAccount")?.value || "", protocol: $("credentialProtocol").value, port: Number($("credentialPort").value), username: $("credentialUsername").value, password: $("credentialPassword").value, enablePassword: $("credentialEnable").value, connectTimeout: 30000, commandTimeout: 90000, retries: 2, concurrency: 1, maxDevices: 1, snapshotId: state.snapshotId }; }
 
 async function load() {
   if (!state.mapId || !state.deviceKey) return showError("نشانی سوئیچ کامل نیست.");
@@ -39,7 +44,7 @@ function render() {
   const portTiles = (device.ports || []).map((port) => `<button class="port-tile ${escapeHtml(port.status || "free")}" title="${escapeHtml([port.description, port.speed, port.rawStatus].filter(Boolean).join(" — "))}"><b>${escapeHtml(port.name)}</b><small>${port.mode === "trunk" ? "Trunk" : port.vlan ? `Access VLAN ${escapeHtml(port.vlan)}` : "Access"}</small><em>${port.mode === "trunk" ? "T" : port.vlan ? `AC${escapeHtml(port.vlan)}` : "—"}</em></button>`).join("") || `<div class="empty">اطلاعات پورت از این سوئیچ دریافت نشده است.</div>`;
   const ipamLink = device.ipamHostId && device.ipamSpaceId ? `/#/ipam/${encodeURIComponent(device.ipamSpaceId)}` : "";
   const backupTrash = deletedBackups.map((item) => `<div class="trash-row compact"><span><b>${formatDate(item.createdAt)}</b><small>حذف: ${formatDate(item.deletedAt)}</small></span><button class="btn sm restore-backup" data-id="${escapeHtml(item.id)}">بازیابی</button></div>`).join("");
-  $("devicePage").innerHTML = `<div class="device-hero"><div><div class="crumb">${escapeHtml(map.name)} · نسخه ${formatNumber(snapshot.version)}</div><h1>${escapeHtml(device.hostname || "سوئیچ ناشناس")}</h1><div class="ip">${escapeHtml(device.ip || "بدون IP مدیریتی")}</div></div><div class="actions"><button id="connectDevice" class="btn">اتصال</button><button id="refreshDevice" class="btn primary">به‌روزرسانی همین سوئیچ</button><button id="safeBackup" class="btn">بکاپ امن</button><button id="liveDownload" class="btn">دانلود کامل زنده</button>${ipamLink ? `<a class="btn" href="${ipamLink}">نمایش در مدیریت آی‌پی</a>` : ""}<a class="btn" href="/network-map/">بازگشت</a></div></div>
+  $("devicePage").innerHTML = `<div class="device-hero"><div><div class="crumb">${escapeHtml(map.name)} · نسخه ${formatNumber(snapshot.version)}</div><h1>${escapeHtml(device.hostname || "سوئیچ ناشناس")}</h1><div class="ip">${escapeHtml(device.ip || "بدون IP مدیریتی")}</div></div><div class="actions"><button id="connectDevice" class="btn">اتصال</button>${state.data.canWrite ? `${device.manual ? `<button id="removeManualDevice" class="btn danger">حذف از نقشه</button>` : ""}<button id="refreshDevice" class="btn primary">به‌روزرسانی همین سوئیچ</button><button id="safeBackup" class="btn">بکاپ امن</button><button id="liveDownload" class="btn">دانلود کامل زنده</button>` : ""}${ipamLink ? `<a class="btn" href="${ipamLink}">نمایش در مدیریت آی‌پی</a>` : ""}<a class="btn" href="/network-map/">بازگشت</a></div></div>
     ${device.reachable === false ? `<div class="warning-banner">سوئیچ در نقشه شناسایی شده اما اتصال به آن موفق نبوده است: ${escapeHtml(device.error)}</div>` : ""}
     <div class="device-grid"><div><section class="device-panel"><h2>نمای پورت‌ها</h2><div class="port-summary"><div><b>${formatNumber(c.total)}</b><span>کل</span></div><div><b>${formatNumber(c.up)}</b><span>فعال</span></div><div><b>${formatNumber(c.free)}</b><span>آزاد</span></div><div><b>${formatNumber(c.adminDown)}</b><span>خاموش مدیریتی</span></div><div><b>${formatNumber(c.error)}</b><span>خطا</span></div></div><div class="port-wall">${portTiles}</div></section>
     <section class="device-panel"><div class="headline"><div><h2>بکاپ‌های کانفیگ</h2><p>فقط نسخه پاک‌سازی‌شده در سامانه نگهداری می‌شود.</p></div><button id="compareBackups" class="btn sm">مقایسه دو انتخاب</button></div><div class="backup-table-wrap"><table class="backup-table"><thead><tr><th>انتخاب</th><th>تاریخ</th><th>هش</th><th>حذف خطوط حساس</th><th>عملیات</th></tr></thead><tbody>${backups.map((item) => `<tr><td><input class="backup-select" type="checkbox" value="${escapeHtml(item.id)}"></td><td>${formatDate(item.createdAt)}</td><td class="ltr">${escapeHtml(item.configHash.slice(0, 12))}</td><td>${formatNumber(item.redactionCount)}</td><td><div class="row-actions"><button class="btn sm view-backup" data-id="${escapeHtml(item.id)}">نمایش</button><a class="btn sm" href="/api/network-map/backups/${encodeURIComponent(item.id)}/download">دانلود</a><button class="btn sm danger delete-backup" data-id="${escapeHtml(item.id)}">حذف</button></div></td></tr>`).join("") || `<tr><td colspan="5"><div class="empty">بکاپی ثبت نشده است.</div></td></tr>`}</tbody></table></div>${backupTrash ? `<details class="trash backup-trash"><summary>بکاپ‌های حذف‌شده (${formatNumber(deletedBackups.length)})</summary>${backupTrash}</details>` : ""}</section></div>
@@ -50,6 +55,12 @@ function render() {
 function openCredential(action) {
   state.action = action;
   clearCredentials();
+  const accountSelect = $("credentialSystemAccount");
+  if (accountSelect) {
+    accountSelect.innerHTML = `<option value="">ورود دستی</option>${(state.data?.systemAccounts || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.username)}${item.displayName ? ` — ${escapeHtml(item.displayName)}` : ""}</option>`).join("")}`;
+    accountSelect.value = state.data?.systemAccounts?.[0]?.id || "";
+  }
+  updateCredentialMode();
   $("credentialProtocol").value = "ssh";
   $("credentialPort").value = "22";
   $("fullWarning").classList.toggle("hidden", action !== "download");
@@ -60,10 +71,11 @@ function openCredential(action) {
 }
 
 function bind() {
+  $("removeManualDevice")?.addEventListener("click", async () => { if(!confirm("این سوئیچ دستی از نقشه حذف شود؟")) return; try{ await request(`/api/network-map/maps/${encodeURIComponent(state.mapId)}/manual-devices/${encodeURIComponent(state.data.device.ip)}`,{method:"DELETE"}); location.href="/network-map/"; }catch(error){toast(error.message)} });
   $("connectDevice").addEventListener("click", () => { $("connectForm").reset(); $("connectProtocol").value = "SSH"; $("connectPort").value = "22"; $("connectDialog").showModal(); });
-  $("refreshDevice").addEventListener("click", () => openCredential("refresh"));
-  $("safeBackup").addEventListener("click", () => openCredential("backup"));
-  $("liveDownload").addEventListener("click", () => openCredential("download"));
+  $("refreshDevice")?.addEventListener("click", () => openCredential("refresh"));
+  $("safeBackup")?.addEventListener("click", () => openCredential("backup"));
+  $("liveDownload")?.addEventListener("click", () => openCredential("download"));
   $("compareBackups").addEventListener("click", compareSelected);
   document.querySelectorAll(".view-backup").forEach((node) => node.addEventListener("click", () => viewBackup(node.dataset.id)));
   document.querySelectorAll(".delete-backup").forEach((node) => node.addEventListener("click", () => deleteBackup(node.dataset.id)));
@@ -100,12 +112,13 @@ async function compareSelected() {
   } catch (error) { toast(error.message); }
 }
 
+$("credentialSystemAccount").addEventListener("change", updateCredentialMode);
 $("credentialProtocol").addEventListener("change", () => { $("credentialPort").value = $("credentialProtocol").value === "telnet" ? "23" : "22"; });
 $("connectProtocol").addEventListener("change", () => { $("connectPort").value = $("connectProtocol").value === "TELNET" ? "23" : "22"; });
 
 $("connectForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const url = new URL("emsipam://open");
+  const url = new URL("emsipam-agent-v060://open");
   url.searchParams.set("tool", $("connectProtocol").value);
   url.searchParams.set("host", state.data.device.ip);
   url.searchParams.set("port", $("connectPort").value);

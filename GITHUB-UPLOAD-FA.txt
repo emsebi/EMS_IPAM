@@ -1,39 +1,33 @@
-راهنمای انتشار نسخه 0.6.0 در GitHub
+راهنمای انتشار EMS IPAM v0.7.0 در GitHub
 
-مخزن مقصد:
+مخزن:
 https://github.com/emsebi/EMS_IPAM
 
-1) از شاخه main یک نسخه پشتیبان یا Branch موقت بسازید.
+1) محتوای EMS_IPAM-GitHub-v0.7.0.zip را مستقیماً در ریشه شاخه main قرار دهید.
 
-2) فایل EMS-IPAM-Network-Map-v0.6.0-GitHub.zip را Extract کنید.
+2) برای ارتقای دستی Repository نسخه قبلی می‌توان از EMS_IPAM-Update-Files-v0.7.0.zip استفاده کرد. مسیر فایل‌ها داخل ZIP حفظ شده است.
 
-3) وارد پوشه استخراج‌شده EMS_IPAM_v0.6.0 شوید.
+3) تصاویر جدید GitHub:
 
-4) تمام محتویات داخل این پوشه را مستقیماً در ریشه مخزن EMS_IPAM بارگذاری کنید و جایگزینی فایل‌های هم‌نام را بپذیرید.
+docs/ems-ipam-overview-v0.7.0.png
+docs/ems-ipam-network-map-v0.7.0.png
+docs/ems-ipam-radius-v0.7.0.png
+docs/ems-ipam-mac-access-v0.7.0.png
 
-مهم:
-- خود فایل ZIP را داخل GitHub نریزید.
-- پوشه EMS_IPAM_v0.6.0 را به‌صورت یک زیرپوشه داخل مخزن نریزید.
-- مسیر نهایی باید مانند compose.yml و install.sh در ریشه مخزن باشد.
-- فایل واقعی .env سرور را هرگز در GitHub قرار ندهید؛ فقط .env.example مجاز است.
+4) Windows Client جدید:
 
-5) بعد از Commit، برای نصب یا ارتقا اجرا کنید:
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.7.0.zip
+
+5) نصب مستقیم پس از Push به main:
+
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 
-6) در نصب تازه گزینه 1 و در سرور دارای نسخه قبلی گزینه 2 را انتخاب کنید.
+6) برای Upgrade نیز همان Installer اجرا و گزینه Update انتخاب می‌شود.
 
-هشدار ارتقا:
-نسخه 0.6 رمزهای قدیمی تجهیزات و اطلاعات پایش خودکار را برای همیشه از دیتابیس پاک می‌کند. قبل از اجرا از تصمیم خود مطمئن باشید. بکاپ تمیز پس از پاک‌سازی ساخته می‌شود.
+7) نصب‌کننده در نسخه 0.7.0 درباره فعال بودن Network Map و RADIUS سؤال می‌کند.
 
-7) پس از موفقیت، نقشه شبکه از این مسیر است:
-http://SERVER-IP:PORT/network-map/
+8) در روش Portainer، فایل portainer-stack.yml هر دو سرویس اختیاری را در Stack قرار می‌دهد. در روش CLI، ماژول‌ها توسط Installer قابل انتخاب هستند.
 
-8) برای به‌روزرسانی‌های بعدی فقط ماژول نقشه:
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/modules/network-map/install.sh | sudo bash -s -- update
+9) قبل از انتشار، فایل SHA256SUMS-v0.7.0.txt و docs/TEST-REPORT-v0.7.0-FA.md بررسی شود.
 
-این دستور فقط کانتینر نقشه را Build می‌کند و مدیریت IP یا دیتابیس را Build نمی‌کند.
-
-9) فایل کلاینت ویندوز باید در این مسیر باشد:
-docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip
-
-10) پیش از انتشار، آزمون‌ها و SHA256SUMS.txt را بررسی کنید.
+10) پروتکل Windows Client همچنان emsipam-agent-v060 است؛ این موضوع عمدی و برای سازگاری با کلاینت‌های 0.6 است.
