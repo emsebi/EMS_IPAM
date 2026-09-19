@@ -1,0 +1,17 @@
+services:
+  sample-module:
+    profiles: ["sample-module"]
+    build:
+      context: .
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ems_ipam
+      PGUSER: ems_ipam
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PORT: 8090
+    expose:
+      - "8090"
+    restart: unless-stopped
+    networks:
+      - ems_internal

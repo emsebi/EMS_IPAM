@@ -1,33 +1,11 @@
-راهنمای انتشار EMS IPAM v0.7.0 در GitHub
+EMS IPAM Core v0.7.0
 
-مخزن:
-https://github.com/emsebi/EMS_IPAM
+این خروجی را در Root مخزن GitHub قرار دهید.
+هسته شامل IPAM و دیتابیس است.
+ماژول‌ها بعداً فقط به صورت پوشه جدید زیر modules/ اضافه می‌شوند.
 
-1) محتوای EMS_IPAM-GitHub-v0.7.0.zip را مستقیماً در ریشه شاخه main قرار دهید.
-
-2) برای ارتقای دستی Repository نسخه قبلی می‌توان از EMS_IPAM-Update-Files-v0.7.0.zip استفاده کرد. مسیر فایل‌ها داخل ZIP حفظ شده است.
-
-3) تصاویر جدید GitHub:
-
-docs/ems-ipam-overview-v0.7.0.png
-docs/ems-ipam-network-map-v0.7.0.png
-docs/ems-ipam-radius-v0.7.0.png
-docs/ems-ipam-mac-access-v0.7.0.png
-
-4) Windows Client جدید:
-
-docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.7.0.zip
-
-5) نصب مستقیم پس از Push به main:
-
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
-
-6) برای Upgrade نیز همان Installer اجرا و گزینه Update انتخاب می‌شود.
-
-7) نصب‌کننده در نسخه 0.7.0 درباره فعال بودن Network Map و RADIUS سؤال می‌کند.
-
-8) در روش Portainer، فایل portainer-stack.yml هر دو سرویس اختیاری را در Stack قرار می‌دهد. در روش CLI، ماژول‌ها توسط Installer قابل انتخاب هستند.
-
-9) قبل از انتشار، فایل SHA256SUMS-v0.7.0.txt و docs/TEST-REPORT-v0.7.0-FA.md بررسی شود.
-
-10) پروتکل Windows Client همچنان emsipam-agent-v060 است؛ این موضوع عمدی و برای سازگاری با کلاینت‌های 0.6 است.
+مراحل پیشنهادی:
+1) محتویات این پوشه را Commit کنید.
+2) روی سرور: sudo bash install.sh
+3) برای نسخه بعد: sudo /opt/ems-ipam/install.sh update
+4) پس از اضافه شدن ماژول: sudo /opt/ems-ipam/install.sh modules
