@@ -142,3 +142,22 @@ dialog{border:0;padding:0;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,4
 .root-prefix-open small{font-size:8px;line-height:1.35}
 
 @media(min-width:1500px){.root-range-table{min-width:1240px}.root-network-cell{min-width:230px;width:230px}.root-prefix-span{min-width:130px}}
+
+/* v1.5 usability + bilingual layout */
+.langbtn{height:38px;min-width:42px;border:1px solid #3a4760;border-radius:9px;background:#202d47;color:#fff;font-weight:800;cursor:pointer}
+[dir="ltr"] .sidebar{border-left:0;border-right:1px solid #203248}
+[dir="ltr"] .sidebar-brand,[dir="ltr"] .navbtn,[dir="ltr"] .settings-tab{text-align:left}
+[dir="ltr"] .top-actions{margin-right:0;margin-left:auto}
+[dir="ltr"] .searchbox>span{right:auto;left:13px}
+[dir="ltr"] .searchbox input{padding:0 12px 0 38px}
+[dir="ltr"] .settings-nav{border-left:0;border-right:1px solid var(--line)}
+.contact-body{min-width:0;flex:1}.contact-meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:7px;color:var(--muted);font-size:11px}.contact-meta span{display:inline-flex;gap:4px;align-items:center}.contact-meta strong{color:var(--ink);font-weight:700}.meta-label{font-weight:700;color:var(--ink)}
+.personnel-toolbar{display:flex;gap:7px;align-items:center}.personnel-toolbar input{flex:1}.inline-form{display:flex;gap:8px;margin-bottom:14px}.inline-form input{flex:1;height:39px;border:1px solid var(--line);border-radius:9px;padding:0 11px;background:var(--card);color:var(--ink)}
+.radio-register-form{grid-template-columns:minmax(220px,1.5fr) minmax(150px,.8fr) 120px minmax(180px,1fr) auto}.radio-tree-card-head .radio-health{display:flex;gap:12px;align-items:center;color:var(--muted)}
+.radio-station-node .row-actions{padding:8px;border-top:1px solid var(--line);justify-content:flex-end}.radio-tree-card{min-width:0}.radio-tree-grid{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
+@media(max-width:900px){.radio-register-form{grid-template-columns:1fr 1fr}.radio-tree-grid{grid-template-columns:1fr}.inline-form{flex-wrap:wrap}}
+.app{direction:ltr}
+[dir="rtl"] .workspace{direction:rtl}
+[dir="ltr"] .workspace{direction:ltr}
+[dir="rtl"] .sidebar{direction:rtl}
+[dir="ltr"] .sidebar{direction:ltr}

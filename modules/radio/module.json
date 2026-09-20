@@ -1,0 +1,9 @@
+{
+  "id": "radio",
+  "name": "Radio Management",
+  "version": "1.0.0",
+  "description": "Simple AP/Station tree synchronized with IPAM, Inventory and shared search.",
+  "enabled": true,
+  "permissions": ["radio.read", "radio.write"],
+  "navigation": {"label": "Radios", "route": "/radios", "order": 30}
+}

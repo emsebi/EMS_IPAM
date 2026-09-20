@@ -39,9 +39,9 @@ test("browser modules are served with a JavaScript MIME type", async () => {
     fs.readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(server, /["']\.mjs["']:\s*["']text\/javascript; charset=utf-8["']/);
-  assert.match(html, /app\.js\?v=1\.4\.0-stage1/);
+  assert.match(html, /app\.js\?v=1\.5\.0-stage1-radio/);
   assert.match(html, /<html[^>]+data-theme=["']light["']/);
-  assert.match(script, /subnet-model\.mjs\?v=1\.4\.0-stage1/);
+  assert.match(script, /subnet-model\.mjs\?v=1\.5\.0-stage1-radio/);
 });
 
 test("Windows client is downloadable from the installed web service", async () => {

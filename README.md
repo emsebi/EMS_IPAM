@@ -1,9 +1,9 @@
-# EMS_IPAM — Stage 01 Base + IPAM v1.4.0-stage1
+# EMS_IPAM — Stage 01 Base + IPAM v1.5.0-stage1-radio
 
 Repository: `github.com/emsebi/EMS_IPAM`  
 طراح و توسعه‌دهنده: **Ebrahim Mamani / ابراهیم مامانی**
 
-این خروجی **مرحله اول رسمی ساخت پروژه** است: پنل مرکزی، دیتابیس مشترک و IPAM. افزونه‌های Radio، RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی به همین Base اضافه می‌شوند و نباید برای توسعه آن‌ها Base از نو ساخته شود.
+این خروجی **Base پایدار پروژه + IPAM + اولین افزونه Radio** است. پنل مرکزی، دیتابیس مشترک، مدیریت شرکت/شعب، کاربران، پرسنل، Inventory و IPAM در Base قرار دارند و `modules/radio` به عنوان اولین افزونه مستقل همراه این نسخه ارائه می‌شود. افزونه‌های RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی روی همین Base اضافه می‌شوند و Base نباید برای توسعه آن‌ها از نو ساخته شود.
 
 > تمام داده‌های Demo داخل سورس ساختگی هستند و برای GitHub تهیه شده‌اند. هیچ نام شرکت، شعبه، رنج یا تجهیز واقعی در Seed/Mock/Documentation قرار داده نشده است.
 
@@ -49,9 +49,10 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 - **دسترسی مستقل به ماژول‌ها برای هر User**
 - Settings متمرکز
 - Light / Dark Theme
+- زبان پیش‌فرض English + کلید FA/EN؛ Sidebar همیشه سمت چپ باقی می‌ماند
 - Profile menu و About
-- Personnel مرکزی با کد پرسنلی
-- Inventory مشترک تجهیزات
+- Personnel مرکزی با کد پرسنلی، CRUD، Import/Export CSV و جستجوی سریع
+- Inventory مشترک تجهیزات با Device Type قابل تعریف/ویرایش/حذف، شمارش بر اساس Type و Export کل/فیلترشده
 - Custom Fields
 - Audit Log
 - Backup دستی و زمان‌بندی‌شده
@@ -86,8 +87,19 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 - IP detail با Previous / Next
 - Hostname / MAC / VLAN / Owner / Location / Vendor / Model / Serial / Firmware / Notes
 - Ping status
-- Service shortcuts و پورت قابل تنظیم
+- Service shortcuts قابل انتخاب برای هر IP (SSH/RDP/HTTP/HTTPS/Winbox/Telnet/Custom) و پورت اختصاصی
 - Import / Export
+
+
+### Radio — افزونه همراه این نسخه
+
+- AP و Station با نمایش درختی ساده
+- Add Station مستقیم از روی AP
+- Sync کامل IP با IPAM/Inventory؛ رکورد جداگانه و تکراری ساخته نمی‌شود
+- Search سریع با Name / IP / MAC / SSID
+- فیلدهای پایه: Name / IP / MAC / Model / SSID / Location / Notes
+- Edit / Delete / Open IP / View in IPAM
+- بدون Signal Monitoring، Performance Monitoring و Credential Management
 
 ## اتصال Base به افزونه‌های آینده
 

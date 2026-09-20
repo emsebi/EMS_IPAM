@@ -37,7 +37,7 @@ const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "1.4.0-stage1";
+const APP_VERSION = "1.5.0-stage1-radio";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
 const MODULE_CATALOG = Object.freeze([
@@ -115,6 +115,23 @@ function json(res, status, value, headers = {}) {
 
 function errorResponse(res, status, message) {
   json(res, status, { ok: false, error: message });
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"','""')}"` : text;
+}
+
+function csvResponse(res, filename, rows) {
+  const text = "\ufeff" + rows.map((row) => row.map(csvEscape).join(",")).join("\r\n") + "\r\n";
+  const body = Buffer.from(text, "utf8");
+  res.writeHead(200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+  });
+  res.end(body);
 }
 
 async function readBody(req) {
@@ -837,9 +854,94 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
   }
 
+  if (req.method === "GET" && pathname === "/api/device-types") {
+    const rows = await pool.query(`SELECT id,name,color,created_at AS "createdAt",updated_at AS "updatedAt" FROM device_types ORDER BY lower(name)`);
+    return json(res, 200, { ok: true, items: rows.rows });
+  }
+
+  if (req.method === "POST" && pathname === "/api/device-types") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const name = cleanText(body.name, 100);
+    if (!name) throw new Error("نام نوع تجهیز الزامی است.");
+    const id = crypto.randomUUID();
+    await pool.query(`INSERT INTO device_types(id,name,color) VALUES($1,$2,$3)`, [id,name,validColor(body.color,"#3157d5")]);
+    await audit(user,"create","device_type",id,{detail:{name}});
+    return json(res,201,{ok:true,id});
+  }
+
+  const deviceTypeMatch = pathname.match(/^\/api\/device-types\/([^/]+)$/);
+  if (deviceTypeMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const name = cleanText(body.name,100);
+    if (!name) throw new Error("نام نوع تجهیز الزامی است.");
+    const before = await pool.query("SELECT name FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
+    if (!before.rowCount) throw Object.assign(new Error("نوع تجهیز پیدا نشد."),{status:404});
+    await pool.query("UPDATE device_types SET name=$2,color=$3,updated_at=now() WHERE id=$1",[deviceTypeMatch[1],name,validColor(body.color,"#3157d5")]);
+    await pool.query("UPDATE hosts SET type=$2,updated_at=now() WHERE type=$1",[before.rows[0].name,name]);
+    await audit(user,"update","device_type",deviceTypeMatch[1],{detail:{name}});
+    return json(res,200,{ok:true});
+  }
+
+  if (deviceTypeMatch && req.method === "DELETE") {
+    requireAdmin(user);
+    const found = await pool.query("SELECT name FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
+    if (!found.rowCount) throw Object.assign(new Error("نوع تجهیز پیدا نشد."),{status:404});
+    const used = await pool.query("SELECT count(*)::int AS count FROM hosts WHERE type=$1 AND deleted_at IS NULL",[found.rows[0].name]);
+    if (used.rows[0].count > 0) throw new Error(`این نوع تجهیز توسط ${used.rows[0].count} تجهیز استفاده می‌شود؛ ابتدا نوع آن تجهیزات را تغییر دهید.`);
+    await pool.query("DELETE FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
+    await audit(user,"delete","device_type",deviceTypeMatch[1]);
+    return json(res,200,{ok:true});
+  }
+
+  if (req.method === "GET" && pathname === "/api/inventory/export") {
+    await requireModuleAccess(user, "inventory");
+    const items = await inventoryData(user);
+    const q = normalizePersian(url.searchParams.get("q") || "").toLowerCase();
+    const type = cleanText(url.searchParams.get("type") || "",100);
+    const filtered = items.filter((item) => (!type || item.type === type) && (!q || [item.name,item.ip,item.mac,item.type,item.vendor,item.model,item.serial,item.owner,item.companyName,item.spaceName,item.location].some((v)=>normalizePersian(v||"").toLowerCase().includes(q))));
+    return csvResponse(res, "ems-ipam-inventory.csv", [["Name","IP","MAC","Device Type","Vendor","Model","Serial","Owner","Company","Address Space","Location","Notes"], ...filtered.map((i)=>[i.name,i.ip,i.mac,i.type,i.vendor,i.model,i.serial,i.owner,i.companyName,i.spaceName,i.location,i.notes])]);
+  }
+
   if (req.method === "GET" && pathname === "/api/inventory") {
     await requireModuleAccess(user, "inventory");
     return json(res, 200, { ok: true, items: await inventoryData(user) });
+  }
+
+  if (req.method === "GET" && pathname === "/api/personnel/export") {
+    requireAdmin(user);
+    const q = cleanText(url.searchParams.get("q") || "",120);
+    const params=[]; let where="";
+    if (q) { params.push(`%${normalizePersian(q)}%`); where=`WHERE (employee_code || ' ' || full_name || ' ' || phone || ' ' || mobile || ' ' || email || ' ' || department || ' ' || job_title) ILIKE $1`; }
+    const rows=await pool.query(`SELECT p.employee_code,p.full_name,p.mobile,p.phone,p.email,p.department,p.job_title,c.name AS company_name,p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name`,params);
+    return csvResponse(res,"ems-ipam-personnel.csv",[["Employee Code","Full Name","Mobile","Phone","Email","Department","Job Title","Company","Notes","Active"],...rows.rows.map((r)=>[r.employee_code,r.full_name,r.mobile,r.phone,r.email,r.department,r.job_title,r.company_name,r.notes,r.active?"true":"false"])]);
+  }
+
+  if (req.method === "POST" && pathname === "/api/personnel/import") {
+    requireAdmin(user);
+    const body=await readBody(req);
+    if (!Array.isArray(body.items)) throw new Error("لیست پرسنل معتبر نیست.");
+    let created=0,updated=0,skipped=0;
+    const client=await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const item of body.items.slice(0,10000)) {
+        const employeeCode=cleanText(item.employeeCode,80); const fullName=cleanText(item.fullName,180);
+        if (!employeeCode || !fullName) { skipped++; continue; }
+        let companyId=null; const companyName=cleanText(item.companyName,180);
+        if (companyName) { const c=await client.query("SELECT id FROM companies WHERE lower(name)=lower($1) AND deleted_at IS NULL LIMIT 1",[companyName]); companyId=c.rows[0]?.id||null; }
+        const existing=await client.query("SELECT id FROM personnel WHERE employee_code=$1",[employeeCode]);
+        if (existing.rowCount) {
+          await client.query(`UPDATE personnel SET full_name=$2,mobile=$3,phone=$4,email=$5,department=$6,job_title=$7,company_id=COALESCE($8,company_id),notes=$9,active=$10,updated_at=now() WHERE id=$1`,[existing.rows[0].id,fullName,cleanText(item.mobile,80),cleanText(item.phone,80),cleanText(item.email,180),cleanText(item.department,180),cleanText(item.jobTitle,180),companyId,cleanText(item.notes,1000),item.active!==false]); updated++;
+        } else {
+          await client.query(`INSERT INTO personnel(id,employee_code,full_name,mobile,phone,email,department,job_title,company_id,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[crypto.randomUUID(),employeeCode,fullName,cleanText(item.mobile,80),cleanText(item.phone,80),cleanText(item.email,180),cleanText(item.department,180),cleanText(item.jobTitle,180),companyId,cleanText(item.notes,1000),item.active!==false]); created++;
+        }
+      }
+      await client.query("COMMIT");
+    } catch(error){ await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+    await audit(user,"import","personnel",null,{detail:{created,updated,skipped}});
+    return json(res,200,{ok:true,created,updated,skipped});
   }
 
   if (req.method === "GET" && pathname === "/api/personnel") {

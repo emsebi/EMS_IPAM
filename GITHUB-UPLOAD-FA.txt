@@ -1,4 +1,4 @@
-EMS IPAM Base v1.4.0-stage1
+EMS IPAM Base v1.5.0-stage1-radio
 
 ZIP را Extract کنید و محتویاتش را مستقیماً در Root مخزن زیر قرار دهید:
 https://github.com/emsebi/EMS_IPAM

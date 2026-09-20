@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="fa" dir="rtl" data-theme="light">
+<html lang="en" dir="ltr" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>EMS IPAM — مدیریت تصویری شبکه</title>
-  <link rel="stylesheet" href="/styles.css?v=1.4.0-stage1">
+  <title>EMS IPAM — Network Management</title>
+  <link rel="stylesheet" href="/styles.css?v=1.5.0-stage1-radio">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -32,6 +32,7 @@
         <button id="companiesButton" class="navbtn active" type="button"><span class="nav-icon">⌂</span><span>داشبورد و شرکت‌ها</span></button>
         <button id="ipamButton" class="navbtn" type="button"><span class="nav-icon">⌗</span><span>مدیریت IP</span></button>
         <button id="inventoryButton" class="navbtn" type="button"><span class="nav-icon">▣</span><span>تجهیزات</span></button>
+        <button id="radiosButton" class="navbtn" type="button"><span class="nav-icon">◉</span><span>رادیوها</span></button>
         <div class="nav-divider"></div>
         <div id="moduleNavigation" class="module-navigation"></div>
         <button id="settingsButton" class="navbtn admin-only" type="button"><span class="nav-icon">⚙</span><span>تنظیمات</span></button>
@@ -55,7 +56,7 @@
           <div id="searchResults" class="search-results hidden"></div>
         </div>
         <div class="top-actions">
-          <button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
+          <button id="languageButton" class="langbtn" type="button" title="Language / زبان">FA</button><button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
           <button id="userMenuButton" class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="avatar">A</span><span class="user-meta"><b id="loggedInUserName">Admin</b><small id="userRoleName">Administrator</small></span><span>⌄</span>
           </button>
@@ -72,7 +73,6 @@
 
     <!-- Compatibility hooks for optional modules; hidden until a module registers itself. -->
     <div class="hidden" aria-hidden="true">
-      <button id="radiosButton" type="button"></button>
       <button id="networkMapButton" type="button"></button>
       <button id="topologyButton" type="button"></button>
       <button id="exportButton" type="button"></button>
@@ -150,7 +150,7 @@
         <div class="form-grid">
           <label class="field">نام سیستم / Hostname<input id="hostName" placeholder="مثلاً ESXi-01"></label>
           <label class="field">وضعیت<select id="hostStatus"><option value="active">فعال</option><option value="reserved">رزرو</option><option value="offline">خاموش</option><option value="fault">نیازمند بررسی</option><option value="free">آزاد</option></select></label>
-          <label class="field">نوع تجهیز<select id="hostType"><option value=""></option><option>سرور</option><option>ماشین مجازی</option><option>رایانه</option><option>روتر</option><option>سوئیچ</option><option>فایروال</option><option>رادیو</option><option>دوربین</option><option>اکسس‌پوینت</option><option>پرینتر</option><option>سایر</option></select></label>
+          <label class="field">نوع تجهیز<select id="hostType"><option value="">انتخاب نوع تجهیز</option></select></label>
           <label class="field">سیستم‌عامل<input id="hostOs"></label>
           <label class="field">MAC Address<input id="hostMac" class="ltr mono"></label>
           <label class="field">VLAN<input id="hostVlan" class="ltr"></label>
@@ -163,7 +163,7 @@
           <label class="field">شماره سریال<input id="hostSerial"></label>
           <label class="field">نسخه سیستم‌عامل / Firmware<input id="hostFirmware"></label>
           <label class="field legacy-module-field hidden">مرجع رمز<input id="hostSecretRef"></label>
-          <fieldset class="field full ports-fieldset legacy-module-field hidden">
+          <fieldset class="field full ports-fieldset radio-module-field">
             <legend>اطلاعات رادیو</legend>
             <div class="form-grid compact-grid">
               <label class="field">حالت رادیو<select id="hostRadioMode"><option value="">رادیو نیست</option><option value="ap">AP</option><option value="station">Station</option></select></label>
@@ -174,22 +174,20 @@
                 <select id="hostRadioParent"></select>
                 <small id="hostRadioParentHint">برای کوتاه‌شدن فهرست، بخشی از مشخصات AP را بنویسید.</small>
               </label>
-              <label class="field">فرکانس<input id="hostFrequency"></label>
-              <label class="field">کانال<input id="hostChannel"></label>
-              <label class="field">سیگنال<input id="hostSignal" placeholder="مثلاً -58 dBm"></label>
+              <input id="hostFrequency" type="hidden"><input id="hostChannel" type="hidden"><input id="hostSignal" type="hidden">
             </div>
           </fieldset>
           <fieldset class="field full ports-fieldset legacy-module-field hidden">
             <legend>وضعیت رادیو و میکروتیک</legend>
             <p class="notice">پایش خودکار غیرفعال است. سامانه فقط زمانی به تجهیز متصل می‌شود که کاربر در صفحه مربوطه رمز را وارد و عملیات دستی را اجرا کند.</p>
           </fieldset>
-          <fieldset class="field full ports-fieldset legacy-module-field hidden">
-            <legend>روش‌های مجاز اتصال</legend>
+          <fieldset class="field full ports-fieldset">
+            <legend>روش‌های اتصال این IP</legend>
             <p>فقط گزینه‌های انتخاب‌شده کنار این تجهیز نمایش داده می‌شوند.</p>
             <div id="hostConnections" class="connection-choice-grid"></div>
           </fieldset>
-          <fieldset class="field full ports-fieldset legacy-module-field hidden">
-            <legend>پورت اختصاصی ابزارها</legend>
+          <fieldset class="field full ports-fieldset">
+            <legend>پورت اختصاصی سرویس‌ها</legend>
             <p>خالی بماند، پورت پیش‌فرض استفاده می‌شود.</p>
             <div id="hostPorts" class="port-grid"></div>
           </fieldset>
@@ -213,7 +211,7 @@
   </dialog>
 
   <dialog id="usersDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>کاربران و دسترسی‌ها</h3><p>مدیر، ویرایشگر و مشاهده‌گر</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-head"><div><h3>کاربران و دسترسی‌ها</h3><p>Admin / Support / Helpdesk / Viewer و دسترسی ماژول‌ها</p></div><div class="modal-head-actions"><button id="usersBackSettings" class="btn sm" type="button">← Settings</button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body users-layout">
       <form id="userForm" class="card-form">
         <input id="userId" type="hidden">
@@ -243,6 +241,7 @@
           <button type="button" class="settings-tab" data-settings-tab="personnel">پرسنل</button>
           <button type="button" class="settings-tab" data-settings-tab="backup">پشتیبان‌گیری</button>
           <button type="button" class="settings-tab" data-settings-tab="appearance">ظاهر</button>
+          <button type="button" class="settings-tab" data-settings-tab="device-types">انواع تجهیزات</button>
           <button type="button" class="settings-tab" data-settings-tab="tools">ابزارهای IP</button>
           <button type="button" class="settings-tab" data-settings-tab="modules">ماژول‌ها</button>
           <button type="button" class="settings-tab" data-settings-tab="system">سیستم</button>
@@ -253,6 +252,7 @@
           <section class="settings-pane" data-settings-pane="personnel"><h4>پرسنل</h4><p>لیست مرکزی پرسنل برای اتصال به MACها و تجهیزات شخصی.</p><button id="openPersonnelFromSettings" class="btn primary" type="button">مدیریت پرسنل</button></section>
           <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
           <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
+          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
           <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
@@ -263,7 +263,7 @@
   </dialog>
 
   <dialog id="personnelDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><button class="close" type="button" data-close>×</button></div>
+    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button">← Settings</button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body personnel-layout">
       <form id="personnelForm" class="card-form">
         <input id="personnelId" type="hidden">
@@ -280,7 +280,7 @@
         <label class="check-field"><input id="personnelActive" type="checkbox" checked> فعال</label>
         <div class="row-actions"><button class="btn primary" type="submit">ذخیره</button><button id="cancelPersonnelEdit" class="btn hidden" type="button">انصراف</button></div>
       </form>
-      <div><div class="quick-filter"><input id="personnelSearch" placeholder="جست‌وجو..." autocomplete="off"></div><div id="personnelList" class="table-list"></div></div>
+      <div><div class="quick-filter personnel-toolbar"><input id="personnelSearch" placeholder="جست‌وجو..." autocomplete="off"><button id="exportPersonnel" class="btn sm" type="button">Export CSV</button><button id="importPersonnel" class="btn sm" type="button">Import CSV</button><input id="personnelImportFile" class="hidden" type="file" accept=".csv,text/csv"></div><div id="personnelList" class="table-list"></div></div>
     </div>
   </dialog>
 
@@ -341,8 +341,8 @@
     <div class="modal-body about-content">
       <div class="about-mark">IP</div>
       <h2>سامانه توسعه و مدیریت IP</h2>
-      <p>این سامانه با توجه به نیازهای شبکه‌های سازمانی و سرویس‌دهندگان اینترنت طراحی و توسعه داده شده است. امیدوارم در سامان‌دهی منابع IP، مستندسازی شبکه و پیشبرد اهداف سازمان‌ها مؤثر باشد.</p>
-      <dl><div><dt>طراح و توسعه‌دهنده</dt><dd>ابراهیم مامانی</dd></div><div><dt>نسخه</dt><dd id="aboutVersion" class="ltr mono"></dd></div></dl>
+      <p>این پروژه Open Source برای مدیریت IP، شعب، تجهیزات و توسعه ماژول‌های شبکه در سازمان‌ها، دیتاسنترها و سرویس‌دهندگان طراحی شده است.</p><p class="about-note">پیش از استقرار Production، اصالت نسخه را با Repository رسمی پروژه بررسی کنید. و یک یادآوری از ابراهیم مامانی: اگر شبکه قرار است پیچیده باشد، حداقل مستنداتش نباید پیچیده بماند.</p>
+      <dl><div><dt>طراحی پروژه</dt><dd>ابراهیم مامانی / Ebrahim Mamani</dd></div><div><dt>نسخه</dt><dd id="aboutVersion" class="ltr mono"></dd></div><div><dt>Repository رسمی</dt><dd class="ltr mono">github.com/emsebi/EMS_IPAM</dd></div></dl>
       <div class="about-actions"><a class="btn primary github-star" href="https://github.com/emsebi/EMS_IPAM" target="_blank" rel="noopener noreferrer">مشاهده پروژه و ثبت Star در GitHub</a><a class="btn" href="/client.html" target="_blank" rel="noopener">دانلود کلاینت اتصال ویندوز</a></div>
     </div>
   </dialog>
@@ -388,6 +388,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.4.0-stage1"></script>
+  <script type="module" src="/app.js?v=1.5.0-stage1-radio"></script>
 </body>
 </html>
