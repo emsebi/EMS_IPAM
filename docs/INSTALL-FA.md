@@ -1,14 +1,31 @@
-# راهنمای نصب EMS_IPAM
+# نصب و Update — EMS_IPAM v1.4.0-stage1
 
-## روش پیشنهادی: نصب کامل با یک دستور
+## نصب معمولی
 
-این دستور پروژه را مستقیماً از GitHub رسمی دریافت می‌کند. اگر Docker، Docker Compose یا Portainer وجود نداشته باشد، Installer آن‌ها را نصب می‌کند.
+فقط یک دستور:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 ```
 
-منو:
+Installer خودش Docker Engine، Docker Compose Plugin و Portainer CE را بررسی می‌کند و در Ubuntu/Debian موارد کمبود را نصب می‌کند.
+
+در Fresh Install موارد زیر پرسیده می‌شود:
+
+```text
+Database password
+Admin username
+Admin password
+Web port
+```
+
+State و Secretهای نصب در GitHub ذخیره نمی‌شوند:
+
+```text
+/var/lib/ems-ipam/.env
+```
+
+## منوی Lifecycle
 
 ```text
 1) Install
@@ -17,84 +34,84 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 4) Uninstall application + database
 ```
 
-### گزینه ۱ — Install
+### 1 — Install
 
-در نصب تازه موارد زیر انجام می‌شود:
+- Download سورس از `emsebi/EMS_IPAM@main`
+- بررسی Archive
+- ساخت State directory
+- ساخت PostgreSQL volume ثابت
+- Build App
+- Start DB/App
+- Health Check
+- Start ماژول‌های معتبر
 
-1. بررسی سیستم و پیش‌نیازها
-2. نصب Docker Engine در صورت نبودن
-3. نصب Docker Compose Plugin در صورت نبودن
-4. نصب Portainer CE در صورت نبودن
-5. دانلود آخرین سورس از `emsebi/EMS_IPAM`
-6. دریافت Username و Password ادمین
-7. تولید خودکار رمز PostgreSQL و Session Secret
-8. ساخت PostgreSQL Volume پایدار
-9. Build و Start سرویس‌ها
-10. Health Check واقعی پنل
-11. نمایش URL پنل
+اگر قبلاً گزینه 3 اجرا شده باشد و Database + State هر دو وجود داشته باشند، Install دوباره همان اطلاعات را استفاده می‌کند.
 
-اگر قبلاً گزینه ۳ اجرا شده باشد، Install مجدد State و دیتابیس قبلی را تشخیص داده و بدون حذف اطلاعات پنل را دوباره نصب می‌کند.
+### 2 — Update — حالت حفظ اطلاعات
 
-### گزینه ۲ — Update
+ترتیب Update عمداً Data-safe است:
 
-قبل از Update:
+1. بررسی معتبر بودن نصب فعلی
+2. Start کردن DB در صورت خاموش بودن
+3. گرفتن **Backup اجباری** با `pg_dump`
+4. بررسی غیرخالی بودن Backup
+5. Download نسخه جدید در Temporary directory
+6. کپی سورس جدید به Staging
+7. جابه‌جایی Atomic-ish پوشه Application
+8. Build/Start نسخه جدید روی **همان DB volume و همان .env**
+9. Health Check
+10. در صورت Fail، بازگرداندن فایل‌های نسخه قبل
 
-- Backup پایگاه داده ساخته می‌شود.
-- `.env` و State پایدار دست‌نخورده می‌ماند.
-- نسخه جدید GitHub در مسیر موقت آماده می‌شود.
-- فقط پس از آماده شدن فایل‌ها، نسخه قبلی جابه‌جا می‌شود.
-- Health Check انجام می‌شود.
-- در صورت Fail شدن Update، فایل‌های نسخه قبلی Rollback می‌شوند.
+در Update از `down -v` استفاده نمی‌شود.
 
-برای اجرای مستقیم Update بدون منو:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash -s -- update
-```
-
-### گزینه ۳ — حذف برنامه بدون دیتابیس
-
-این گزینه Containerهای EMS_IPAM و فایل‌های `/opt/ems-ipam` را حذف می‌کند اما موارد زیر باقی می‌مانند:
+Database volume:
 
 ```text
-/var/lib/ems-ipam
 ems_ipam_db_data
 ```
 
-نصب دوباره با گزینه ۱ همان دیتابیس را استفاده می‌کند.
+Backup قبل از Update:
 
-### گزینه ۴ — حذف کامل
+```text
+/var/lib/ems-ipam/backups/pre-update-YYYYMMDD-HHMMSS.sql.gz
+```
 
-پس از تأیید کاربر موارد زیر حذف می‌شوند:
+### 3 — حذف App با حفظ اطلاعات
 
-- فایل‌های برنامه
-- Database Volume
-- تنظیمات Installer
-- Backupهای موجود در State
+Application حذف می‌شود ولی موارد زیر باقی می‌مانند:
 
-Docker و Portainer حذف نمی‌شوند.
+```text
+ems_ipam_db_data
+/var/lib/ems-ipam/.env
+/var/lib/ems-ipam/backups
+```
+
+### 4 — حذف کامل
+
+فقط این گزینه Database volume و State را حذف می‌کند و قبل از اجرا Confirmation می‌گیرد.
 
 ## نصب فقط پیش‌نیازها
 
-برای زمانی که مدیر فقط می‌خواهد Docker و Portainer آماده شوند:
+```bash
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/scripts/install-prerequisites.sh | sudo bash
+```
+
+## عیب‌یابی
+
+وضعیت:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash -s -- prereqs
+sudo docker compose --project-name ems-ipam --env-file /var/lib/ems-ipam/.env -f /opt/ems-ipam/compose.yml ps
 ```
 
-## مسیرها
+App log:
 
-```text
-Application: /opt/ems-ipam
-State:       /var/lib/ems-ipam
-Env:         /var/lib/ems-ipam/.env
-Backups:     /var/lib/ems-ipam/backups
-DB Volume:   ems_ipam_db_data
-Network:     ems_ipam_internal
+```bash
+sudo docker compose --project-name ems-ipam --env-file /var/lib/ems-ipam/.env -f /opt/ems-ipam/compose.yml logs --tail=200 app
 ```
 
-## GitHub Workflow
+DB log:
 
-فایل ZIP هر مرحله طوری ساخته می‌شود که محتویات آن مستقیماً در ریشه Repository قرار بگیرند. ZIP را Extract کنید و فایل‌ها/پوشه‌های آن را در ریشه `EMS_IPAM` جایگزین یا اضافه کنید، سپس Commit کنید.
-
-برای مراحل بعد، بیشتر تغییرات فقط داخل پوشه ماژول مربوطه خواهند بود؛ مثلاً مرحله IPAM فقط پوشه `modules/ipam/` و در صورت نیاز فایل‌های مستندات مرتبط را اضافه می‌کند.
+```bash
+sudo docker compose --project-name ems-ipam --env-file /var/lib/ems-ipam/.env -f /opt/ems-ipam/compose.yml logs --tail=200 db
+```

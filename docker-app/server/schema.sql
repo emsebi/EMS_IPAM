@@ -37,11 +37,40 @@ CREATE TABLE IF NOT EXISTS users (
   username text NOT NULL UNIQUE,
   display_name text NOT NULL DEFAULT '',
   password_hash text NOT NULL,
-  role text NOT NULL CHECK (role IN ('admin','editor','viewer')),
+  role text NOT NULL CHECK (role IN ('admin','support','helpdesk','viewer')),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Base v1.1 roles: admin changes core/IPAM settings; support/helpdesk/viewer are read-only here.
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT conname FROM pg_constraint WHERE conrelid='users'::regclass AND contype='c' LOOP
+    IF pg_get_constraintdef(r.oid) ILIKE '%role%' THEN EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', r.conname); END IF;
+  END LOOP;
+END $$;
+UPDATE users SET role='support' WHERE role='editor';
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','support','helpdesk','viewer'));
+
+CREATE TABLE IF NOT EXISTS personnel (
+  id text PRIMARY KEY,
+  employee_code text NOT NULL UNIQUE,
+  full_name text NOT NULL,
+  phone text NOT NULL DEFAULT '',
+  mobile text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  department text NOT NULL DEFAULT '',
+  job_title text NOT NULL DEFAULT '',
+  company_id text REFERENCES companies(id) ON DELETE SET NULL,
+  notes text NOT NULL DEFAULT '',
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS personnel_search_idx ON personnel(employee_code, full_name);
 
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE address_spaces ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;
@@ -301,3 +330,22 @@ CREATE INDEX IF NOT EXISTS address_spaces_deleted_idx ON address_spaces(deleted_
 CREATE INDEX IF NOT EXISTS prefixes_deleted_idx ON prefixes(deleted_at);
 CREATE INDEX IF NOT EXISTS hosts_deleted_idx ON hosts(deleted_at);
 CREATE INDEX IF NOT EXISTS hosts_monitor_idx ON hosts(monitor_enabled,monitor_checked_at);
+
+-- Base v1.2: extensible inventory metadata without schema changes for every new field.
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS custom_fields jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- Base v1.3 module-level access. The same table is used by present and future modules.
+CREATE TABLE IF NOT EXISTS user_module_access (
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  module_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,module_id)
+);
+CREATE INDEX IF NOT EXISTS user_module_access_module_idx ON user_module_access(module_id,user_id);
+-- Preserve access for users created before module permissions existed.
+INSERT INTO user_module_access(user_id,module_id)
+SELECT id,'ipam' FROM users WHERE role <> 'admin'
+ON CONFLICT DO NOTHING;
+INSERT INTO user_module_access(user_id,module_id)
+SELECT id,'inventory' FROM users WHERE role <> 'admin'
+ON CONFLICT DO NOTHING;

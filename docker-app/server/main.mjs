@@ -35,11 +35,53 @@ const DATABASE_URL = process.env.DATABASE_URL || undefined;
 const ADMIN_USERNAME = process.env.EMS_ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
-const MODULE_REGISTRY = path.resolve(process.env.EMS_MODULE_REGISTRY || "/runtime/modules.json");
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "0.7.0";
+const APP_VERSION = "1.4.0-stage1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
+const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
+const MODULE_CATALOG = Object.freeze([
+  { id: "ipam", name: "مدیریت IP و شعب", description: "شرکت‌ها، شعب، رنج‌ها، IPها و پرسنل" },
+  { id: "inventory", name: "تجهیزات", description: "Inventory مشترک تجهیزات و اتصال آن‌ها به IPAM" },
+  { id: "radio", name: "رادیوها", description: "AP / Station و همگام‌سازی IP و SSID" },
+  { id: "radius", name: "RADIUS / AAA", description: "FreeRADIUS برای احراز هویت مدیریت تجهیزات" },
+  { id: "network-map", name: "نقشه شبکه", description: "Discovery خواندنی، همسایه‌ها و توپولوژی" },
+  { id: "mac-finder", name: "جست‌وجوی MAC", description: "محل فعلی و تاریخچه MAC" },
+  { id: "network-access", name: "اکسس شبکه 802.1X / MAB", description: "کنترل MAC، VLAN و دسترسی شبکه با FreeRADIUS" },
+]);
+
+async function discoverModules() {
+  let entries = [];
+  try { entries = await fs.readdir(MODULES_DIR, { withFileTypes: true }); } catch { return []; }
+  const modules = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
+    const dir = path.join(MODULES_DIR, entry.name);
+    const manifestPath = path.join(dir, "module.json");
+    try { await fs.access(manifestPath); } catch { continue; }
+    try {
+      const raw = await fs.readFile(manifestPath, "utf8");
+      const manifest = JSON.parse(raw);
+      if (manifest.id !== entry.name) throw new Error("module id must match folder name");
+      if (manifest.enabled === false) continue;
+      modules.push({
+        id: manifest.id,
+        name: cleanTextEnvironment(manifest.name || manifest.id),
+        version: cleanTextEnvironment(manifest.version || "0.0.0"),
+        description: cleanTextEnvironment(manifest.description || ""),
+        navigation: manifest.navigation && typeof manifest.navigation === "object" ? manifest.navigation : null,
+        proxy: manifest.proxy && typeof manifest.proxy === "object" ? manifest.proxy : null,
+        permissions: Array.isArray(manifest.permissions) ? manifest.permissions.slice(0, 50) : [],
+        dir,
+      });
+    } catch (error) {
+      console.warn(`[module] ignored ${entry.name}: ${error.message}`);
+    }
+  }
+  return modules;
+}
+
+let installedModules = [];
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const execFileAsync = promisify(execFile);
@@ -48,23 +90,7 @@ function cleanTextEnvironment(value) {
   return String(value ?? "").trim().slice(0, 500);
 }
 
-let moduleCache = { loadedAt: 0, items: [] };
-async function loadModules() {
-  const now = Date.now();
-  if (now - moduleCache.loadedAt < 5000) return moduleCache.items;
-  try {
-    const raw = JSON.parse(await fs.readFile(MODULE_REGISTRY, "utf8"));
-    const items = Array.isArray(raw) ? raw : [];
-    moduleCache = { loadedAt: now, items: items.filter((m) => m && /^[a-z0-9][a-z0-9-]*$/.test(String(m.id || "")) && m.enabled === true) };
-  } catch {
-    moduleCache = { loadedAt: now, items: [] };
-  }
-  return moduleCache.items;
-}
-
-async function publicModules() {
-  return (await loadModules()).map(({ upstream, ...item }) => item);
-}
+installedModules = await discoverModules();
 
 if (!DATABASE_URL && !process.env.PGHOST) throw new Error("تنظیمات اتصال PostgreSQL تعریف نشده است.");
 if (ADMIN_PASSWORD.length < 1) throw new Error("EMS_ADMIN_PASSWORD نمی‌تواند خالی باشد.");
@@ -121,7 +147,7 @@ function validColor(value, fallback = COLORS[0]) {
 }
 
 function safeRole(value) {
-  if (!["admin", "editor", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
+  if (!["admin", "support", "helpdesk", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
   return value;
 }
 
@@ -158,6 +184,17 @@ function normalizeDevicePorts(value) {
     vlan: cleanText(item?.vlan, 80),
     enabled: item?.enabled !== false,
   })).filter((item) => item.name && !seen.has(item.name) && seen.add(item.name));
+}
+
+function normalizeCustomFields(value) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const out = {};
+  for (const [key, raw] of Object.entries(input).slice(0, 50)) {
+    const cleanKey = cleanText(key, 80);
+    if (!cleanKey) continue;
+    out[cleanKey] = cleanText(raw, 500);
+  }
+  return out;
 }
 
 function nullableCoordinate(value, minimum, maximum) {
@@ -232,14 +269,43 @@ async function currentUser(req) {
 }
 
 function requireWriter(user) {
-  if (!user || !["admin", "editor"].includes(user.role)) throw Object.assign(new Error("دسترسی ویرایش ندارید."), { status: 403 });
+  if (!user || user.role !== "admin") throw Object.assign(new Error("ویرایش اطلاعات پایه و IPAM فقط برای مدیر سیستم مجاز است."), { status: 403 });
 }
 
 function requireAdmin(user) {
   if (!user || user.role !== "admin") throw Object.assign(new Error("این عملیات فقط برای مدیر سیستم مجاز است."), { status: 403 });
 }
 
+async function moduleIdsForUser(user) {
+  if (!user) return [];
+  if (user.role === "admin") return [...new Set([...MODULE_CATALOG.map((item) => item.id), ...installedModules.map((item) => item.id)])];
+  const rows = await pool.query("SELECT module_id AS id FROM user_module_access WHERE user_id=$1 ORDER BY module_id", [user.id]);
+  return rows.rows.map((item) => item.id);
+}
+
+async function hasModuleAccess(user, moduleId) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const found = await pool.query("SELECT 1 FROM user_module_access WHERE user_id=$1 AND module_id=$2", [user.id, moduleId]);
+  return found.rowCount > 0;
+}
+
+async function requireModuleAccess(user, moduleId) {
+  if (!(await hasModuleAccess(user, moduleId))) throw Object.assign(new Error("به این بخش دسترسی ندارید."), { status: 403 });
+}
+
+async function replaceUserModuleAccess(client, userId, role, moduleIds) {
+  await client.query("DELETE FROM user_module_access WHERE user_id=$1", [userId]);
+  if (role === "admin") return;
+  const allowed = new Set([...MODULE_CATALOG.map((item) => item.id), ...installedModules.map((item) => item.id)]);
+  for (const moduleId of [...new Set(Array.isArray(moduleIds) ? moduleIds.map(String) : [])]) {
+    if (!allowed.has(moduleId)) continue;
+    await client.query("INSERT INTO user_module_access(user_id,module_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [userId, moduleId]);
+  }
+}
+
 async function canAccessCompany(user, companyId) {
+  if (!(await hasModuleAccess(user, "ipam"))) return false;
   const active = await pool.query("SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyId]);
   if (!active.rowCount) return false;
   if (user.role === "admin") return true;
@@ -254,6 +320,7 @@ async function canAccessCompany(user, companyId) {
 }
 
 async function canManageCompany(user, companyId) {
+  if (!(await hasModuleAccess(user, "ipam"))) return false;
   const active = await pool.query("SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL", [companyId]);
   if (!active.rowCount) return false;
   if (user.role === "admin") return true;
@@ -265,6 +332,7 @@ async function canManageCompany(user, companyId) {
 }
 
 async function canAccessSpace(user, spaceId) {
+  if (!(await hasModuleAccess(user, "ipam"))) return false;
   if (user.role === "admin") {
     const active = await pool.query(
       "SELECT 1 FROM address_spaces s JOIN companies c ON c.id=s.company_id WHERE s.id=$1 AND s.deleted_at IS NULL AND c.deleted_at IS NULL",
@@ -326,9 +394,12 @@ function broadcast(event) {
 }
 
 async function listBootstrap(user) {
-  const companyWhere = user.role === "admin"
-    ? { sql: "WHERE c.deleted_at IS NULL", params: [] }
-    : { sql: `WHERE c.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
+  const ipamAllowed = await hasModuleAccess(user, "ipam");
+  const companyWhere = !ipamAllowed
+    ? { sql: "WHERE 1=0", params: [] }
+    : user.role === "admin"
+      ? { sql: "WHERE c.deleted_at IS NULL", params: [] }
+      : { sql: `WHERE c.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
                     OR EXISTS (SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
                                 WHERE s.company_id=c.id AND s.deleted_at IS NULL AND usa.user_id=$1))`, params: [user.id] };
   const companies = await pool.query(
@@ -364,12 +435,18 @@ async function listBootstrap(user) {
   const fullCompanyIds = user.role === "admin"
     ? ids
     : (await pool.query("SELECT company_id AS id FROM user_company_access WHERE user_id=$1", [user.id])).rows.map((item) => item.id);
-  return { ok: true, version: APP_VERSION, user, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds, modules: await publicModules() };
+  const moduleIds = await moduleIdsForUser(user);
+  const moduleSet = new Set(moduleIds);
+  const modules = installedModules.filter((item) => user.role === "admin" || moduleSet.has(item.id)).map(({ dir, proxy, ...item }) => item);
+  const catalogMap = new Map(MODULE_CATALOG.map((item) => [item.id, { ...item, installed: item.id === "ipam" || item.id === "inventory" || installedModules.some((module) => module.id === item.id) }]));
+  for (const module of installedModules) if (!catalogMap.has(module.id)) catalogMap.set(module.id, { id: module.id, name: module.name || module.id, description: module.description || "افزونه نصب‌شده", installed: true });
+  const moduleCatalog = [...catalogMap.values()];
+  return { ok: true, version: APP_VERSION, user: { ...user, moduleIds }, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds, moduleIds, moduleCatalog, modules };
 }
 
 async function companyData(user, companyId) {
   if (!(await canAccessCompany(user, companyId))) throw Object.assign(new Error("شرکت پیدا نشد یا دسترسی ندارید."), { status: 404 });
-  const [company, contacts, connections, spaces, stats] = await Promise.all([
+  const [company, contacts, connections, spaces, personnel, stats] = await Promise.all([
     pool.query(
       `SELECT id,parent_company_id AS "parentCompanyId",kind,code,name,description,address,postal_code AS "postalCode",
               phone,manager_name AS "managerName",latitude,longitude,notes,updated_at AS "updatedAt"
@@ -393,6 +470,11 @@ async function companyData(user, companyId) {
       [companyId],
     ),
     pool.query(
+      `SELECT id,employee_code AS "employeeCode",full_name AS "fullName",phone,mobile,email,department,job_title AS "jobTitle",notes,active
+         FROM personnel WHERE company_id=$1 ORDER BY active DESC,full_name`,
+      [companyId],
+    ),
+    pool.query(
       `SELECT count(DISTINCT h.id)::int AS hosts,count(DISTINCT p.id)::int AS prefixes,
               count(DISTINCT CASE WHEN h.radio_mode<>'' THEN h.id END)::int AS radios
          FROM address_spaces s
@@ -403,7 +485,7 @@ async function companyData(user, companyId) {
     ),
   ]);
   if (!company.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
-  return { ok: true, company: company.rows[0], contacts: contacts.rows, connections: connections.rows, spaces: spaces.rows, stats: stats.rows[0] };
+  return { ok: true, company: company.rows[0], contacts: contacts.rows, connections: connections.rows, spaces: spaces.rows, personnel: personnel.rows, stats: stats.rows[0] };
 }
 
 async function replaceCompanyDetails(client, companyId, body) {
@@ -445,7 +527,7 @@ async function spaceData(user, spaceId) {
               monitor_interval AS "monitorInterval",monitor_state AS "monitorState",monitor_checked_at AS "monitorCheckedAt",
               monitor_last_ok_at AS "monitorLastOkAt",monitor_failures AS "monitorFailures",monitor_error AS "monitorError",
               secret_ref AS "secretRef",(secret_ciphertext <> '') AS "hasPassword",
-              notes,ports,updated_at AS "updatedAt"
+              custom_fields AS "customFields",notes,ports,updated_at AS "updatedAt"
          FROM hosts WHERE space_id=$1 AND deleted_at IS NULL ORDER BY ip`,
       [spaceId],
     ),
@@ -516,7 +598,7 @@ async function inventoryData(user) {
               h.monitor_ca_pem AS "monitorCaPem",
               h.monitor_interval AS "monitorInterval",h.monitor_state AS "monitorState",h.monitor_checked_at AS "monitorCheckedAt",
               h.monitor_last_ok_at AS "monitorLastOkAt",h.monitor_failures AS "monitorFailures",h.monitor_error AS "monitorError",
-              (h.secret_ciphertext <> '') AS "hasPassword",s.name AS "spaceName",s.cidr AS "spaceCidr",
+              (h.secret_ciphertext <> '') AS "hasPassword",h.custom_fields AS "customFields",s.name AS "spaceName",s.cidr AS "spaceCidr",
               c.id AS "companyId",c.name AS "companyName"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL
@@ -547,16 +629,18 @@ async function searchData(user, query) {
   if (!spaceIds.length) return [];
   const items = [];
   const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
+  const compactMacQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
-  const [hosts, prefixes, companies] = await Promise.all([
+  const [hosts, prefixes, companies, personnel] = await Promise.all([
     pool.query(
       `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
           (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
-           translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2)
+           ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
+           translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2 OR h.custom_fields::text ILIKE $2)
         ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip LIMIT 30`,
-      [spaceIds, `%${q}%`, exactIp || ""],
+      [spaceIds, `%${q}%`, exactIp || "", compactMacQuery],
     ),
     pool.query(
       `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
@@ -579,8 +663,17 @@ async function searchData(user, query) {
         ORDER BY c.name LIMIT 20`,
       [companyIds, `%${q}%`],
     ) : { rows: [] },
+    companyIds.length ? pool.query(
+      `SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName"
+         FROM personnel p LEFT JOIN companies c ON c.id=p.company_id
+        WHERE p.active=true AND (p.company_id IS NULL OR p.company_id=ANY($1::text[])) AND
+          (p.employee_code ILIKE $2 OR translate(p.full_name,'كيى','کیی') ILIKE $2 OR p.phone ILIKE $2 OR p.mobile ILIKE $2 OR p.email ILIKE $2 OR translate(p.department,'كيى','کیی') ILIKE $2)
+        ORDER BY p.full_name LIMIT 20`,
+      [companyIds, `%${q}%`],
+    ) : { rows: [] },
   ]);
   items.push(...companies.rows.map((item) => ({ kind: "company", companyId: item.id, ...item })));
+  items.push(...personnel.rows.map((item) => ({ kind: "personnel", ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
   if (exactIp && !hosts.rows.some((item) => item.ip === exactIp)) {
@@ -734,13 +827,59 @@ async function api(req, res, url, user) {
   }
 
   if (req.method === "GET" && pathname === "/api/bootstrap") return json(res, 200, await listBootstrap(user));
+  if (req.method === "GET" && pathname === "/api/modules") {
+    const moduleIds = await moduleIdsForUser(user);
+    const allowed = new Set(moduleIds);
+    return json(res, 200, { ok: true, catalog: MODULE_CATALOG, modules: installedModules.filter((item) => user.role === "admin" || allowed.has(item.id)).map(({ dir, proxy, ...item }) => item) });
+  }
 
   if (req.method === "GET" && pathname === "/api/search") {
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
   }
 
   if (req.method === "GET" && pathname === "/api/inventory") {
+    await requireModuleAccess(user, "inventory");
     return json(res, 200, { ok: true, items: await inventoryData(user) });
+  }
+
+  if (req.method === "GET" && pathname === "/api/personnel") {
+    const q = cleanText(url.searchParams.get("q") || "", 120);
+    const params = [];
+    let where = "";
+    if (q) { params.push(`%${normalizePersian(q)}%`); where = `WHERE (employee_code || ' ' || full_name || ' ' || phone || ' ' || mobile || ' ' || email || ' ' || department) ILIKE $1`; }
+    const rows = await pool.query(`SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName",p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name LIMIT 50`, params);
+    return json(res, 200, { ok: true, items: rows.rows });
+  }
+
+  if (req.method === "POST" && pathname === "/api/personnel") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const employeeCode = cleanText(body.employeeCode, 80);
+    const fullName = cleanText(body.fullName, 180);
+    if (!employeeCode || !fullName) throw new Error("کد پرسنلی و نام الزامی است.");
+    const id = crypto.randomUUID();
+    await pool.query(`INSERT INTO personnel(id,employee_code,full_name,phone,mobile,email,department,job_title,company_id,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [id,employeeCode,fullName,cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
+    await audit(user,"create","personnel",id,{detail:{employeeCode,fullName}});
+    return json(res,201,{ok:true,id});
+  }
+
+  const personnelMatch = pathname.match(/^\/api\/personnel\/([^/]+)$/);
+  if (personnelMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const body = await readBody(req);
+    const id = personnelMatch[1];
+    const updated = await pool.query(`UPDATE personnel SET employee_code=$2,full_name=$3,phone=$4,mobile=$5,email=$6,department=$7,job_title=$8,company_id=$9,notes=$10,active=$11,updated_at=now() WHERE id=$1 RETURNING id`, [id,cleanText(body.employeeCode,80),cleanText(body.fullName,180),cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
+    if (!updated.rowCount) throw Object.assign(new Error("پرسنل پیدا نشد."),{status:404});
+    await audit(user,"update","personnel",id);
+    return json(res,200,{ok:true});
+  }
+
+  if (personnelMatch && req.method === "DELETE") {
+    requireAdmin(user);
+    const removed = await pool.query("DELETE FROM personnel WHERE id=$1 RETURNING id",[personnelMatch[1]]);
+    if (!removed.rowCount) throw Object.assign(new Error("پرسنل پیدا نشد."),{status:404});
+    await audit(user,"delete","personnel",personnelMatch[1]);
+    return json(res,200,{ok:true});
   }
 
   if (req.method === "GET" && pathname === "/api/backups") {
@@ -1337,7 +1476,7 @@ async function api(req, res, url, user) {
       radioMode, cleanText(body.ssid, 160), cleanText(body.frequency, 80), cleanText(body.channel, 80),
       cleanText(body.signal, 40), radioParentHostId, JSON.stringify(normalizeConnections(body.connectionMethods)),
       monitorEnabled, monitorDriver, monitorPort, "", monitorSecretCiphertext,
-      "", monitorInterval,
+      "", monitorInterval, JSON.stringify(normalizeCustomFields(body.customFields)),
     ];
     const client = await pool.connect();
     let savedId = id;
@@ -1346,9 +1485,9 @@ async function api(req, res, url, user) {
       const saved = await client.query(
         `INSERT INTO hosts(id,space_id,ip,name,status,type,os,mac,vlan,username,owner,location,secret_ref,secret_ciphertext,notes,ports,created_by,updated_by,
                            vendor,model,serial,firmware,radio_mode,ssid,frequency,channel,signal,radio_parent_host_id,connection_methods,
-                           monitor_enabled,monitor_driver,monitor_port,monitor_username,monitor_secret_ciphertext,monitor_ca_pem,monitor_interval)
+                           monitor_enabled,monitor_driver,monitor_port,monitor_username,monitor_secret_ciphertext,monitor_ca_pem,monitor_interval,custom_fields)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28::jsonb,
-                $29,$30,$31,$32,$33,$34,$35)
+                $29,$30,$31,$32,$33,$34,$35,$36::jsonb)
          ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id,ip=excluded.ip,name=excluded.name,status=excluded.status,type=excluded.type,
            os=excluded.os,mac=excluded.mac,vlan=excluded.vlan,username=excluded.username,owner=excluded.owner,
            location=excluded.location,secret_ref=excluded.secret_ref,secret_ciphertext=excluded.secret_ciphertext,
@@ -1357,7 +1496,7 @@ async function api(req, res, url, user) {
            channel=excluded.channel,signal=excluded.signal,radio_parent_host_id=excluded.radio_parent_host_id,
            connection_methods=excluded.connection_methods,monitor_enabled=excluded.monitor_enabled,monitor_driver=excluded.monitor_driver,
            monitor_port=excluded.monitor_port,monitor_username=excluded.monitor_username,monitor_secret_ciphertext=excluded.monitor_secret_ciphertext,
-           monitor_ca_pem=excluded.monitor_ca_pem,monitor_interval=excluded.monitor_interval,deleted_at=NULL,deleted_by=NULL,
+           monitor_ca_pem=excluded.monitor_ca_pem,monitor_interval=excluded.monitor_interval,custom_fields=excluded.custom_fields,deleted_at=NULL,deleted_by=NULL,
            updated_by=excluded.updated_by,updated_at=now()
          RETURNING id`,
         values,
@@ -1432,7 +1571,8 @@ async function api(req, res, url, user) {
     const users = await pool.query(
       `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,
               COALESCE((SELECT json_agg(a.company_id) FROM user_company_access a WHERE a.user_id=u.id),'[]') AS "companyIds",
-              COALESCE((SELECT json_agg(a.space_id) FROM user_space_access a WHERE a.user_id=u.id),'[]') AS "spaceIds"
+              COALESCE((SELECT json_agg(a.space_id) FROM user_space_access a WHERE a.user_id=u.id),'[]') AS "spaceIds",
+              COALESCE((SELECT json_agg(a.module_id ORDER BY a.module_id) FROM user_module_access a WHERE a.user_id=u.id),'[]') AS "moduleIds"
          FROM users u ORDER BY u.username`,
     );
     return json(res, 200, { ok: true, users: users.rows });
@@ -1463,6 +1603,7 @@ async function api(req, res, url, user) {
           await client.query("INSERT INTO user_space_access(user_id,space_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [id, spaceId]);
         }
       }
+      await replaceUserModuleAccess(client, id, role, body.moduleIds);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1496,6 +1637,7 @@ async function api(req, res, url, user) {
         for (const companyId of companyIds) await client.query("INSERT INTO user_company_access(user_id,company_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [userUpdate[1], companyId]);
         for (const spaceId of spaceIds) await client.query("INSERT INTO user_space_access(user_id,space_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [userUpdate[1], spaceId]);
       }
+      await replaceUserModuleAccess(client, userUpdate[1], role, body.moduleIds);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -1586,56 +1728,76 @@ async function staticFile(res, pathname) {
   }
 }
 
-async function proxyModule(req, res, url, user) {
-  if (!user) return errorResponse(res, 401, "ابتدا وارد سامانه شوید.");
-  const parts = url.pathname.split("/").filter(Boolean);
-  const moduleId = parts[1] || "";
-  const moduleInfo = (await loadModules()).find((item) => item.id === moduleId);
-  if (!moduleInfo?.upstream) return errorResponse(res, 404, "ماژول موردنظر فعال نیست.");
-  const upstreamUrl = new URL(moduleInfo.upstream);
-  const stripPrefix = `/m/${moduleId}`;
-  const forwardedPath = (url.pathname.slice(stripPrefix.length) || "/") + url.search;
+function findModuleForPath(pathname) {
+  const match = pathname.match(/^\/m\/([^/]+)(?:\/|$)/);
+  return match ? installedModules.find((item) => item.id === match[1]) || null : null;
+}
+
+async function staticModuleFile(res, module, pathname) {
+  const prefix = `/m/${module.id}/`;
+  const requested = pathname === `/m/${module.id}` || pathname === prefix ? "index.html" : pathname.slice(prefix.length);
+  const publicDir = path.resolve(module.dir, "public");
+  const resolved = path.resolve(publicDir, requested || "index.html");
+  if (!resolved.startsWith(publicDir + path.sep) && resolved !== path.join(publicDir, "index.html")) return false;
+  try {
+    const data = await fs.readFile(resolved);
+    const ext = path.extname(resolved);
+    res.writeHead(200, {
+      "Content-Type": contentTypes[ext] || "application/octet-stream",
+      "Content-Length": data.length,
+      "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "same-origin",
+      "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'",
+    });
+    res.end(data);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function proxyModule(req, res, module) {
   return new Promise((resolve) => {
-    const upstream = http.request({
-      protocol: upstreamUrl.protocol,
-      hostname: upstreamUrl.hostname,
-      port: upstreamUrl.port || 80,
+    let upstream;
+    try { upstream = new URL(module.proxy.upstream); } catch { errorResponse(res, 500, "تنظیمات Proxy ماژول معتبر نیست."); return resolve(); }
+    let requestPath = req.url;
+    if (module.proxy.stripPrefix === true) {
+      const prefix = `/m/${module.id}`;
+      requestPath = req.url.startsWith(prefix) ? req.url.slice(prefix.length) || "/" : req.url;
+    }
+    const upstreamReq = http.request({
+      protocol: upstream.protocol,
+      hostname: upstream.hostname,
+      port: upstream.port || (upstream.protocol === "https:" ? 443 : 80),
       method: req.method,
-      path: forwardedPath,
-      headers: {
-        ...req.headers,
-        host: upstreamUrl.host,
-        "x-ems-user-id": user.id,
-        "x-ems-user-role": user.role,
-        "x-ems-user-name": encodeURIComponent(user.username || ""),
-        "x-ems-module-prefix": stripPrefix,
-      },
+      path: requestPath,
+      headers: { ...req.headers, host: upstream.host },
     }, (response) => {
-      const headers = { ...response.headers };
-      delete headers["content-security-policy"];
-      res.writeHead(response.statusCode || 502, headers);
+      res.writeHead(response.statusCode || 502, response.headers);
       response.pipe(res);
       response.on("end", resolve);
     });
-    upstream.on("error", () => {
-      if (!res.headersSent) errorResponse(res, 503, "ماژول فعال است اما سرویس آن آماده پاسخ‌گویی نیست.");
-      else res.end();
-      resolve();
-    });
-    req.pipe(upstream);
+    upstreamReq.on("error", () => { if (!res.headersSent) errorResponse(res, 503, `ماژول ${module.name} در دسترس نیست.`); else res.end(); resolve(); });
+    req.pipe(upstreamReq);
   });
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-    if (url.pathname === "/api/modules" && req.method === "GET") {
-      const user = await currentUser(req);
-      if (!user) return errorResponse(res, 401, "ابتدا وارد سامانه شوید.");
-      return json(res, 200, { ok: true, modules: await publicModules() });
+    const module = findModuleForPath(url.pathname);
+    if (module) {
+      const moduleUser = await currentUser(req);
+      if (!moduleUser) return errorResponse(res, 401, "برای استفاده از این ماژول ابتدا وارد EMS_IPAM شوید.");
+      if (!(await hasModuleAccess(moduleUser, module.id))) return errorResponse(res, 403, "دسترسی این ماژول برای کاربر فعال نیست.");
+      if (Array.isArray(module.permissions) && module.permissions.length && !module.permissions.includes(moduleUser.role)) return errorResponse(res, 403, "دسترسی به این ماژول مجاز نیست.");
+      if (module.proxy?.upstream) return await proxyModule(req, res, module);
+      if (req.method === "GET" && await staticModuleFile(res, module, url.pathname)) return;
+      return errorResponse(res, 404, "فایل ماژول پیدا نشد.");
     }
-    if (url.pathname.startsWith("/m/")) return await proxyModule(req, res, url, await currentUser(req));
-    if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, version: APP_VERSION });
+    if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, version: APP_VERSION, modules: installedModules.map((item) => item.id) });
     if (url.pathname.startsWith("/api/")) {
       if (!csrfAllowed(req)) return errorResponse(res, 403, "درخواست فاقد نشان امنیتی معتبر است.");
       return await api(req, res, url, await currentUser(req));

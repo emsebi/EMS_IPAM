@@ -1,12 +1,9 @@
-EMS IPAM Core v0.7.1
-Repository: https://github.com/emsebi/EMS_IPAM
+EMS IPAM Base v1.4.0-stage1
 
-روش انتشار:
-1) محتوای این پوشه را در ریشه Repository قرار دهید.
-2) فایل‌های هم‌نام نسخه قبلی را Replace کنید.
-3) پوشه‌های Legacy قدیمی در modules در صورت باقی‌ماندن مانع نصب Core نمی‌شوند؛ Installer فقط ماژول‌هایی را می‌شناسد که module.env معتبر دارند.
+ZIP را Extract کنید و محتویاتش را مستقیماً در Root مخزن زیر قرار دهید:
+https://github.com/emsebi/EMS_IPAM
 
-نصب با یک دستور:
+سپس Commit/Push و روی Ubuntu فقط این دستور را اجرا کنید:
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 
 منو:
@@ -14,3 +11,12 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 2) Update
 3) Uninstall application (keep database)
 4) Uninstall application + database
+
+Update ایمن:
+- PostgreSQL named volume حذف نمی‌شود.
+- /var/lib/ems-ipam/.env حفظ می‌شود.
+- قبل از Update یک DB backup معتبر و غیرخالی اجباری است.
+- اگر Backup ساخته نشود Update قبل از تغییر برنامه متوقف می‌شود.
+- اگر Health Check نسخه جدید Fail شود، فایل‌های Application rollback می‌شوند.
+
+چک‌لیست تست: docs/TEST-CHECKLIST-FA.md

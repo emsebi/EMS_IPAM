@@ -1,43 +1,21 @@
-# EMS_IPAM
+# EMS_IPAM — Stage 01 Base + IPAM v1.4.0-stage1
 
-پلتفرم ماژولار مدیریت زیرساخت شبکه. هسته اصلی مستقل از ماژول‌های IPAM، Radio، RADIUS، Network Map، MAC Finder و Network Access طراحی شده است تا هر بخش جداگانه توسعه و جایگزین شود.
+Repository: `github.com/emsebi/EMS_IPAM`  
+طراح و توسعه‌دهنده: **Ebrahim Mamani / ابراهیم مامانی**
 
-مخزن رسمی: `https://github.com/emsebi/EMS_IPAM`
+این خروجی **مرحله اول رسمی ساخت پروژه** است: پنل مرکزی، دیتابیس مشترک و IPAM. افزونه‌های Radio، RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی به همین Base اضافه می‌شوند و نباید برای توسعه آن‌ها Base از نو ساخته شود.
 
-## وضعیت این خروجی
+> تمام داده‌های Demo داخل سورس ساختگی هستند و برای GitHub تهیه شده‌اند. هیچ نام شرکت، شعبه، رنج یا تجهیز واقعی در Seed/Mock/Documentation قرار داده نشده است.
 
-این بسته **مرحله ۱** پروژه است و شامل موارد زیر است:
+![طرح مفهومی نمای Subnet](docs/screenshots/subnet-overview-concept.png)
 
-- Core / پنل اصلی
-- PostgreSQL 16
-- Login و Session
-- نقش‌های Admin / Support / Helpdesk / Viewer
-- Company و Site / Branch
-- Personnel Directory
-- Device Inventory مرکزی و قابل ویرایش
-- Search سراسری با پیشنهاد سریع و انتخاب با کلیدهای جهت‌نما
-- Settings متمرکز
-- Audit Log
-- Backup دستی دیتابیس
-- Module Loader و قرارداد افزونه‌ها
-- Installer / Update / Uninstall پایدار
-- Docker / Docker Compose / Portainer prerequisite bootstrap
-
-ماژول IPAM در **مرحله ۲** به صورت پوشه مستقل `modules/ipam/` اضافه می‌شود و بدون بازسازی Core در منوی اصلی ظاهر خواهد شد.
-
-## تصویر مرحله ۱
-
-![EMS IPAM Core Dashboard](docs/screenshots/ems-ipam-core-stage1.png)
-
-## نصب سریع
-
-فقط یک دستور روی Ubuntu/Debian اجرا کنید. اسکریپت وجود Docker Engine، Docker Compose و Portainer را بررسی می‌کند و در صورت نیاز نصب می‌کند:
+## نصب با یک دستور
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
 ```
 
-سپس یکی از گزینه‌ها را انتخاب کنید:
+منو:
 
 ```text
 1) Install
@@ -46,61 +24,111 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 4) Uninstall application + database
 ```
 
-جزئیات کامل: [docs/INSTALL-FA.md](docs/INSTALL-FA.md)
+### ایمنی Update
 
-## معماری ماژولار
+گزینه **Update** برای حفظ اطلاعات طراحی شده است:
+
+- قبل از تغییر Application، Backup اجباری PostgreSQL ساخته و غیرخالی بودن آن بررسی می‌شود.
+- Docker volume با نام `ems_ipam_db_data` در Update حذف نمی‌شود.
+- فایل تنظیمات `/var/lib/ems-ipam/.env` در Update بازنویسی نمی‌شود.
+- فایل‌های برنامه به صورت Staged جایگزین می‌شوند.
+- اگر Health Check نسخه جدید Fail شود، فایل‌های Application به نسخه قبلی Rollback می‌شوند.
+- Backup قبل از Update در `/var/lib/ems-ipam/backups` باقی می‌ماند.
+- تنها گزینه **4** اجازه حذف Database/State را دارد و قبل از حذف تأیید می‌گیرد.
+
+راهنمای کامل: [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
+
+## امکانات Base فعلی
+
+### Core
+
+- Login / Logout و Session
+- Admin / Support / Helpdesk / Viewer
+- Create / Edit / Delete / Enable / Disable کاربران
+- دسترسی به شرکت‌ها و Address Spaceها
+- **دسترسی مستقل به ماژول‌ها برای هر User**
+- Settings متمرکز
+- Light / Dark Theme
+- Profile menu و About
+- Personnel مرکزی با کد پرسنلی
+- Inventory مشترک تجهیزات
+- Custom Fields
+- Audit Log
+- Backup دستی و زمان‌بندی‌شده
+- Global Search با پیشنهاد لحظه‌ای و Keyboard navigation
+
+### Company / Branch / Site
+
+- Company / Branch / Site / Customer
+- Parent/Child
+- کد، آدرس، تلفن، مدیر، کدپستی
+- Latitude / Longitude
+- چند Contact با نام، سمت، تلفن، موبایل و Email
+- Personnel مرتبط با همان شعبه/شرکت و کد پرسنلی
+- چند IP/Link برای Router/WAN
+- روش اتصال Web / HTTPS / SSH / WinBox و Custom Port
+- Notes
+- Create / Edit / Delete
+
+### IPAM
+
+- Root Address Space از `/16` تا `/24`
+- نمای پیش‌فرض **جدول عمودی CIDR**
+- `/24` سمت چپ و `/23 ... /16` با ارتفاع واقعی بر اساس تعداد `/24`های زیرمجموعه
+- کلیک روی **متن CIDR** = ورود دقیقاً به همان Range
+- کلیک روی **مربع کوچک رنگ** = فقط Name / Description / Color همان Range
+- رنگ Range به Childها ارث داده نمی‌شود
+- Range بدون Group خاکستری باقی می‌ماند
+- رنگ پیشنهادی خودکار برای Group جدید و تلاش برای جلوگیری از تکرار رنگ هم‌سطح
+- Tile view اختیاری
+- Drill-down تا `/30` و سپس چهار IP مجزا
+- `/31` به عنوان مرحله جدا در UI نمایش داده نمی‌شود
+- IP detail با Previous / Next
+- Hostname / MAC / VLAN / Owner / Location / Vendor / Model / Serial / Firmware / Notes
+- Ping status
+- Service shortcuts و پورت قابل تنظیم
+- Import / Export
+
+## اتصال Base به افزونه‌های آینده
+
+همه بخش‌ها از **یک PostgreSQL مشترک** و IDهای مشترک استفاده خواهند کرد. افزونه‌ها نباید رکورد IP/Device جداگانه بسازند.
 
 ```text
-EMS_IPAM/
-├── core/                  # هسته ثابت
-├── modules/               # افزونه‌های مستقل
-│   └── _template/         # نمونه قرارداد ماژول
-├── docs/
-├── scripts/
-├── backups/
-├── runtime/
-├── compose.yml
-├── install.sh
-└── VERSION
+Core + IPAM
+├── Inventory
+├── Personnel
+├── modules/radio
+├── modules/radius
+├── modules/network-map
+├── modules/mac-finder
+└── modules/network-access
 ```
 
-هر قابلیت جدید داخل `modules/<module-id>/` قرار می‌گیرد. Core پوشه‌هایی که `module.json` معتبر ندارند نادیده می‌گیرد؛ بنابراین فایل‌های قدیمی یا ناقص مانع بالا آمدن پنل نمی‌شوند.
+Module access از همین نسخه در فرم User وجود دارد. افزونه‌های جدید نیز با `module.json` به Catalog دسترسی‌ها اضافه می‌شوند.
 
-راهنمای ساخت ماژول: [docs/MODULE-SDK-FA.md](docs/MODULE-SDK-FA.md)
+## Upload به GitHub
 
-## State پایدار
-
-کد برنامه در:
+ZIP تحویلی پوشه والد اضافی ندارد. محتویات ZIP را مستقیم در Root مخزن زیر Extract/Upload کنید:
 
 ```text
-/opt/ems-ipam
+https://github.com/emsebi/EMS_IPAM
 ```
 
-و اطلاعات پایدار Installer در:
+بعد همان یک دستور Installer را اجرا کنید.
 
-```text
-/var/lib/ems-ipam
-```
+## تست محلی UI بدون دیتابیس
 
-قرار می‌گیرد. دیتابیس در Docker Volume ثابت `ems_ipam_db_data` نگهداری می‌شود. حذف برنامه با گزینه ۳ دیتابیس و State را نگه می‌دارد و نصب مجدد آن‌ها را استفاده می‌کند.
+برای توسعه Frontend، Mock data فقط داده‌های ساختگی دارد. در صورت Serve کردن `docker-app/public`، آدرس را با `?mock` باز کنید.
 
-## اصول پروژه
+## مستندات
 
-- Core به هیچ ماژول اختیاری وابسته نیست.
-- خراب شدن یک ماژول نباید Core را Down کند.
-- همه ماژول‌ها از User / Role / Company / Site / Personnel / Inventory مشترک استفاده می‌کنند.
-- اطلاعات تکراری Device بین ماژول‌ها ساخته نمی‌شود.
-- هر تغییر حساس در Audit ثبت می‌شود.
-- تاریخ‌ها در دیتابیس به صورت استاندارد ذخیره و در رابط کاربری قابل نمایش به تقویم شمسی هستند.
-- رمزهای تجهیزات در Core مرحله ۱ ذخیره نمی‌شوند.
+- [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
+- [`docs/ARCHITECTURE-FA.md`](docs/ARCHITECTURE-FA.md)
+- [`docs/MODULE-SDK-FA.md`](docs/MODULE-SDK-FA.md)
+- [`docs/TEST-REPORT-FA.md`](docs/TEST-REPORT-FA.md)
 
-## مراحل توسعه
 
-1. Core + Database + Installer **(این بسته)**
-2. IPAM
-3. Radio Map
-4. RADIUS / AAA
-5. Network Map
-6. MAC Finder
-7. Network Access / MAB / 802.1X
-8. هر قابلیت آینده به عنوان Module مستقل
+## محدوده مرحله اول
+
+- [Stage 01 Scope](docs/STAGE-01-SCOPE-FA.md)
+- [Update Safety](docs/UPDATE-SAFETY-FA.md)

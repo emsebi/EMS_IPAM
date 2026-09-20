@@ -1,25 +1,28 @@
-# گزارش آزمون نسخه ۰.۶.۰
+# گزارش تست v1.4.0-stage1
 
-تاریخ بررسی: ۲۲ شهریور ۱۴۰۵ / ۱۳ سپتامبر ۲۰۲۶
+## تست‌های اجراشده در زمان Build
 
-## نتیجه
+- `node --check docker-app/server/main.mjs` — PASS
+- `node --check docker-app/public/app.js` — PASS
+- `node --check docker-app/public/mock-api.js` — PASS
+- `bash -n install.sh` — PASS
+- Node test suite — 27/27 PASS
+- ZIP integrity — در زمان Packaging بررسی می‌شود
 
-- آزمون‌های هسته مدیریت IP: ۲۷ مورد موفق از ۲۷ مورد
-- آزمون‌های ماژول نقشه شبکه: ۷ مورد موفق از ۷ مورد
-- مجموع: ۳۴ آزمون موفق و صفر خطا
-- بررسی نحو JavaScript و Bash: موفق
-- بررسی ساختار YAML و بسته کلاینت ویندوز: موفق
+## موارد پوشش‌داده‌شده توسط تست‌ها
 
-## محدوده بررسی
+- CIDR math از Root تا Detail
+- `/30` = چهار IP و عدم نمایش `/31` در Detail table
+- Company/IP/Scoped access schema
+- User lifecycle و حفاظت Last Admin
+- Module discovery
+- Module permissions schema
+- Backup قبل از Update
+- Rollback فایل Application
+- عدم ذخیره Password تجهیزات
+- Search / Inventory / Backup API
+- Frontend IDs و Workflowهای اصلی
 
-- دسترسی کاربران و حفظ حداقل یک مدیر فعال
-- رنج‌های IP، مدیریت تجهیزات، حذف نرم و بازیابی
-- حذف کامل قابلیت ذخیره رمز تجهیزات و پایش خودکار
-- جداسازی ماژول نقشه و استفاده از پایگاه داده مشترک
-- کشف CDP/LLDP، برچسب پورت Access/Trunk و پارسر IOS/NX-OS
-- لغو عملیات فعال هنگام قطع صفحه و پاک‌سازی اطلاعات ورود موقت
-- پاک‌سازی سخت‌گیرانه خطوط حساس کانفیگ پیش از ذخیره
-- نسخه تاریخی نقشه، حذف/بازیابی و بکاپ کانفیگ
-- پشتیبانی کلاینت ویندوز از SSH و Telnet بدون انتقال رمز
+## محدودیت محیط Build
 
-آزمون عملی اتصال به مدل‌های واقعی سوئیچ باید پس از نصب در شبکه مقصد و با حساب فقط‌خواندنی یا سطح ۱۵ انجام شود؛ رفتار CLI بین مدل‌ها و نسخه‌های سیستم‌عامل متفاوت است.
+Docker daemon واقعی در محیط ساخت در دسترس نیست؛ بنابراین اجرای `docker compose up` باید روی Ubuntu تست کاربر انجام شود. Installer در Fail شدن Health Check لاگ App/DB را نمایش می‌دهد.

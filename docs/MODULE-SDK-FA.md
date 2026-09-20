@@ -1,64 +1,45 @@
-# EMS_IPAM Module SDK
+# EMS IPAM Module SDK
 
-هدف این قرارداد آن است که هر قابلیت جدید بدون بازسازی هسته به پروژه اضافه شود.
+هسته Base مستقل است. قابلیت‌های آینده در `modules/<module-id>/` اضافه می‌شوند.
 
-## حداقل ساختار
-
+## ساختار حداقل
 ```text
-modules/example/
+modules/example-module/
 ├── module.json
 ├── backend/
-│   └── index.mjs
 ├── frontend/
-│   └── index.html
-└── README-FA.md
+├── migrations/
+└── README.md
 ```
 
-نمونه `module.json`:
+اگر ماژول سرویس Docker مستقل لازم دارد، `compose.module.yml` هم اضافه می‌شود.
 
+## نمونه module.json
 ```json
 {
-  "id": "example",
-  "name": "Example",
-  "version": "1.0.0",
-  "description": "Example module",
-  "enabledByDefault": true,
-  "navigation": {
-    "label": "Example",
-    "icon": "◇"
-  },
-  "backend": "backend/index.mjs",
-  "frontend": "frontend/index.html",
-  "dependencies": ["core>=1.0.0"]
+  "id": "example-module",
+  "name": "Example Module",
+  "version": "0.1.0",
+  "route": "/example-module",
+  "icon": "puzzle",
+  "dependencies": ["core", "ipam"],
+  "permissions": ["admin", "support"],
+  "enabled": true
 }
 ```
 
-## Backend
+## اصول
+- PostgreSQL اصلی مشترک است؛ داده مشترک Duplicate نشود.
+- Migration ماژول Idempotent باشد.
+- خرابی/حذف یک ماژول Core و IPAM را Down نکند.
+- IP، Device، Company، Site و Personnel با ID به Base متصل شوند.
+- ماژول به Search و Permission Matrix هسته متصل شود.
+- Secret داخل Git یا Log ذخیره نشود.
+- هر آبجکت قابل ایجاد مسیر Edit/Delete مناسب داشته باشد.
 
-```js
-export async function register({ route, query, id, manifest }) {
-  route('GET', '/api/example/status', async ({ res, json }) => {
-    json(res, 200, { ok: true, module: manifest.id });
-  }, 'viewer');
-}
-```
-
-توابع مشترک Core به Module تزریق می‌شوند تا Module برای Authentication و Database یک پیاده‌سازی جدا نسازد.
-
-## Frontend
-
-صفحه `frontend/index.html` به صورت خودکار در مسیر زیر قابل دسترسی است:
-
-```text
-/m/example/
-```
-
-وقتی `navigation` در Manifest تعریف شده باشد، Core ورودی آن را در Sidebar نمایش می‌دهد.
-
-## اصل Isolation
-
-- ماژول نباید فایل‌های Core را Patch کند.
-- ماژول نباید User Table جدا بسازد.
-- ماژول نباید Company/Site/Device تکراری بسازد.
-- خطای ماژول نباید Core را متوقف کند.
-- Migration ماژول باید Idempotent باشد.
+## ماژول‌های برنامه‌ریزی‌شده
+- radio
+- radius
+- network-map
+- mac-finder
+- network-access

@@ -1,63 +1,59 @@
-# معماری EMS_IPAM
+# معماری Base و Modules
 
-## هسته ثابت
+## اصل اصلی
 
-Core مالک داده‌های مشترک است:
+Core + IPAM همیشه مستقل و قابل استفاده است. افزونه خراب یا حذف‌شده نباید Core را Down کند.
 
-- Authentication و Session
-- Panel Users و Roles
-- Company / Site
-- Personnel
-- Device Inventory
-- Settings
-- Audit
-- Backup Metadata
-- Module Registry
+یک PostgreSQL مشترک منبع اطلاعات است. IP، Company، Personnel و Device توسط افزونه‌ها Duplicate نمی‌شوند.
 
-ماژول‌ها برای این اطلاعات جدول موازی ایجاد نمی‌کنند و از شناسه‌های Core استفاده می‌کنند.
-
-## ماژول‌ها
-
-هر ماژول یک پوشه مستقل دارد:
+## Base
 
 ```text
-modules/<module-id>/
-├── module.json
-├── backend/
-├── frontend/
-├── migrations/
-└── README-FA.md
+Core
+├── Authentication
+├── Users / Roles / Module Permissions
+├── Settings
+├── Company / Site / Branch
+├── Personnel
+├── Inventory
+├── Search
+├── Audit
+├── Backup
+└── IPAM
 ```
 
-Core هنگام Start فقط پوشه‌هایی را Load می‌کند که `module.json` معتبر داشته باشند. نبودن یا خراب بودن یک پوشه قدیمی نباید Core را متوقف کند.
-
-## ماژول‌های برنامه‌ریزی‌شده
+## افزونه‌های برنامه‌ریزی‌شده
 
 ```text
-modules/ipam/
-modules/radio/
-modules/radius/
-modules/network-map/
-modules/mac-finder/
-modules/network-access/
+modules/radio
+modules/radius
+modules/network-map
+modules/mac-finder
+modules/network-access
 ```
 
-این فهرست محدودکننده نیست و ماژول جدید در آینده با همان قرارداد قابل اضافه شدن است.
+### Radio
 
-## Database Ownership
+AP/Station به همان Host/IP موجود در IPAM متصل می‌شود. Search باید Name/IP/MAC/SSID را پوشش دهد.
 
-Core Schema اطلاعات پایه را نگهداری می‌کند. هر Module Migrationهای مخصوص خودش را دارد و Foreign Key به موجودیت‌های Core می‌دهد. این طراحی باعث می‌شود تغییر یک ماژول نیاز به بازنویسی کل پروژه نداشته باشد.
+### RADIUS
 
-## Frontend Integration
+FreeRADIUS برای Device AAA و System User. Network Access نیز از همین Backend استفاده می‌کند.
 
-Core مسیر زیر را برای رابط هر Module رزرو کرده است:
+### Network Map
 
-```text
-/m/<module-id>/
-```
+Cisco discovery فقط Read-only و Sync با Inventory/IPAM.
 
-Module Loader Navigation را از `module.json` می‌خواند و ورودی ماژول را به Sidebar اضافه می‌کند. صفحه ماژول داخل Workspace اصلی EMS نمایش داده می‌شود.
+### MAC Finder
 
-## Backend Integration
+Current location + history و اتصال به Network Map.
 
-Backend ماژول می‌تواند تابع `register()` صادر کند و API Routeهای خودش را Register کند. Failure یک Module Log می‌شود و Core به کار خود ادامه می‌دهد.
+### Network Access
+
+802.1X/MAB، MAC Registry، Static/Dynamic VLAN و Unknown policy با FreeRADIUS.
+
+## Module permissions
+
+جدول `user_module_access` مستقل از Role است. Admin همه دسترسی‌ها را دارد. برای Userهای دیگر Admin می‌تواند Moduleها را جدا انتخاب کند.
+
+Module جدیدی که در آینده به Repository اضافه شود می‌تواند با `module.json` به Loader معرفی شود؛ Core برای اضافه شدن Feature جدید نیاز به بازنویسی ندارد.

@@ -1,49 +1,66 @@
 services:
   db:
     image: postgres:16-alpine
-    restart: unless-stopped
+    shm_size: 128mb
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:-ems_ipam}
+      POSTGRES_USER: ${POSTGRES_USER:-ems_ipam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      TZ: ${TZ:-Asia/Tehran}
     volumes:
       - ems_ipam_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ems_ipam} -d ${POSTGRES_DB:-ems_ipam}"]
+      interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 20
+    restart: unless-stopped
     networks:
-      - internal
+      - ems_ipam_internal
 
   app:
     build:
-      context: .
-      dockerfile: core/Dockerfile
-    restart: unless-stopped
+      context: ./docker-app
+    image: ems-ipam-base:1.4.0-stage1
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-ems_ipam}
+      PGUSER: ${POSTGRES_USER:-ems_ipam}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME:-admin}
+      EMS_ADMIN_PASSWORD: ${EMS_ADMIN_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PORT: 8080
+      BACKUP_DIR: /backups
+      BACKUP_DISPLAY_PATH: ${EMS_BACKUP_PATH:-/var/lib/ems-ipam/backups}
+      TZ: ${TZ:-Asia/Tehran}
+      EMS_MODULES_DIR: /modules
+    ports:
+      - "${EMS_HTTP_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      PORT: 8080
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      EMS_ADMIN_USERNAME: ${EMS_ADMIN_USERNAME}
-      EMS_ADMIN_PASSWORD_B64: ${EMS_ADMIN_PASSWORD_B64}
-      EMS_SESSION_SECRET: ${EMS_SESSION_SECRET}
-      TZ: ${TZ:-Asia/Tehran}
-    ports:
-      - "${EMS_HTTP_PORT:-8080}:8080"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     volumes:
-      - ${EMS_STATE_DIR:-/var/lib/ems-ipam}:/state
+      - ${EMS_STATE_DIR:-/var/lib/ems-ipam}/backups:/backups
+      - ./modules:/modules:ro
+    restart: unless-stopped
     networks:
-      - internal
-
-networks:
-  internal:
-    name: ems_ipam_internal
+      - ems_ipam_internal
 
 volumes:
   ems_ipam_db_data:
     name: ems_ipam_db_data
+
+networks:
+  ems_ipam_internal:
+    name: ems_ipam_internal
+    driver: bridge

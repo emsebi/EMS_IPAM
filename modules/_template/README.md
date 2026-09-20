@@ -1,12 +1,18 @@
-# EMS IPAM module template
+# EMS_IPAM module template
 
-A real module lives in `modules/<module-id>/` and contains at minimum:
+هر افزونه در پوشه مستقل `modules/<module-id>/` قرار می‌گیرد. حداقل فایل لازم `module.json` است.
 
-- `module.env`
-- `compose.module.yml`
-- its own application source/Dockerfile
+برای رابط کاربری مستقل، فایل‌ها را در `public/` قرار دهید. Core آن‌ها را از مسیر `/m/<module-id>/` ارائه می‌کند.
 
-The installer discovers modules automatically. No edit to core `compose.yml` is required.
-The service must stay on the internal `ems_internal` network and should not publish a host port.
-The core proxies `/m/<module-id>/...` to `EMS_MODULE_UPSTREAM` after authenticating the user.
-The module receives `X-EMS-User-Id`, `X-EMS-User-Role`, `X-EMS-User-Name` and `X-EMS-Module-Prefix` headers from the core.
+اگر ماژول سرویس Docker مستقل دارد، فایل `compose.module.yml` را کنار `module.json` قرار دهید. Installer آن را خودکار به Docker Compose اضافه می‌کند. در این حالت می‌توان در `module.json` بخش `proxy` تعریف کرد:
+
+```json
+{
+  "proxy": {
+    "upstream": "http://sample-module:8080",
+    "stripPrefix": true
+  }
+}
+```
+
+خرابی یا نبود یک ماژول نباید Core + IPAM را متوقف کند.

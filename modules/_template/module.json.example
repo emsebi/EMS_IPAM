@@ -1,0 +1,14 @@
+{
+  "id": "sample-module",
+  "name": "Sample Module",
+  "version": "0.1.0",
+  "description": "Example EMS_IPAM add-on",
+  "enabled": true,
+  "navigation": {
+    "label": "Sample Module",
+    "icon": "◫",
+    "path": "/m/sample-module/",
+    "order": 100
+  },
+  "permissions": ["admin", "support", "helpdesk", "viewer"]
+}
