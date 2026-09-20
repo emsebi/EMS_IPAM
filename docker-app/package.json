@@ -1,6 +1,6 @@
 {
   "name": "ems-ipam-container",
-  "version": "1.4.0-stage1",
+  "version": "1.4.1-stage1",
   "private": true,
   "type": "module",
   "engines": {

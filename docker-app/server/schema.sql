@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS users (
 DO $$
 DECLARE r record;
 BEGIN
-  FOR r IN SELECT conname FROM pg_constraint WHERE conrelid='users'::regclass AND contype='c' LOOP
+  FOR r IN SELECT oid, conname FROM pg_constraint WHERE conrelid='users'::regclass AND contype='c' LOOP
     IF pg_get_constraintdef(r.oid) ILIKE '%role%' THEN EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', r.conname); END IF;
   END LOOP;
 END $$;

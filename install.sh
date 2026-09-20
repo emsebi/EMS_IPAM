@@ -175,6 +175,12 @@ ENV
   chmod 600 "$ENV_FILE"
 }
 
+sync_env_link(){
+  [[ -f "$ENV_FILE" ]] || fail "Configuration file is missing: $ENV_FILE"
+  rm -f "$INSTALL_DIR/.env"
+  ln -s "$ENV_FILE" "$INSTALL_DIR/.env"
+}
+
 wait_health(){
   # shellcheck disable=SC1090
   source "$ENV_FILE"
@@ -264,6 +270,7 @@ install_app(){
   cp -a "$SOURCE_DIR" "$staged"
   touch "$staged/.ems-ipam-install"
   mv "$staged" "$INSTALL_DIR"
+  sync_env_link
   log "Building and starting EMS IPAM Core + IPAM"
   compose_core_cmd pull db
   compose_core_cmd build --pull app
@@ -282,6 +289,7 @@ update_app(){
   touch "$staged/.ems-ipam-install"
   mv "$INSTALL_DIR" "$previous"
   mv "$staged" "$INSTALL_DIR"
+  sync_env_link
   log "Updating application files"
   if compose_core_cmd pull db && compose_core_cmd build --pull app && compose_core_cmd up -d --remove-orphans && wait_health; then
     start_optional_modules
@@ -293,6 +301,7 @@ update_app(){
   compose_core_cmd down --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$INSTALL_DIR"
   mv "$previous" "$INSTALL_DIR"
+  sync_env_link
   compose_core_cmd build app >/dev/null 2>&1 || true
   compose_core_cmd up -d --remove-orphans >/dev/null 2>&1 || true
   wait_health || true

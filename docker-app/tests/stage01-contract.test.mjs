@@ -26,3 +26,16 @@ test('stage01 database keeps shared IDs for future modules', () => {
     assert.match(schema, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   }
 });
+
+
+test('stage01 role migration selects constraint oid before reading it', () => {
+  const schema = fs.readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8');
+  assert.match(schema, /SELECT oid, conname FROM pg_constraint/);
+  assert.doesNotMatch(schema, /SELECT conname FROM pg_constraint/);
+});
+
+test('installer exposes persistent env to ordinary docker compose commands', () => {
+  const installer = fs.readFileSync(new URL('../../install.sh', import.meta.url), 'utf8');
+  assert.match(installer, /ln -s "\$ENV_FILE" "\$INSTALL_DIR\/.env"/);
+  assert.match(installer, /sync_env_link/);
+});
