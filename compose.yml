@@ -20,7 +20,7 @@ services:
   app:
     build:
       context: ./docker-app
-    image: ems-ipam-base:1.5.0-stage1-radio
+    image: ems-ipam-base:1.5.1-base-fix
     environment:
       PGHOST: db
       PGPORT: 5432

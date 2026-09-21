@@ -1,0 +1,12 @@
+[
+  {
+    "id": "en",
+    "label": "English",
+    "dir": "ltr"
+  },
+  {
+    "id": "fa",
+    "label": "فارسی",
+    "dir": "rtl"
+  }
+]

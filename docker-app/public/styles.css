@@ -161,3 +161,10 @@ dialog{border:0;padding:0;border-radius:16px;box-shadow:0 24px 70px rgba(15,23,4
 [dir="ltr"] .workspace{direction:ltr}
 [dir="rtl"] .sidebar{direction:rtl}
 [dir="ltr"] .sidebar{direction:ltr}
+
+/* v1.5.1 language/layout contract: navigation stays left in every language. */
+html[data-language="fa"] .page, html[data-language="fa"] dialog .modal-body, html[data-language="fa"] dialog .modal-head, html[data-language="fa"] dialog .modal-foot { direction: rtl; }
+html[data-language="fa"] .sidebar, html[data-language="fa"] .topbar { direction: ltr; }
+html[data-language="fa"] .sidebar .navbtn, html[data-language="fa"] .sidebar .module-nav-btn { direction: rtl; text-align: right; }
+html[data-language="en"] .page, html[data-language="en"] dialog { direction: ltr; }
+#inventoryCreateError:empty { display:none; }
