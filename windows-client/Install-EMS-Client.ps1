@@ -68,4 +68,3 @@ foreach ($item in @(@('WinBox',$winbox),@('RDP',$rdp),@('SSH',$ssh),@('Telnet',$
     if ($item[1]) { Write-Host ($item[0] + ': found') -ForegroundColor Green }
     else { Write-Host ($item[0] + ': not found - file selection will open on first use') -ForegroundColor Yellow }
 }
-\n# Verify the protocol handler points to EMS-IPAM-Protocol.ps1, never directly to WinBox.\n$registered = (Get-Item -LiteralPath $commandKey).GetValue('')\nif ($registered -notmatch 'EMS-IPAM-Protocol\\.ps1' -or $registered -match 'winbox\\.exe') {\n    throw 'EMS IPAM protocol registration verification failed.'\n}\n

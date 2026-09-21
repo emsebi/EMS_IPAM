@@ -1,13 +1,4 @@
-
-## v1.5.1 Base stabilization
-
-- Inventory now supports **Create / Edit / Delete** from the Inventory page.
-- Device Types support create, edit, delete, color, counts, filters, and export.
-- UI language packs live under `docker-app/public/i18n/`; adding a language only requires a new JSON pack and registration in `languages.json`.
-- Navigation remains on the left in all languages. English is the default.
-- WinBox launching uses the Windows EMS IPAM client protocol and passes only the validated `IP[:port]` target to WinBox.
-
-# EMS_IPAM — Stage 01 Base + IPAM v1.5.1-base-fix
+# EMS_IPAM — Stage 01 Base + IPAM v1.5.0-stage1-radio
 
 Repository: `github.com/emsebi/EMS_IPAM`  
 طراح و توسعه‌دهنده: **Ebrahim Mamani / ابراهیم مامانی**
@@ -153,6 +144,3 @@ https://github.com/emsebi/EMS_IPAM
 
 - [Stage 01 Scope](docs/STAGE-01-SCOPE-FA.md)
 - [Update Safety](docs/UPDATE-SAFETY-FA.md)
-
-
-> Base v1.5.1 does not install feature modules. Add-ons such as Radio, RADIUS, Network Map, MAC Finder and Network Access are installed later under `modules/`.

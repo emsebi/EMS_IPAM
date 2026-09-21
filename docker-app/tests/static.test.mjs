@@ -39,20 +39,20 @@ test("browser modules are served with a JavaScript MIME type", async () => {
     fs.readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(server, /["']\.mjs["']:\s*["']text\/javascript; charset=utf-8["']/);
-  assert.match(html, /app\.js\?v=1\.5\.1-base-fix/);
+  assert.match(html, /app\.js\?v=1\.5\.0-stage1-radio/);
   assert.match(html, /<html[^>]+data-theme=["']light["']/);
-  assert.match(script, /subnet-model\.mjs\?v=1\.5\.1-base-fix/);
+  assert.match(script, /subnet-model\.mjs\?v=1\.5\.0-stage1-radio/);
 });
 
 test("Windows client is downloadable from the installed web service", async () => {
   const [index, clientPage, clientArchive, readme] = await Promise.all([
     fs.readFile(new URL("../public/index.html", import.meta.url), "utf8"),
     fs.readFile(new URL("../public/client.html", import.meta.url), "utf8"),
-    fs.readFile(new URL("../public/downloads/EMS-IPAM-Windows-Client-v0.6.1.zip", import.meta.url)),
+    fs.readFile(new URL("../public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip", import.meta.url)),
     fs.readFile(new URL("../../README.md", import.meta.url), "utf8"),
   ]);
   assert.match(index, /id=["']clientDownloadButton["'][^>]+href=["']\/client\.html["']/);
-  assert.match(clientPage, /\/downloads\/EMS-IPAM-Windows-Client-v0\.6\.1\.zip/);
+  assert.match(clientPage, /\/downloads\/EMS-IPAM-Windows-Client-v0\.6\.0\.zip/);
   assert.equal(clientArchive.subarray(0, 2).toString("ascii"), "PK");
   assert.match(readme, /docs\/screenshots\/subnet-overview-concept\.png/);
   assert.match(readme, /Core \+ IPAM/);});

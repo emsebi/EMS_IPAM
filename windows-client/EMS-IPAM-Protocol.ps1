@@ -59,7 +59,6 @@ function Resolve-Tool([string]$Name, $ConfiguredTool) {
     return @{ path = $resolved; mode = $mode }
 }
 
-$UriValue = $UriValue.Trim().Trim('\"')
 $uri = [System.Uri]$UriValue
 if ($uri.Scheme -ne 'emsipam' -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
 $query = Parse-Query $uri.Query
@@ -88,7 +87,7 @@ $target = if ($portValue -gt 0) { $hostValue + ':' + $portValue } else { $hostVa
 $logPath = Join-Path $PSScriptRoot 'last-launch.txt'
 @("time=" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "tool=" + $toolName, "target=" + $target) | Set-Content -LiteralPath $logPath -Encoding UTF8
 $arguments = switch ([string]$tool.mode) {
-    'winbox' { @($target) }
+    'winbox' { if ($usernameValue) { @($target, $usernameValue) } else { @($target) } }
     'rdp' { @('/v:' + $target, '/prompt') }
     'putty' {
         $items = @('-ssh', $hostValue)

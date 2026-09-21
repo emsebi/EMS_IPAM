@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.5.1-base-fix">
+  <link rel="stylesheet" href="/styles.css?v=1.5.0-stage1-radio">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -56,7 +56,7 @@
           <div id="searchResults" class="search-results hidden"></div>
         </div>
         <div class="top-actions">
-          <button id="languageButton" class="langbtn" type="button" title="Language">FA</button><button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
+          <button id="languageButton" class="langbtn" type="button" title="Language / زبان">FA</button><button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
           <button id="userMenuButton" class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="avatar">A</span><span class="user-meta"><b id="loggedInUserName">Admin</b><small id="userRoleName">Administrator</small></span><span>⌄</span>
           </button>
@@ -139,19 +139,6 @@
         </div>
       </div>
       <div class="modal-foot split"><div><button id="deletePrefixButton" class="btn danger hidden" type="button">حذف رنج</button><button id="exportPrefixButton" class="btn hidden" type="button">خروجی قابل انتقال</button></div><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره و اعمال رنگ</button></div>
-    </form>
-  </dialog>
-
-
-  <dialog id="inventoryCreateDialog">
-    <form id="inventoryCreateForm">
-      <div class="modal-head"><div><h3>ایجاد تجهیز</h3><p>ابتدا رنج IPAM و IP را انتخاب کنید؛ سپس فرم کامل تجهیز باز می‌شود.</p></div><button class="close" type="button" data-close>×</button></div>
-      <div class="modal-body form-grid">
-        <label class="field full">انتخاب رنج IPAM<select id="inventoryCreateSpace" required></select></label>
-        <label class="field full">آدرس IP<input id="inventoryCreateIp" class="ltr mono" required placeholder="192.0.2.10"></label>
-        <div id="inventoryCreateError" class="notice error full"></div>
-      </div>
-      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ادامه و تکمیل اطلاعات</button></div>
     </form>
   </dialog>
 
@@ -265,7 +252,7 @@
           <section class="settings-pane" data-settings-pane="personnel"><h4>پرسنل</h4><p>لیست مرکزی پرسنل برای اتصال به MACها و تجهیزات شخصی.</p><button id="openPersonnelFromSettings" class="btn primary" type="button">مدیریت پرسنل</button></section>
           <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
           <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
-          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><input id="deviceTypeColor" type="color" value="#3157d5" title="رنگ نوع تجهیز"><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
+          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
           <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
@@ -401,6 +388,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.5.1-base-fix"></script>
+  <script type="module" src="/app.js?v=1.5.0-stage1-radio"></script>
 </body>
 </html>

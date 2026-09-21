@@ -1,4 +1,4 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs?v=1.5.1-base-fix";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs?v=1.5.0-stage1-radio";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -39,7 +39,6 @@ const state = {
   deviceTypes: [],
   language: localStorage.getItem("ems-language") || "en",
   routeBusy: false,
-  hostReturnView: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -48,37 +47,46 @@ const page = $("page");
 const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
 
-let LANGUAGE_PACK = {};
-let LANGUAGE_ENTRIES = [];
-async function loadLanguagePack(lang) {
-  try {
-    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.5.1`, { cache: "no-store" });
-    LANGUAGE_PACK = response.ok ? await response.json() : {};
-  } catch { LANGUAGE_PACK = {}; }
-  LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
-}
-function translateValue(value) {
-  let output = String(value ?? "");
-  for (const [source,target] of LANGUAGE_ENTRIES) if (source && output.includes(source)) output = output.split(source).join(target);
-  return output;
-}
+const EN_TEXT = new Map(Object.entries({
+  "داشبورد و شرکت‌ها":"Dashboard & Companies","مدیریت IP":"IP Management","تجهیزات":"Inventory","رادیوها":"Radios","تنظیمات":"Settings",
+  "کاربران و دسترسی‌ها":"Users & Access","پشتیبان‌گیری":"Backup","درباره EMS_IPAM":"About EMS IPAM","خروج از حساب":"Logout",
+  "شرکت‌ها، شعبه‌ها و مشتریان":"Companies, Branches & Customers","افزودن شرکت یا شعبه":"Add Company / Branch","مشاهده شرکت":"Open Company","ویرایش":"Edit","حذف":"Delete","افزودن رنج":"Add Network",
+  "کل تجهیزات":"Total Devices","شرکت‌ها":"Companies","نوع تجهیز":"Device Type","همه انواع تجهیزات":"All Device Types","به‌روزرسانی فهرست":"Refresh","مشاهده و ویرایش":"View / Edit","اتصال":"Connect",
+  "مدیریت تجهیزات":"Device Management","رادیوها و ارتباط AP / Station":"Radio AP / Station Map","نمای درختی":"Tree View","نمای فهرست":"List View","ثبت AP جدید":"New AP","افزودن Station":"Add Station","کل رادیوها":"Total Radios",
+  "تنظیمات EMS_IPAM":"EMS IPAM Settings","عمومی":"General","پرسنل":"Personnel","ظاهر":"Appearance","ابزارهای IP":"IP Tools","ماژول‌ها":"Modules","سیستم":"System","انواع تجهیزات":"Device Types",
+  "مدیریت کاربران":"Manage Users","مدیریت پرسنل":"Manage Personnel","تنظیم Backup":"Backup Settings","اعمال ظاهر":"Apply Appearance","بستن تنظیمات":"Close Settings",
+  "کاربر جدید":"New User","نام کاربری":"Username","نام نمایشی":"Display Name","رمز عبور":"Password","نقش":"Role","مدیر کل":"Admin","پشتیبانی":"Support","هلپ‌دسک":"Helpdesk","مشاهده‌گر":"Viewer","ذخیره کاربر":"Save User",
+  "پرسنل جدید":"New Personnel","کد پرسنلی":"Employee Code","نام و نام خانوادگی":"Full Name","موبایل":"Mobile","تلفن":"Phone","ایمیل":"Email","واحد":"Department","سمت":"Job Title","شرکت":"Company","توضیحات":"Notes","فعال":"Active","ذخیره":"Save","انصراف":"Cancel",
+  "اطلاعات IP":"IP Details","IP قبلی":"Previous IP","IP بعدی":"Next IP","نام سیستم / Hostname":"System Name / Hostname","وضعیت":"Status","سیستم‌عامل":"Operating System","مسئول / مالک":"Owner","موقعیت":"Location","سازنده":"Vendor","مدل":"Model","شماره سریال":"Serial Number","نسخه سیستم‌عامل / Firmware":"OS / Firmware","روش‌های اتصال این IP":"IP Connection Services","پورت اختصاصی سرویس‌ها":"Custom Service Ports",
+  "اطلاعات رادیو":"Radio Information","حالت رادیو":"Radio Mode","اتصال به AP":"Parent AP","رادیو نیست":"Not a Radio","انتخاب نوع تجهیز":"Select Device Type",
+  "نام رنج":"Network Name","کاربرد":"Purpose","رنگ":"Color","ذخیره و اعمال رنگ":"Save & Apply Color","حذف رنج":"Delete Network","خروجی قابل انتقال":"Portable Export",
+  "جست‌وجو...":"Search...","جست‌وجوی سریع IP، MAC، Hostname، شرکت، رنج…":"Search IP, MAC, hostname, company, network...",
+  "روشن":"Light","تیره":"Dark","پوسته":"Theme","افزودن شخص":"Add Contact","افراد و راه‌های تماس":"Contacts","افراد تماس":"Contacts",
+  "نام شرکت یا شعبه":"Company / Branch Name","نوع":"Type","شرکت مادر":"Parent Company","کد داخلی":"Internal Code","نام مدیر":"Manager","شماره تماس":"Phone","کد پستی":"Postal Code","آدرس":"Address","عرض جغرافیایی":"Latitude","طول جغرافیایی":"Longitude","توضیح کوتاه":"Description","یادداشت‌های شرکت":"Company Notes",
+  "آزاد":"Free","فعال":"Active","رزروشده":"Reserved","برنامه‌ریزی‌شده":"Planned","قرنطینه":"Quarantine","غیرفعال":"Disabled","خاموش":"Offline","نیازمند بررسی":"Needs Review",
+  "مدیریت تصویری شبکه":"Visual Network Management","ورود به سامانه EMS IPAM":"Sign in to EMS IPAM","ورود":"Sign In","نام کاربری":"Username","رمز عبور":"Password",
+  "داشبورد":"Dashboard","نمای شرکت":"Company View","همه شرکت‌ها":"All Companies","رنج اصلی":"Address Space","افزودن رنج اصلی":"Add Address Space","ثبت رنج":"Register Network","شبکه /24":"/24 Network",
+  "نتیجه فیلتر":"Filtered Results","نوع انتخاب‌شده":"Selected Type","نتیجه جست‌وجو":"Search Results","ادامه":"Continue","انتخاب AP":"Select AP","بدون SSID":"No SSID",
+  "ثبت سریع رادیو":"Quick Radio Registration","ذخیره نوع":"Save Type","انصراف از ویرایش":"Cancel Edit","کاربر فعال باشد":"User is active"
+}));
+
 function translateTree(root = document) {
+  if (state.language !== "en") return;
+  document.documentElement.lang = "en";
+  document.documentElement.dir = "ltr";
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) { const raw=node.nodeValue; if (!raw?.trim()) continue; node.nodeValue=translateValue(raw); }
-  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el)=>{
-    for (const attr of ["placeholder","title","aria-label"]) if (el.hasAttribute(attr)) el.setAttribute(attr,translateValue(el.getAttribute(attr)));
-  });
+  for (const node of nodes) { const raw=node.nodeValue; const key=raw?.trim(); if (!key || !EN_TEXT.has(key)) continue; node.nodeValue=raw.replace(key,EN_TEXT.get(key)); }
+  root.querySelectorAll?.("input[placeholder],textarea[placeholder]").forEach((el)=>{ const key=el.getAttribute("placeholder"); if(EN_TEXT.has(key)) el.setAttribute("placeholder",EN_TEXT.get(key)); });
+  const btn=$("languageButton"); if(btn) btn.textContent="FA";
 }
-async function applyLanguage() {
-  await loadLanguagePack(state.language);
-  document.documentElement.lang = state.language;
-  document.documentElement.dir = "ltr"; // Sidebar/layout always stays on the left.
-  document.documentElement.dataset.language = state.language;
+
+function applyLanguage() {
+  if (state.language === "fa") { document.documentElement.lang="fa"; document.documentElement.dir="rtl"; const btn=$("languageButton"); if(btn) btn.textContent="EN"; return; }
   translateTree(document);
-  const btn=$("languageButton"); if(btn) btn.textContent = state.language === "en" ? "FA" : "EN";
 }
-const langObserver = new MutationObserver((records)=>{ for(const record of records) for(const node of record.addedNodes) if(node.nodeType===1) translateTree(node); });
+
+const langObserver = new MutationObserver((records)=>{ if(state.language!=="en") return; for(const record of records) for(const node of record.addedNodes) if(node.nodeType===1) translateTree(node); });
 langObserver.observe(document.documentElement,{subtree:true,childList:true});
 const nativeShowModal = HTMLDialogElement.prototype.showModal;
 HTMLDialogElement.prototype.showModal = function showCleanDialog() {
@@ -280,7 +288,7 @@ async function boot() {
     state.bootstrap = await request("/api/bootstrap");
     setLoginVisible(false);
     applyRoleVisibility();
-    await applyLanguage();
+    applyLanguage();
     const savedCompany = localStorage.getItem("ems-company");
     state.currentCompanyId = state.bootstrap.companies.some((item) => item.id === savedCompany)
       ? savedCompany : "";
@@ -1070,12 +1078,11 @@ function renderInventory() {
   const types = [...new Set(state.deviceTypes.map((item)=>item.name).concat(all.map((item)=>item.type).filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
   const items = all.filter((item) => (!state.inventoryType || item.type === state.inventoryType) && (!query || [item.name,item.ip,item.mac,item.type,item.vendor,item.model,item.serial,item.owner,item.location,item.companyName,item.spaceName].some((value)=>String(value||"").toLowerCase().includes(query))));
   const typeCount = state.inventoryType ? all.filter((item)=>item.type===state.inventoryType).length : all.length;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">Inventory</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">هر تجهیز از همان رکورد IPAM استفاده می‌کند؛ نوع تجهیزات قابل مدیریت است.</div></div><div class="head-actions">${canWrite() ? `<button id="newInventoryDevice" class="btn primary">تجهیز جدید</button>` : ""}${isAdmin() ? `<button id="manageDeviceTypes" class="btn">انواع تجهیزات</button>` : ""}<button id="exportInventory" class="btn">Export CSV</button></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(all.length)}</div></article><article class="stat"><div class="label">نتیجه فیلتر</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">نوع انتخاب‌شده</div><div class="value">${formatNumber(typeCount)}</div></article><article class="stat"><div class="label">انواع تجهیزات</div><div class="value">${formatNumber(types.length)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل، سریال یا مالک…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type)=>`<option value="${escapeHtml(type)}" ${type===state.inventoryType?"selected":""}>${escapeHtml(type)} (${formatNumber(all.filter((i)=>i.type===type).length)})</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی فهرست</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>مالک / موقعیت</th><th>عملیات</th></tr></thead><tbody>${items.map((item)=>`<tr><td class="inventory-name"><b>${escapeHtml(item.name||"بدون نام")}</b><small>${escapeHtml(item.serial||"—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac||"—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type||"نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ")||"—")}</small></td><td>${escapeHtml(item.owner||"—")}<small>${escapeHtml(item.location||"—")}</small></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button>${normalizedConnectionMethods(item).length?`<button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button>`:""}</div></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">Inventory</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">هر تجهیز از همان رکورد IPAM استفاده می‌کند؛ نوع تجهیزات قابل مدیریت است.</div></div><div class="head-actions">${isAdmin() ? `<button id="manageDeviceTypes" class="btn">انواع تجهیزات</button>` : ""}<button id="exportInventory" class="btn">Export CSV</button></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(all.length)}</div></article><article class="stat"><div class="label">نتیجه فیلتر</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">نوع انتخاب‌شده</div><div class="value">${formatNumber(typeCount)}</div></article><article class="stat"><div class="label">انواع تجهیزات</div><div class="value">${formatNumber(types.length)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل، سریال یا مالک…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type)=>`<option value="${escapeHtml(type)}" ${type===state.inventoryType?"selected":""}>${escapeHtml(type)} (${formatNumber(all.filter((i)=>i.type===type).length)})</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی فهرست</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>مالک / موقعیت</th><th>عملیات</th></tr></thead><tbody>${items.map((item)=>`<tr><td class="inventory-name"><b>${escapeHtml(item.name||"بدون نام")}</b><small>${escapeHtml(item.serial||"—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac||"—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type||"نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ")||"—")}</small></td><td>${escapeHtml(item.owner||"—")}<small>${escapeHtml(item.location||"—")}</small></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button>${normalizedConnectionMethods(item).length?`<button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button>`:""}</div></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
   $("inventorySearch").addEventListener("input",(event)=>{state.inventoryQuery=event.target.value;renderInventory();requestAnimationFrame(()=>{$("inventorySearch")?.focus();$("inventorySearch")?.setSelectionRange(state.inventoryQuery.length,state.inventoryQuery.length);});});
   $("inventoryType").addEventListener("change",(event)=>{state.inventoryType=event.target.value;renderInventory();});
   $("refreshInventory").addEventListener("click",()=>openInventoryPage(true));
   $("exportInventory").addEventListener("click",()=>window.location.assign(`/api/inventory/export?q=${encodeURIComponent(state.inventoryQuery)}&type=${encodeURIComponent(state.inventoryType)}`));
-  $("newInventoryDevice")?.addEventListener("click", openInventoryCreateDialog);
   $("manageDeviceTypes")?.addEventListener("click",()=>openSettingsDialog("device-types"));
   page.querySelectorAll(".edit-inventory").forEach((node)=>node.addEventListener("click",()=>openInventoryItem(state.inventory.find((item)=>item.id===node.dataset.id))));
   page.querySelectorAll(".inventory-tools").forEach((node)=>node.addEventListener("click",(event)=>{const item=state.inventory.find((entry)=>entry.id===node.dataset.id);if(item)openToolMenu(event,item.ip);}));
@@ -1245,7 +1252,7 @@ async function refreshDeviceTypes() {
   const result=await request("/api/device-types"); state.deviceTypes=result.items||[]; populateHostTypes($("hostType")?.value||"");
   const list=$("deviceTypesList"); if(!list) return;
   list.innerHTML=state.deviceTypes.map((item)=>`<div class="user-row"><div><b>${escapeHtml(item.name)}</b><small><i class="swatch" style="background:${escapeHtml(item.color)}"></i> ${formatNumber(state.inventory.filter((h)=>h.type===item.name).length)} دستگاه</small></div><div class="row-actions"><button class="btn sm edit-device-type" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-device-type" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("")||`<div class="empty-state">نوع تجهیزی ثبت نشده است.</div>`;
-  list.querySelectorAll(".edit-device-type").forEach((node)=>node.addEventListener("click",()=>{const item=state.deviceTypes.find((i)=>i.id===node.dataset.id);$("deviceTypeId").value=item.id;$("deviceTypeName").value=item.name;$("deviceTypeColor").value=item.color||"#3157d5";$("cancelDeviceTypeEdit").classList.remove("hidden");}));
+  list.querySelectorAll(".edit-device-type").forEach((node)=>node.addEventListener("click",()=>{const item=state.deviceTypes.find((i)=>i.id===node.dataset.id);$("deviceTypeId").value=item.id;$("deviceTypeName").value=item.name;$("cancelDeviceTypeEdit").classList.remove("hidden");}));
   list.querySelectorAll(".delete-device-type").forEach((node)=>node.addEventListener("click",async()=>{if(!confirm("این نوع تجهیز حذف شود؟"))return;try{await request(`/api/device-types/${encodeURIComponent(node.dataset.id)}`,{method:"DELETE"});await refreshDeviceTypes();toast("نوع تجهیز حذف شد.");}catch(error){toast(error.message);}}));
 }
 
@@ -1342,36 +1349,9 @@ function editUser(user) {
 
 async function openInventoryItem(item) {
   if (!item) return;
-  state.hostReturnView = "inventory";
   const address = ipv4ToInt(item.ip);
   await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(address & 0xffffff00)}/24` });
   openHostDialog(item.ip);
-}
-
-function openInventoryCreateDialog() {
-  const spaces = state.bootstrap?.spaces || [];
-  const select = $("inventoryCreateSpace");
-  select.innerHTML = spaces.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.companyName || state.bootstrap.companies.find((c)=>c.id===item.companyId)?.name || "")} — ${escapeHtml(item.name)} — ${escapeHtml(item.cidr)}</option>`).join("");
-  $("inventoryCreateIp").value = "";
-  $("inventoryCreateError").textContent = "";
-  markFormClean($("inventoryCreateForm"));
-  $("inventoryCreateDialog").showModal();
-}
-
-async function continueInventoryCreate() {
-  const spaceId = $("inventoryCreateSpace").value;
-  const ip = $("inventoryCreateIp").value.trim();
-  const space = (state.bootstrap?.spaces || []).find((item)=>item.id===spaceId);
-  const info = parseCidr(space?.cidr || "");
-  const ipValue = ipv4ToInt(ip);
-  if (!space || ipValue === null || !info || ipValue < info.start || ipValue > info.end) {
-    $("inventoryCreateError").textContent = "IP باید داخل رنج انتخاب‌شده باشد.";
-    return;
-  }
-  $("inventoryCreateDialog").close();
-  state.hostReturnView = "inventory";
-  await loadSpace(spaceId, { sheetCidr: `${intToIpv4(ipValue & 0xffffff00)}/24` });
-  openHostDialog(ip);
 }
 
 async function quickOpenIp(ip) {
@@ -1753,7 +1733,6 @@ $("exportPrefixButton").addEventListener("click", () => {
   if (id) window.location.assign(`/api/prefixes/${encodeURIComponent(id)}/export`);
 });
 
-$("inventoryCreateForm")?.addEventListener("submit", async (event)=>{ event.preventDefault(); await continueInventoryCreate(); });
 $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const ports = {};
@@ -1788,7 +1767,7 @@ $("hostForm").addEventListener("submit", async (event) => {
     devicePorts: collectDevicePorts(),
     customFields: collectHostCustomFields(),
   };
-  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { toast(error.message); }
 });
 
 $("addDevicePort").addEventListener("click", () => appendDevicePort());
@@ -1813,7 +1792,7 @@ $("nextHostButton").addEventListener("click", () => navigateHostFromDialog($("ne
 
 $("deleteHostButton").addEventListener("click", async () => {
   if (!confirm("اطلاعات این IP حذف شود؟")) return;
-  try { await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}`, { method: "DELETE" }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else renderCurrent(); toast("اطلاعات IP حذف شد."); } catch (error) { toast(error.message); }
+  try { await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}`, { method: "DELETE" }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP حذف شد."); } catch (error) { toast(error.message); }
 });
 
 $("userRole").addEventListener("change", () => renderCompanyAccess(
@@ -1834,7 +1813,7 @@ $("saveToolsSettings").addEventListener("click", async () => {
   try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارهای IP ذخیره شد."); } catch (error) { toast(error.message); }
 });
 
-$("deviceTypeForm").addEventListener("submit", async (event)=>{event.preventDefault();const id=$("deviceTypeId").value;try{await request(id?`/api/device-types/${encodeURIComponent(id)}`:"/api/device-types",{method:id?"PUT":"POST",body:{name:$("deviceTypeName").value,color:$("deviceTypeColor").value}});$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");await refreshDeviceTypes();await ensureInventory(true);toast("نوع تجهیز ذخیره شد.");}catch(error){toast(error.message);}});
+$("deviceTypeForm").addEventListener("submit", async (event)=>{event.preventDefault();const id=$("deviceTypeId").value;try{await request(id?`/api/device-types/${encodeURIComponent(id)}`:"/api/device-types",{method:id?"PUT":"POST",body:{name:$("deviceTypeName").value}});$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");await refreshDeviceTypes();await ensureInventory(true);toast("نوع تجهیز ذخیره شد.");}catch(error){toast(error.message);}});
 $("cancelDeviceTypeEdit").addEventListener("click",()=>{$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");});
 $("exportPersonnel").addEventListener("click",()=>window.location.assign(`/api/personnel/export?q=${encodeURIComponent($("personnelSearch").value||"")}`));
 $("importPersonnel").addEventListener("click",()=>$("personnelImportFile").click());
@@ -1922,7 +1901,7 @@ $("deleteMapLink").addEventListener("click", async () => {
 
 $("mapLinkDialog").addEventListener("close", () => { if (!$("mapLinkDialog").open) state.linkSelection = []; });
 
-await applyLanguage();
+applyLanguage();
 boot();
 
 export { contains, intToIpv4, ipv4ToInt, networkAt, parseCidr };

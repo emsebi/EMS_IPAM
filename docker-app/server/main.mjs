@@ -37,7 +37,7 @@ const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "1.5.1-base-fix";
+const APP_VERSION = "1.5.0-stage1-radio";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
 const MODULE_CATALOG = Object.freeze([
