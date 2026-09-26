@@ -25,16 +25,16 @@ Core
 ## افزونه‌ها
 
 ```text
-modules/radio          # همراه v1.5.0
+modules/radio          # همراه v1.6.1
 modules/radius
 modules/network-map
 modules/mac-finder
 modules/network-access
 ```
 
-### Radio — همراه این نسخه
+### Radio — همراه v1.6.1
 
-AP/Station به همان Host/IP موجود در IPAM متصل می‌شود و رکورد Shadow ایجاد نمی‌کند. Search شامل Name/IP/MAC/SSID است. نمایش عمداً ساده و درختی است؛ Signal/Performance/Credential Monitoring در این ماژول وجود ندارد.
+AP/Station به همان Host/IP موجود در IPAM متصل می‌شود و رکورد Shadow ایجاد نمی‌کند. Search شامل Name/IP/MAC/SSID است. Ping دستی هر رادیو، وضعیت Online/Offline و مسیرهای مستقل Edit و IPAM دارد. Signal/Performance/Credential Monitoring در این ماژول وجود ندارد.
 
 ### RADIUS
 

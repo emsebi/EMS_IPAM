@@ -20,7 +20,7 @@ services:
   app:
     build:
       context: ./docker-app
-    image: ems-ipam-base:1.5.0-stage1-radio
+    image: ems-ipam-base:1.6.1
     environment:
       PGHOST: db
       PGPORT: 5432
@@ -58,9 +58,9 @@ services:
 
 volumes:
   ems_ipam_db_data:
-    name: ems_ipam_db_data
+    name: ${EMS_DB_VOLUME_NAME:-ems_ipam_db_data}
 
 networks:
   ems_ipam_internal:
-    name: ems_ipam_internal
+    name: ${EMS_NETWORK_NAME:-ems_ipam_internal}
     driver: bridge

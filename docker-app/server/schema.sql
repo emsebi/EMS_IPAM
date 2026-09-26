@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS users (
   username text NOT NULL UNIQUE,
   display_name text NOT NULL DEFAULT '',
   password_hash text NOT NULL,
-  role text NOT NULL CHECK (role IN ('admin','support','helpdesk','viewer')),
+  role text NOT NULL CHECK (role IN ('admin','support','helpdesk','branch','viewer')),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -53,11 +53,11 @@ BEGIN
   END LOOP;
 END $$;
 UPDATE users SET role='support' WHERE role='editor';
-ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','support','helpdesk','viewer'));
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','support','helpdesk','branch','viewer'));
 
 CREATE TABLE IF NOT EXISTS personnel (
   id text PRIMARY KEY,
-  employee_code text NOT NULL UNIQUE,
+  employee_code text UNIQUE,
   full_name text NOT NULL,
   phone text NOT NULL DEFAULT '',
   mobile text NOT NULL DEFAULT '',
@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS personnel (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE personnel ALTER COLUMN employee_code DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS personnel_search_idx ON personnel(employee_code, full_name);
 
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_by text REFERENCES users(id) ON DELETE SET NULL;

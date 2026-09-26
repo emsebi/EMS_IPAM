@@ -20,13 +20,15 @@ modules/example-module/
   "id": "example-module",
   "name": "Example Module",
   "version": "0.1.0",
-  "route": "/example-module",
-  "icon": "puzzle",
+  "navigation": {"label": "Example", "path": "/m/example-module/", "icon": "puzzle", "order": 50},
   "dependencies": ["core", "ipam"],
-  "permissions": ["admin", "support"],
+  "permissions": ["example.read", "example.write"],
+  "roles": ["admin", "support"],
   "enabled": true
 }
 ```
+
+`permissions` نام قابلیت‌های خود افزونه است و نباید با Role اشتباه شود. محدودیت اختیاری نقش‌های مجاز در `roles` قرار می‌گیرد. اگر `roles` حذف یا خالی باشد، دسترسی از جدول Module Access هر کاربر کنترل می‌شود؛ Admin همیشه دسترسی دارد.
 
 ## اصول
 - PostgreSQL اصلی مشترک است؛ داده مشترک Duplicate نشود.

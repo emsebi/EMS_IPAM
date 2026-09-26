@@ -37,7 +37,7 @@ const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "1.5.0-stage1-radio";
+const APP_VERSION = "1.6.1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
 const MODULE_CATALOG = Object.freeze([
@@ -71,6 +71,7 @@ async function discoverModules() {
         description: cleanTextEnvironment(manifest.description || ""),
         navigation: manifest.navigation && typeof manifest.navigation === "object" ? manifest.navigation : null,
         proxy: manifest.proxy && typeof manifest.proxy === "object" ? manifest.proxy : null,
+        roles: Array.isArray(manifest.roles) ? manifest.roles.slice(0, 20).map((item) => cleanTextEnvironment(item)) : [],
         permissions: Array.isArray(manifest.permissions) ? manifest.permissions.slice(0, 50) : [],
         dir,
       });
@@ -164,7 +165,7 @@ function validColor(value, fallback = COLORS[0]) {
 }
 
 function safeRole(value) {
-  if (!["admin", "support", "helpdesk", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
+  if (!["admin", "support", "helpdesk", "branch", "viewer"].includes(value)) throw new Error("نقش کاربر معتبر نیست.");
   return value;
 }
 
@@ -482,8 +483,11 @@ async function companyData(user, companyId) {
       [companyId],
     ),
     pool.query(
-      `SELECT id,name,cidr,color,description FROM address_spaces
-        WHERE company_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
+      `SELECT s.id,s.name,s.cidr,s.color,s.description,
+              (SELECT count(*)::int FROM prefixes p WHERE p.space_id=s.id AND p.deleted_at IS NULL) AS "prefixCount",
+              (SELECT count(*)::int FROM hosts h WHERE h.space_id=s.id AND h.deleted_at IS NULL) AS "hostCount"
+         FROM address_spaces s
+        WHERE s.company_id=$1 AND s.deleted_at IS NULL ORDER BY s.cidr`,
       [companyId],
     ),
     pool.query(
@@ -616,8 +620,10 @@ async function inventoryData(user) {
               h.monitor_interval AS "monitorInterval",h.monitor_state AS "monitorState",h.monitor_checked_at AS "monitorCheckedAt",
               h.monitor_last_ok_at AS "monitorLastOkAt",h.monitor_failures AS "monitorFailures",h.monitor_error AS "monitorError",
               (h.secret_ciphertext <> '') AS "hasPassword",h.custom_fields AS "customFields",s.name AS "spaceName",s.cidr AS "spaceCidr",
+              pr.online AS "pingOnline",pr.checked_at AS "pingCheckedAt",pr.last_seen_at AS "pingLastSeenAt",
               c.id AS "companyId",c.name AS "companyName"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+         LEFT JOIN ping_results pr ON pr.space_id=h.space_id AND pr.ip=h.ip
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL
         ORDER BY c.name,s.cidr,h.ip`,
       [spaceIds],
@@ -900,7 +906,8 @@ async function api(req, res, url, user) {
     const items = await inventoryData(user);
     const q = normalizePersian(url.searchParams.get("q") || "").toLowerCase();
     const type = cleanText(url.searchParams.get("type") || "",100);
-    const filtered = items.filter((item) => (!type || item.type === type) && (!q || [item.name,item.ip,item.mac,item.type,item.vendor,item.model,item.serial,item.owner,item.companyName,item.spaceName,item.location].some((v)=>normalizePersian(v||"").toLowerCase().includes(q))));
+    const companyId = cleanText(url.searchParams.get("companyId") || "",80);
+    const filtered = items.filter((item) => (!companyId || item.companyId === companyId) && (!type || item.type === type) && (!q || [item.name,item.ip,item.mac,item.type,item.vendor,item.model,item.serial,item.owner,item.companyName,item.spaceName,item.location].some((v)=>normalizePersian(v||"").toLowerCase().includes(q))));
     return csvResponse(res, "ems-ipam-inventory.csv", [["Name","IP","MAC","Device Type","Vendor","Model","Serial","Owner","Company","Address Space","Location","Notes"], ...filtered.map((i)=>[i.name,i.ip,i.mac,i.type,i.vendor,i.model,i.serial,i.owner,i.companyName,i.spaceName,i.location,i.notes])]);
   }
 
@@ -913,7 +920,7 @@ async function api(req, res, url, user) {
     requireAdmin(user);
     const q = cleanText(url.searchParams.get("q") || "",120);
     const params=[]; let where="";
-    if (q) { params.push(`%${normalizePersian(q)}%`); where=`WHERE (employee_code || ' ' || full_name || ' ' || phone || ' ' || mobile || ' ' || email || ' ' || department || ' ' || job_title) ILIKE $1`; }
+    if (q) { params.push(`%${normalizePersian(q)}%`); where=`WHERE concat_ws(' ',employee_code,full_name,phone,mobile,email,department,job_title) ILIKE $1`; }
     const rows=await pool.query(`SELECT p.employee_code,p.full_name,p.mobile,p.phone,p.email,p.department,p.job_title,c.name AS company_name,p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name`,params);
     return csvResponse(res,"ems-ipam-personnel.csv",[["Employee Code","Full Name","Mobile","Phone","Email","Department","Job Title","Company","Notes","Active"],...rows.rows.map((r)=>[r.employee_code,r.full_name,r.mobile,r.phone,r.email,r.department,r.job_title,r.company_name,r.notes,r.active?"true":"false"])]);
   }
@@ -927,11 +934,11 @@ async function api(req, res, url, user) {
     try {
       await client.query("BEGIN");
       for (const item of body.items.slice(0,10000)) {
-        const employeeCode=cleanText(item.employeeCode,80); const fullName=cleanText(item.fullName,180);
-        if (!employeeCode || !fullName) { skipped++; continue; }
+        const employeeCode=cleanText(item.employeeCode,80)||null; const fullName=cleanText(item.fullName,180);
+        if (!fullName) { skipped++; continue; }
         let companyId=null; const companyName=cleanText(item.companyName,180);
         if (companyName) { const c=await client.query("SELECT id FROM companies WHERE lower(name)=lower($1) AND deleted_at IS NULL LIMIT 1",[companyName]); companyId=c.rows[0]?.id||null; }
-        const existing=await client.query("SELECT id FROM personnel WHERE employee_code=$1",[employeeCode]);
+        const existing=employeeCode ? await client.query("SELECT id FROM personnel WHERE employee_code=$1",[employeeCode]) : { rowCount:0, rows:[] };
         if (existing.rowCount) {
           await client.query(`UPDATE personnel SET full_name=$2,mobile=$3,phone=$4,email=$5,department=$6,job_title=$7,company_id=COALESCE($8,company_id),notes=$9,active=$10,updated_at=now() WHERE id=$1`,[existing.rows[0].id,fullName,cleanText(item.mobile,80),cleanText(item.phone,80),cleanText(item.email,180),cleanText(item.department,180),cleanText(item.jobTitle,180),companyId,cleanText(item.notes,1000),item.active!==false]); updated++;
         } else {
@@ -945,10 +952,11 @@ async function api(req, res, url, user) {
   }
 
   if (req.method === "GET" && pathname === "/api/personnel") {
+    if (user.role !== "admin") throw Object.assign(new Error("مشاهده فهرست کامل پرسنل فقط برای مدیر سیستم مجاز است."), { status: 403 });
     const q = cleanText(url.searchParams.get("q") || "", 120);
     const params = [];
     let where = "";
-    if (q) { params.push(`%${normalizePersian(q)}%`); where = `WHERE (employee_code || ' ' || full_name || ' ' || phone || ' ' || mobile || ' ' || email || ' ' || department) ILIKE $1`; }
+    if (q) { params.push(`%${normalizePersian(q)}%`); where = `WHERE concat_ws(' ',employee_code,full_name,phone,mobile,email,department) ILIKE $1`; }
     const rows = await pool.query(`SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName",p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name LIMIT 50`, params);
     return json(res, 200, { ok: true, items: rows.rows });
   }
@@ -956,9 +964,9 @@ async function api(req, res, url, user) {
   if (req.method === "POST" && pathname === "/api/personnel") {
     requireAdmin(user);
     const body = await readBody(req);
-    const employeeCode = cleanText(body.employeeCode, 80);
+    const employeeCode = cleanText(body.employeeCode, 80) || null;
     const fullName = cleanText(body.fullName, 180);
-    if (!employeeCode || !fullName) throw new Error("کد پرسنلی و نام الزامی است.");
+    if (!fullName) throw new Error("نام و نام خانوادگی الزامی است.");
     const id = crypto.randomUUID();
     await pool.query(`INSERT INTO personnel(id,employee_code,full_name,phone,mobile,email,department,job_title,company_id,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [id,employeeCode,fullName,cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
     await audit(user,"create","personnel",id,{detail:{employeeCode,fullName}});
@@ -970,7 +978,9 @@ async function api(req, res, url, user) {
     requireAdmin(user);
     const body = await readBody(req);
     const id = personnelMatch[1];
-    const updated = await pool.query(`UPDATE personnel SET employee_code=$2,full_name=$3,phone=$4,mobile=$5,email=$6,department=$7,job_title=$8,company_id=$9,notes=$10,active=$11,updated_at=now() WHERE id=$1 RETURNING id`, [id,cleanText(body.employeeCode,80),cleanText(body.fullName,180),cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
+    const fullName = cleanText(body.fullName,180);
+    if (!fullName) throw new Error("نام و نام خانوادگی الزامی است.");
+    const updated = await pool.query(`UPDATE personnel SET employee_code=$2,full_name=$3,phone=$4,mobile=$5,email=$6,department=$7,job_title=$8,company_id=$9,notes=$10,active=$11,updated_at=now() WHERE id=$1 RETURNING id`, [id,cleanText(body.employeeCode,80)||null,fullName,cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
     if (!updated.rowCount) throw Object.assign(new Error("پرسنل پیدا نشد."),{status:404});
     await audit(user,"update","personnel",id);
     return json(res,200,{ok:true});
@@ -1554,6 +1564,7 @@ async function api(req, res, url, user) {
     const secretCiphertext = "";
     const monitorSecretCiphertext = "";
     const radioMode = ["", "ap", "station"].includes(String(body.radioMode || "").toLowerCase()) ? String(body.radioMode || "").toLowerCase() : "";
+    if (radioMode && !installedModules.some((item) => item.id === "radio")) throw Object.assign(new Error("افزونه Radio نصب یا فعال نیست."), { status: 409 });
     let radioParentHostId = cleanText(body.radioParentHostId, 80) || null;
     if (radioParentHostId) {
       const parent = await pool.query(
@@ -1668,6 +1679,26 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true, online, total: ips.length, results: Object.fromEntries(results) });
   }
 
+  if (req.method === "POST" && pathname === "/api/ping/host") {
+    await requireModuleAccess(user, "radio");
+    const body = await readBody(req);
+    const id = cleanText(body.id, 80);
+    const found = await pool.query(
+      `SELECT h.id,h.space_id AS "spaceId",h.ip,s.company_id AS "companyId"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+        WHERE h.id=$1 AND h.radio_mode IN ('ap','station') AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,
+      [id],
+    );
+    const host = found.rows[0];
+    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("تجهیز پیدا نشد یا دسترسی ندارید."), { status: 404 });
+    const results = await pingMany([host.ip], { concurrency: 1, timeoutSeconds: 1 });
+    await storePingResults(host.spaceId, results);
+    const online = results.get(host.ip) === true;
+    await audit(user, "ping", "host", host.id, { companyId: host.companyId, spaceId: host.spaceId, detail: { ip: host.ip, online } });
+    broadcast({ type: "host", companyId: host.companyId, spaceId: host.spaceId, entityId: host.id });
+    return json(res, 200, { ok: true, ip: host.ip, online });
+  }
+
   if (req.method === "GET" && pathname === "/api/users") {
     requireAdmin(user);
     const users = await pool.query(
@@ -1774,7 +1805,7 @@ async function api(req, res, url, user) {
     const tools = Array.isArray(body.tools) ? body.tools : [];
     for (const item of tools) {
       const tool = cleanText(item.tool, 8).toUpperCase();
-      if (!["VNC", "MIK", "RDP", "SSH", "HTTP", "HTTPS"].includes(tool)) continue;
+      if (!["VNC", "MIK", "RDP", "SSH", "TELNET", "HTTP", "HTTPS"].includes(tool)) continue;
       await pool.query(
         "UPDATE tool_defaults SET label=$1,default_port=$2,color=$3 WHERE tool=$4",
         [cleanText(item.label, 80) || tool, validatePort(item.defaultPort), validColor(item.color), tool],
@@ -1894,7 +1925,7 @@ const server = http.createServer(async (req, res) => {
       const moduleUser = await currentUser(req);
       if (!moduleUser) return errorResponse(res, 401, "برای استفاده از این ماژول ابتدا وارد EMS_IPAM شوید.");
       if (!(await hasModuleAccess(moduleUser, module.id))) return errorResponse(res, 403, "دسترسی این ماژول برای کاربر فعال نیست.");
-      if (Array.isArray(module.permissions) && module.permissions.length && !module.permissions.includes(moduleUser.role)) return errorResponse(res, 403, "دسترسی به این ماژول مجاز نیست.");
+      if (Array.isArray(module.roles) && module.roles.length && !module.roles.includes(moduleUser.role)) return errorResponse(res, 403, "دسترسی به این ماژول مجاز نیست.");
       if (module.proxy?.upstream) return await proxyModule(req, res, module);
       if (req.method === "GET" && await staticModuleFile(res, module, url.pathname)) return;
       return errorResponse(res, 404, "فایل ماژول پیدا نشد.");

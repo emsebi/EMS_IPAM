@@ -1,4 +1,18 @@
-# EMS_IPAM — Stage 01 Base + IPAM v1.5.0-stage1-radio
+
+## v1.6.1 — Base + IPAM + Radio defect fixes
+
+- Personnel now requires only Full Name; every other field is optional.
+- Inventory Create/Edit loads the selected IP context directly and shows save errors in the form.
+- WinBox uses the repaired `emsipam-client` handler and receives only validated `IP[:port]`.
+- Station creation from an AP keeps that AP selected automatically.
+- IP maps grow with the actual viewport, and IPAM returns to the last selected space/sheet.
+- Address Space cards show registered, free, total, range count, and usage percent.
+- Device Types support create, edit, delete, color, counts, filters, and export.
+- رابط فقط دو زبان فارسی و انگلیسی دارد. توسعه زبان‌های دیگر، در صورت نیاز، پروژه‌ای جدا خواهد بود.
+- Navigation remains on the left in all languages. English is the default.
+- WinBox launching uses the Windows EMS IPAM client protocol and passes only the validated `IP[:port]` target to WinBox.
+
+# EMS_IPAM — BASE + IPAM + Radio v1.6.1
 
 Repository: `github.com/emsebi/EMS_IPAM`  
 طراح و توسعه‌دهنده: **Ebrahim Mamani / ابراهیم مامانی**
@@ -9,7 +23,13 @@ Repository: `github.com/emsebi/EMS_IPAM`
 
 ![طرح مفهومی نمای Subnet](docs/screenshots/subnet-overview-concept.png)
 
-## نصب با یک دستور
+## پیش‌نیازهای نصب
+
+- Ubuntu یا Debian با دسترسی `sudo`/`root`
+- اینترنت برای دریافت بسته‌ها و Imageها
+- Docker Engine، Docker Compose Plugin و Portainer؛ نصب‌کننده نبودن آن‌ها را بررسی می‌کند و در صورت نیاز نصب را انجام می‌دهد.
+
+## نصب با خط فرمان
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
@@ -20,8 +40,9 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 ```text
 1) Install
 2) Update
-3) Uninstall application (keep database)
-4) Uninstall application + database
+3) Backup database
+4) Uninstall application (keep database)
+5) Uninstall application + database
 ```
 
 ### ایمنی Update
@@ -34,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 - فایل‌های برنامه به صورت Staged جایگزین می‌شوند.
 - اگر Health Check نسخه جدید Fail شود، فایل‌های Application به نسخه قبلی Rollback می‌شوند.
 - Backup قبل از Update در `/var/lib/ems-ipam/backups` باقی می‌ماند.
-- تنها گزینه **4** اجازه حذف Database/State را دارد و قبل از حذف تأیید می‌گیرد.
+- تنها گزینه **5** اجازه حذف Database/State را دارد و قبل از حذف تأیید می‌گیرد.
 
 راهنمای کامل: [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
 
@@ -43,13 +64,13 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 ### Core
 
 - Login / Logout و Session
-- Admin / Support / Helpdesk / Viewer
+- Admin / Support / Helpdesk / Branch / Viewer
 - Create / Edit / Delete / Enable / Disable کاربران
 - دسترسی به شرکت‌ها و Address Spaceها
 - **دسترسی مستقل به ماژول‌ها برای هر User**
 - Settings متمرکز
 - Light / Dark Theme
-- زبان پیش‌فرض English + کلید FA/EN؛ Sidebar همیشه سمت چپ باقی می‌ماند
+- فقط English و فارسی، با English به‌عنوان پیش‌فرض؛ Sidebar همیشه سمت چپ باقی می‌ماند
 - Profile menu و About
 - Personnel مرکزی با کد پرسنلی، CRUD، Import/Export CSV و جستجوی سریع
 - Inventory مشترک تجهیزات با Device Type قابل تعریف/ویرایش/حذف، شمارش بر اساس Type و Export کل/فیلترشده
@@ -98,7 +119,7 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 - Sync کامل IP با IPAM/Inventory؛ رکورد جداگانه و تکراری ساخته نمی‌شود
 - Search سریع با Name / IP / MAC / SSID
 - فیلدهای پایه: Name / IP / MAC / Model / SSID / Location / Notes
-- Edit / Delete / Open IP / View in IPAM
+- Edit / Delete، ورود مستقل به IPAM و Ping تک‌رادیو با وضعیت Online/Offline
 - بدون Signal Monitoring، Performance Monitoring و Credential Management
 
 ## اتصال Base به افزونه‌های آینده
@@ -132,15 +153,27 @@ https://github.com/emsebi/EMS_IPAM
 
 برای توسعه Frontend، Mock data فقط داده‌های ساختگی دارد. در صورت Serve کردن `docker-app/public`، آدرس را با `?mock` باز کنید.
 
+## تست Release روی Docker
+
+روی میزبان دارای Docker و Compose، Smoke test ایزوله زیر Build، Health، Login، API، Backup و ماندگاری دیتابیس را کنترل می‌کند:
+
+```bash
+sudo ./scripts/docker-release-smoke.sh
+```
+
 ## مستندات
 
 - [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
 - [`docs/ARCHITECTURE-FA.md`](docs/ARCHITECTURE-FA.md)
 - [`docs/MODULE-SDK-FA.md`](docs/MODULE-SDK-FA.md)
 - [`docs/TEST-REPORT-FA.md`](docs/TEST-REPORT-FA.md)
+- [`docs/RELEASE-v1.6.1-FA.md`](docs/RELEASE-v1.6.1-FA.md)
 
 
 ## محدوده مرحله اول
 
 - [Stage 01 Scope](docs/STAGE-01-SCOPE-FA.md)
 - [Update Safety](docs/UPDATE-SAFETY-FA.md)
+
+
+> پوشه `modules/radio` همراه انتشار v1.6.1 تحویل می‌شود و Installer آن را کشف می‌کند. با حذف این پوشه، BASE + IPAM همچنان مستقل اجرا می‌شود. RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی اضافه می‌شوند.

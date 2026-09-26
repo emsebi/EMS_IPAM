@@ -1,4 +1,13 @@
-EMS IPAM Base v1.5.0-stage1-radio
+EMS IPAM Base + IPAM + Radio v1.6.1
+
+اصلاحات این خروجی:
+- پرسنل فقط با نام قابل ثبت است و بقیه فیلدها اختیاری‌اند.
+- افزودن و ویرایش تجهیزات از Inventory اصلاح شده است.
+- WinBox فقط IP:PORT می‌گیرد و کلاینت ویندوز 0.7.1 داخل پروژه است.
+- Station هنگام افزودن زیر AP همان AP را خودکار نگه می‌دارد.
+- کارت رنج شرکت اطلاعات مصرف و ظرفیت آزاد را نمایش می‌دهد.
+- ارتفاع نقشه IP با اندازه مانیتور و Zoom تغییر می‌کند.
+- بازگشت به IPAM همان Address Space و رنج قبلی را باز می‌کند.
 
 ZIP را Extract کنید و محتویاتش را مستقیماً در Root مخزن زیر قرار دهید:
 https://github.com/emsebi/EMS_IPAM
@@ -9,8 +18,9 @@ curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | s
 منو:
 1) Install
 2) Update
-3) Uninstall application (keep database)
-4) Uninstall application + database
+3) Backup database
+4) Uninstall application (keep database)
+5) Uninstall application + database
 
 Update ایمن:
 - PostgreSQL named volume حذف نمی‌شود.

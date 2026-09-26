@@ -5,6 +5,7 @@ REPOSITORY="${EMS_REPOSITORY:-emsebi/EMS_IPAM}"
 REPOSITORY_REF="${EMS_REPOSITORY_REF:-main}"
 INSTALL_DIR="${EMS_INSTALL_DIR:-/opt/ems-ipam}"
 STATE_DIR="${EMS_STATE_DIR:-/var/lib/ems-ipam}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ENV_FILE="$STATE_DIR/.env"
 PROJECT_NAME="ems-ipam"
 TTY_DEVICE="/dev/tty"
@@ -17,6 +18,13 @@ fail(){ printf '\nError: %s\n' "$*" >&2; exit 1; }
 cleanup(){ [[ -n "$TMP_ROOT" && -d "$TMP_ROOT" ]] && rm -rf "$TMP_ROOT" || true; }
 trap cleanup EXIT
 have(){ command -v "$1" >/dev/null 2>&1; }
+
+validate_paths(){
+  [[ "$INSTALL_DIR" == /* && "$STATE_DIR" == /* ]] || fail "Install and state directories must be absolute paths."
+  case "$INSTALL_DIR" in /|/opt|/usr|/var|/home|/root) fail "Unsafe install directory: $INSTALL_DIR" ;; esac
+  case "$STATE_DIR" in /|/opt|/usr|/var|/home|/root) fail "Unsafe state directory: $STATE_DIR" ;; esac
+  [[ "$INSTALL_DIR" != "$STATE_DIR" ]] || fail "Install and state directories must be different."
+}
 
 read_default(){
   local __var="$1" prompt="$2" default="$3" value=""
@@ -97,7 +105,7 @@ ensure_portainer(){
   log "Portainer CE was not found; installing it"
   docker volume create portainer_data >/dev/null
   docker run -d --name portainer --restart=always -p 8000:8000 -p 9443:9443 \
-    -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:latest >/dev/null
+    -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:lts >/dev/null
 }
 
 download_source(){
@@ -107,6 +115,9 @@ download_source(){
   if [[ -n "${EMS_INSTALL_SOURCE_DIR:-}" ]]; then
     [[ -d "$EMS_INSTALL_SOURCE_DIR" ]] || fail "EMS_INSTALL_SOURCE_DIR does not exist."
     cp -a "$EMS_INSTALL_SOURCE_DIR/." "$SOURCE_DIR/"
+  elif [[ "$SCRIPT_DIR" != "$INSTALL_DIR" && -f "$SCRIPT_DIR/compose.yml" && -f "$SCRIPT_DIR/docker-app/package.json" ]]; then
+    log "Using project files next to install.sh"
+    cp -a "$SCRIPT_DIR/." "$SOURCE_DIR/"
   else
     log "Downloading project from GitHub: ${REPOSITORY}@${REPOSITORY_REF}"
     local archive="$TMP_ROOT/source.tar.gz"
@@ -117,6 +128,7 @@ download_source(){
   for f in compose.yml docker-app/Dockerfile docker-app/package.json docker-app/server/main.mjs docker-app/server/schema.sql; do
     [[ -f "$SOURCE_DIR/$f" ]] || fail "Repository is missing required file: $f"
   done
+  rm -rf "$SOURCE_DIR/.git" "$SOURCE_DIR/docker-app/node_modules"
 }
 
 compose_core_cmd(){
@@ -156,9 +168,11 @@ start_optional_modules(){
 }
 
 write_env(){
-  local db_pass="$1" admin_user="$2" admin_pass="$3" http_port="$4"
+  local db_pass="$1" admin_user="$2" admin_pass="$3" http_port="$4" cookie_secure="$5"
   mkdir -p "$STATE_DIR/backups" "$STATE_DIR/runtime"
   chmod 700 "$STATE_DIR"
+  chown 1000:1000 "$STATE_DIR/backups" "$STATE_DIR/runtime"
+  chmod 700 "$STATE_DIR/backups" "$STATE_DIR/runtime"
   umask 077
   cat > "$ENV_FILE" <<ENV
 POSTGRES_DB=ems_ipam
@@ -169,7 +183,7 @@ EMS_ADMIN_PASSWORD=$admin_pass
 EMS_HTTP_PORT=$http_port
 EMS_STATE_DIR=$STATE_DIR
 EMS_BACKUP_PATH=$STATE_DIR/backups
-COOKIE_SECURE=false
+COOKIE_SECURE=$cookie_secure
 TZ=Asia/Tehran
 ENV
   chmod 600 "$ENV_FILE"
@@ -201,6 +215,7 @@ wait_health(){
 }
 
 backup_database(){
+  local backup_kind="${1:-pre-update}"
   [[ -f "$ENV_FILE" ]] || fail "Configuration file is missing; update was stopped before changing files."
   # shellcheck disable=SC1090
   source "$ENV_FILE"
@@ -217,9 +232,13 @@ backup_database(){
     done
   fi
   [[ -n "$db_container" ]] || fail "Database container is unavailable. Update cancelled without changing application files."
-  file="$STATE_DIR/backups/pre-update-$(date +%Y%m%d-%H%M%S).sql.gz"
+  file="$STATE_DIR/backups/${backup_kind}-$(date +%Y%m%d-%H%M%S).sql.gz"
   tmp="${file}.tmp"
-  log "Creating mandatory pre-update database backup"
+  if [[ "$backup_kind" == "pre-update" ]]; then
+    log "Creating mandatory pre-update database backup"
+  else
+    log "Creating manual database backup"
+  fi
   rm -f "$tmp"
   if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$db_container" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges | gzip -c > "$tmp"; then
     rm -f "$tmp"
@@ -227,8 +246,9 @@ backup_database(){
   fi
   [[ -s "$tmp" ]] || { rm -f "$tmp"; fail "Database backup is empty. Update cancelled without changing application files."; }
   mv "$tmp" "$file"
+  chown 1000:1000 "$file"
   chmod 600 "$file"
-  log "Pre-update backup verified: $file"
+  log "Database backup verified: $file"
 }
 
 install_app(){
@@ -248,9 +268,9 @@ install_app(){
     preserved=true
     log "Preserved database and configuration found; reinstalling the application without changing them"
   elif [[ -f "$ENV_FILE" ]] || docker volume inspect ems_ipam_db_data >/dev/null 2>&1; then
-    fail "Only part of a previous installation remains. Choose option 4 for a clean removal, or restore both state and database before installing."
+    fail "Only part of a previous installation remains. Choose option 5 for a clean removal, or restore both state and database before installing."
   else
-    local db_pass admin_user admin_pass http_port
+    local db_pass admin_user admin_pass http_port cookie_secure
     log "Installation settings"
     read_secret_twice db_pass "Database password" 8
     [[ "$db_pass" =~ ^[A-Za-z0-9._@%+=:,!^-]+$ ]] || fail "Database password contains unsupported characters. Use letters, numbers, and . _ @ % + = : , ! ^ -"
@@ -261,7 +281,10 @@ install_app(){
     read_default http_port "Web port" "8080"
     [[ "$http_port" =~ ^[0-9]+$ ]] && ((http_port>=1 && http_port<=65535)) || fail "Web port must be between 1 and 65535."
     port_busy "$http_port" && fail "Port $http_port is already in use."
-    write_env "$db_pass" "$admin_user" "$admin_pass" "$http_port"
+    read_default cookie_secure "Secure cookies (true requires HTTPS)" "false"
+    cookie_secure="${cookie_secure,,}"
+    [[ "$cookie_secure" == "true" || "$cookie_secure" == "false" ]] || fail "Secure cookies must be true or false."
+    write_env "$db_pass" "$admin_user" "$admin_pass" "$http_port" "$cookie_secure"
   fi
 
   mkdir -p "$(dirname "$INSTALL_DIR")"
@@ -282,7 +305,7 @@ install_app(){
 update_app(){
   install_prerequisites
   [[ -f "$INSTALL_DIR/.ems-ipam-install" && -f "$ENV_FILE" ]] || fail "A valid EMS IPAM installation was not found. Choose Install for a new installation."
-  backup_database
+  backup_database pre-update
   download_source
   local previous="${INSTALL_DIR}.previous.$(date +%Y%m%d-%H%M%S)" staged="${INSTALL_DIR}.new.$$"
   cp -a "$SOURCE_DIR" "$staged"
@@ -315,6 +338,12 @@ uninstall_keep_db(){
   log "Application files were removed. Database volume, configuration and backups were kept in $STATE_DIR."
 }
 
+manual_backup(){
+  install_prerequisites
+  [[ -f "$INSTALL_DIR/.ems-ipam-install" && -f "$ENV_FILE" ]] || fail "A valid EMS IPAM installation was not found."
+  backup_database manual
+}
+
 uninstall_all(){
   install_prerequisites
   printf '\nThis permanently deletes EMS IPAM database, settings and backups. Docker and Portainer are kept.\n'
@@ -322,23 +351,25 @@ uninstall_all(){
   if [[ -f "$ENV_FILE" && -f "$INSTALL_DIR/compose.yml" ]]; then compose_all_cmd down -v --remove-orphans || true; fi
   docker volume rm -f ems_ipam_db_data >/dev/null 2>&1 || true
   docker network rm ems_ipam_internal >/dev/null 2>&1 || true
-  rm -rf "$INSTALL_DIR" "$STATE_DIR" /opt/ems-ipam.previous.* /opt/ems-ipam.failed.* /opt/ems-ipam.new.*
+  rm -rf "$INSTALL_DIR" "$STATE_DIR"
   log "EMS IPAM application and database were removed."
 }
 
 menu(){
   printf '\n========================================\n EMS IPAM Setup\n========================================\n'
-  printf '1) Install\n2) Update\n3) Uninstall application (keep database)\n4) Uninstall application + database\n'
+  printf '1) Install\n2) Update\n3) Backup database\n4) Uninstall application (keep database)\n5) Uninstall application + database\n'
   printf '========================================\n'
   local choice
-  read -r -p 'Select [1-4]: ' choice <"$TTY_DEVICE" || fail "Unable to read menu selection."
+  read -r -p 'Select [1-5]: ' choice <"$TTY_DEVICE" || fail "Unable to read menu selection."
   case "$choice" in
     1) install_app ;;
     2) update_app ;;
-    3) uninstall_keep_db ;;
-    4) uninstall_all ;;
+    3) manual_backup ;;
+    4) uninstall_keep_db ;;
+    5) uninstall_all ;;
     *) fail "Invalid selection." ;;
   esac
 }
 
+validate_paths
 menu

@@ -3,7 +3,7 @@
 کلاینت ویندوز، پروتکل محلی زیر را در حساب کاربری ویندوز ثبت می‌کند:
 
 ```text
-emsipam://
+emsipam-client://
 ```
 
 با انتخاب دکمهٔ اتصال در سامانه، مرورگر آدرس، پورت، ابزار و در صورت موجودبودن نام کاربری را به کلاینت می‌دهد. کلاینت سپس برنامهٔ مناسب را روی همان رایانه اجرا می‌کند.
@@ -12,7 +12,7 @@ emsipam://
 
 دانلود مستقیم از GitHub:
 
-[EMS IPAM Windows Client v0.6.0](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip)
+[EMS IPAM Windows Client v0.7.1](https://github.com/emsebi/EMS_IPAM/raw/refs/heads/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.7.1.zip)
 
 دانلود از سرور نصب‌شده:
 
@@ -34,17 +34,17 @@ Install.cmd
 
 ۴. مرورگر را دوباره باز کنید و در سامانه، کنار تجهیز یا IP روی «اتصال» بزنید.
 
-۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید و **EMS IPAM Client** را انتخاب کنید. WinBox را مستقیماً برای پروتکل `emsipam` انتخاب نکنید.
+۵. هنگام اولین اجرا، اجازهٔ بازشدن کلاینت را در مرورگر تأیید و **EMS IPAM Client** را انتخاب کنید. نسخهٔ ۰.۷.۱ از پروتکل جدید `emsipam-client` استفاده می‌کند و ارتباط قدیمی مستقیم WinBox را دور می‌زند.
 
 ## رفع نمایش لینک emsipam داخل WinBox
 
 اگر داخل کادر `Connect To` عبارت زیر دیده شد:
 
 ```text
-emsipam://open?tool=MIK&host=192.0.2.10&port=9191
+emsipam-client://open?tool=MIK&host=192.0.2.10&port=9191
 ```
 
-مرورگر به‌اشتباه WinBox را مستقیماً به‌عنوان برنامهٔ بازکننده انتخاب کرده است. در Firefox به مسیر `Settings > General > Applications` بروید، انتخاب مربوط به `emsipam` را پاک کنید و سپس `Repair.cmd` را از بستهٔ کلاینت اجرا کنید.
+این وضعیت مربوط به اتصال قدیمی مستقیم WinBox است. `Repair.cmd` را از بستهٔ کلاینت اجرا کنید؛ نصب‌کننده هر دو پروتکل `emsipam-client` و `emsipam` را به واسط امن EMS IPAM متصل می‌کند.
 
 پس از اصلاح، WinBox فقط این مقدار را دریافت می‌کند:
 
@@ -73,7 +73,7 @@ emsipam://open?tool=MIK&host=192.0.2.10&port=9191
 
 ## امنیت
 
-- رمز عبور داخل `emsipam://` قرار نمی‌گیرد.
+- رمز عبور داخل `emsipam-client://` قرار نمی‌گیرد.
 - رمز عبور در خط فرمان برنامهٔ مقصد نوشته نمی‌شود.
 - ورود رمز در خود WinBox، Remote Desktop، PuTTY یا VNC انجام می‌شود.
 - کلاینت فقط نشانی‌هایی را می‌پذیرد که قالب و ابزار آن‌ها معتبر باشد.

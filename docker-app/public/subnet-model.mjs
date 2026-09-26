@@ -17,6 +17,12 @@ export function visibleTableCount(total, requested = 8) {
   return Math.min(count, Math.max(1, Number(requested) || 8));
 }
 
+export function viewportMapHeight(viewportHeight, elementTop, { minimum = 420, bottomGap = 24 } = {}) {
+  const height = Number(viewportHeight) || 0;
+  const top = Math.max(0, Number(elementTop) || 0);
+  return Math.max(minimum, Math.floor(height - top - bottomGap));
+}
+
 export function detailGroupSize(prefix) {
   if (!DETAIL_PREFIXES.includes(Number(prefix))) throw new RangeError("Detail prefix must be between /24 and /30.");
   return 2 ** (32 - Number(prefix));

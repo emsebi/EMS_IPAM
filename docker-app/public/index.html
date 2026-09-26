@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.5.0-stage1-radio">
+  <link rel="stylesheet" href="/styles.css?v=1.6.1">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -33,6 +33,7 @@
         <button id="ipamButton" class="navbtn" type="button"><span class="nav-icon">⌗</span><span>مدیریت IP</span></button>
         <button id="inventoryButton" class="navbtn" type="button"><span class="nav-icon">▣</span><span>تجهیزات</span></button>
         <button id="radiosButton" class="navbtn" type="button"><span class="nav-icon">◉</span><span>رادیوها</span></button>
+        <button id="personnelButton" class="navbtn admin-only" type="button"><span class="nav-icon">♙</span><span>پرسنل</span></button>
         <div class="nav-divider"></div>
         <div id="moduleNavigation" class="module-navigation"></div>
         <button id="settingsButton" class="navbtn admin-only" type="button"><span class="nav-icon">⚙</span><span>تنظیمات</span></button>
@@ -56,7 +57,7 @@
           <div id="searchResults" class="search-results hidden"></div>
         </div>
         <div class="top-actions">
-          <button id="languageButton" class="langbtn" type="button" title="Language / زبان">FA</button><button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
+          <select id="languageSelect" class="langselect" title="Language" aria-label="Language"></select><button id="themeButton" class="iconbtn" title="تغییر حالت روشن و تاریک" aria-label="تغییر پوسته">☾</button>
           <button id="userMenuButton" class="user-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="avatar">A</span><span class="user-meta"><b id="loggedInUserName">Admin</b><small id="userRoleName">Administrator</small></span><span>⌄</span>
           </button>
@@ -142,6 +143,19 @@
     </form>
   </dialog>
 
+
+  <dialog id="inventoryCreateDialog">
+    <form id="inventoryCreateForm">
+      <div class="modal-head"><div><h3>ایجاد تجهیز</h3><p>ابتدا رنج IPAM و IP را انتخاب کنید؛ سپس فرم کامل تجهیز باز می‌شود.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body form-grid">
+        <label class="field full">انتخاب رنج IPAM<select id="inventoryCreateSpace" required></select></label>
+        <label class="field full">آدرس IP<input id="inventoryCreateIp" class="ltr mono" required placeholder="192.0.2.10"></label>
+        <div id="inventoryCreateError" class="notice error full"></div>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ادامه و تکمیل اطلاعات</button></div>
+    </form>
+  </dialog>
+
   <dialog id="hostDialog" class="wide-dialog">
     <form id="hostForm">
       <div class="modal-head"><div><h3>اطلاعات IP</h3><p id="hostIpTitle" class="ltr mono"></p></div><div class="modal-head-actions"><button id="prevHostButton" class="btn sm" type="button">IP قبلی</button><button id="nextHostButton" class="btn sm" type="button">IP بعدی</button><button class="close" type="button" data-close>×</button></div></div>
@@ -204,6 +218,7 @@
             <button id="addDevicePort" class="btn sm" type="button">افزودن پورت</button>
           </fieldset>
           <label class="field full">توضیحات<textarea id="hostNotes"></textarea></label>
+          <div id="hostFormError" class="notice error full"></div>
         </div>
       </div>
       <div class="modal-foot split"><button id="deleteHostButton" class="btn danger hidden" type="button">حذف اطلاعات</button><span></span><button class="btn" type="button" data-close>انصراف</button><button class="btn primary" type="submit">ذخیره</button></div>
@@ -211,7 +226,7 @@
   </dialog>
 
   <dialog id="usersDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>کاربران و دسترسی‌ها</h3><p>Admin / Support / Helpdesk / Viewer و دسترسی ماژول‌ها</p></div><div class="modal-head-actions"><button id="usersBackSettings" class="btn sm" type="button">← Settings</button><button class="close" type="button" data-close>×</button></div></div>
+    <div class="modal-head"><div><h3>کاربران و دسترسی‌ها</h3><p>Admin / Support / Helpdesk / Branch / Viewer و دسترسی ماژول‌ها</p></div><div class="modal-head-actions"><button id="usersBackSettings" class="btn sm" type="button">← بازگشت</button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body users-layout">
       <form id="userForm" class="card-form">
         <input id="userId" type="hidden">
@@ -219,7 +234,7 @@
         <label class="field">نام کاربری<input id="userUsername" required autocomplete="off"></label>
         <label class="field">نام نمایشی<input id="userDisplayName"></label>
         <label class="field">رمز عبور<input id="userPassword" type="password" autocomplete="new-password"><small id="passwordHint">هر رمز دلخواه؛ برای کاربر جدید خالی نباشد</small></label>
-        <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="support">پشتیبانی</option><option value="helpdesk">هلپ‌دسک</option><option value="admin">مدیر کل</option></select></label>
+        <label class="field">نقش<select id="userRole"><option value="viewer">مشاهده‌گر</option><option value="branch">کاربر شعبه</option><option value="support">پشتیبانی</option><option value="helpdesk">هلپ‌دسک</option><option value="admin">مدیر کل</option></select></label>
         <label id="userActiveWrap" class="check-field hidden"><input id="userActive" type="checkbox" checked> کاربر فعال باشد</label>
         <fieldset id="moduleAccessField" class="company-access"><legend>دسترسی به بخش‌ها و ماژول‌ها</legend><div id="moduleAccessList" class="module-access-grid"></div><small>ماژول‌های آینده بعد از اضافه‌شدن به پوشه modules/ نیز در همین بخش قابل تخصیص هستند.</small></fieldset>
         <fieldset id="companyAccessField" class="company-access"><legend>شرکت‌های قابل دسترسی</legend><div id="companyAccessList"></div></fieldset>
@@ -252,7 +267,7 @@
           <section class="settings-pane" data-settings-pane="personnel"><h4>پرسنل</h4><p>لیست مرکزی پرسنل برای اتصال به MACها و تجهیزات شخصی.</p><button id="openPersonnelFromSettings" class="btn primary" type="button">مدیریت پرسنل</button></section>
           <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
           <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
-          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
+          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><input id="deviceTypeColor" type="color" value="#3157d5" title="رنگ نوع تجهیز"><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
           <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
@@ -263,13 +278,13 @@
   </dialog>
 
   <dialog id="personnelDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button">← Settings</button><button class="close" type="button" data-close>×</button></div></div>
+    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button">← بازگشت</button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body personnel-layout">
       <form id="personnelForm" class="card-form">
         <input id="personnelId" type="hidden">
         <h4 id="personnelFormTitle">پرسنل جدید</h4>
-        <label class="field">کد پرسنلی<input id="personnelCode" required autocomplete="off"></label>
-        <label class="field">نام و نام خانوادگی<input id="personnelName" required></label>
+        <label class="field">کد پرسنلی (اختیاری)<input id="personnelCode" autocomplete="off"></label>
+        <label class="field">نام و نام خانوادگی (الزامی)<input id="personnelName" required></label>
         <label class="field">موبایل<input id="personnelMobile" class="ltr"></label>
         <label class="field">تلفن<input id="personnelPhone" class="ltr"></label>
         <label class="field">ایمیل<input id="personnelEmail" class="ltr"></label>
@@ -295,7 +310,7 @@
         <button class="btn" type="submit">ذخیره برنامه پشتیبان</button>
         <div class="backup-meta"><span>محل ذخیره:</span><b id="backupPath" class="ltr mono"></b><span>اجرای بعدی:</span><b id="backupNextRun"></b></div>
       </form>
-      <div class="toolbar compact-toolbar"><span class="subtitle">فایل شامل دیتابیس و کلید رمزگشایی تجهیزات است.</span><button id="createBackupButton" class="btn primary" type="button">ساخت پشتیبان جدید</button></div>
+      <div class="toolbar compact-toolbar"><span class="subtitle">فایل پشتیبان شامل دیتابیس است؛ رمز تجهیزات در سامانه ذخیره نمی‌شود.</span><button id="createBackupButton" class="btn primary" type="button">ساخت پشتیبان جدید</button></div>
       <div id="backupsList" class="table-list"></div>
     </div>
   </dialog>
@@ -388,6 +403,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.5.0-stage1-radio"></script>
+  <script type="module" src="/app.js?v=1.6.1"></script>
 </body>
 </html>

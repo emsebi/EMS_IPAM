@@ -1,8 +1,15 @@
 $ErrorActionPreference = 'Stop'
-$root = 'Registry::HKEY_CURRENT_USER\Software\Classes\emsipam'
-$command = (Get-Item -LiteralPath (Join-Path $root 'shell\open\command')).GetValue('')
-Write-Host 'EMS IPAM protocol handler:' -ForegroundColor Cyan
-Write-Host $command
+foreach ($scheme in @('emsipam-client','emsipam')) {
+    $root = 'Registry::HKEY_CURRENT_USER\Software\Classes\' + $scheme
+    $commandKey = Join-Path $root 'shell\open\command'
+    if (-not (Test-Path -LiteralPath $commandKey)) { throw ('Protocol is not registered: ' + $scheme) }
+    $command = (Get-Item -LiteralPath $commandKey).GetValue('')
+    Write-Host ($scheme + ' handler:') -ForegroundColor Cyan
+    Write-Host $command
+    if ($command -notmatch 'EMS-IPAM-Protocol\.ps1' -or $command -match 'winbox\.exe') {
+        throw ('Invalid EMS IPAM handler: ' + $scheme)
+    }
+}
 $log = Join-Path $env:LOCALAPPDATA 'EMS-IPAM-Client\last-launch.txt'
 if (Test-Path -LiteralPath $log) {
     Write-Host ''

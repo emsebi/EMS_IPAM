@@ -1,10 +1,11 @@
-# چک‌لیست تست Base v1.5.0-stage1-radio
+# چک‌لیست تست BASE + IPAM + Radio v1.6.1
 
 این نسخه برای تست «هسته + مدیریت IP» است و باید فقط با داده آزمایشی تست شود.
 
 ## نصب تازه
 - Installer باید Docker Engine، Docker Compose و Portainer را بررسی کند.
-- رمز PostgreSQL، نام Admin، رمز Admin و Web Port را بپرسد.
+- رمز PostgreSQL، نام Admin، رمز Admin، Web Port و Cookie Secure را بپرسد.
+- منوی Installer شامل Install، Update، Backup، حذف App با حفظ DB و حذف کامل باشد.
 - Login و Logout باید کار کنند.
 
 ## ظاهر و تنظیمات پایه
@@ -20,7 +21,9 @@
 ## شرکت، شعبه و پرسنل
 - Company/Site/Branch ساخت/ویرایش/حذف شود.
 - اطلاعات تماس، آدرس، مختصات، توضیحات و Public/WAN links قابل ویرایش باشد.
-- Personnel با کد پرسنلی ثبت شود و روی Company/Branch دیده شود.
+- Personnel فقط با نام ثبت شود؛ کد پرسنلی و تمام فیلدهای دیگر اختیاری باشند.
+- Personnel از منوی اصلی Admin نیز مستقیماً باز شود.
+- کارت هر Address Space تعداد IP ثبت‌شده، آزاد، کل ظرفیت، تعداد رنج و درصد استفاده را نشان دهد.
 
 ## Subnet Overview
 - ستون /24 سمت چپ و /23 تا /16 به‌ترتیب دیده شوند.
@@ -29,6 +32,8 @@
 - مربع رنگ کنار Range فقط همان Range را نام‌گذاری/رنگ کند.
 - رنگ Parent به Child ارث نرسد.
 - Range بدون Group خاکستری بماند.
+- با بزرگ‌شدن پنجره یا Zoom کمتر، ارتفاع نقشه و تعداد ردیف‌های قابل مشاهده بیشتر شود.
+- پس از رفتن به Settings/Inventory/Radio و بازگشت، همان Address Space و رنج قبلی باز شود.
 
 ## زیر /24
 - /24 تا /30 خرد شود.
@@ -41,6 +46,8 @@
 - Ping status نمایش داده شود.
 - Services/Ports و میانبرهای Web/HTTPS/SSH/RDP/WinBox قابل ویرایش/استفاده باشند.
 - Edit/Delete و ذخیره اطلاعات IP کار کند.
+- افزودن و ویرایش تجهیز از صفحه Inventory کار کند و خطای ذخیره داخل فرم نمایش داده شود.
+- WinBox فقط مقدار `IP:PORT` بگیرد و هرگز URI داخلی سامانه را در Connect To نشان ندهد.
 
 ## Search
 - IP/MAC/Hostname/Company/Personnel با بخشی از عبارت نتیجه بدهد.
@@ -51,3 +58,12 @@
 2. Installer را دوباره اجرا و گزینه Update را انتخاب کنید.
 3. Update باید قبل از تغییر فایل‌ها Backup معتبر DB بسازد.
 4. بعد از Update همان اطلاعات باید باقی مانده باشد.
+
+## Radio
+
+- جستجوی Station باید AP والد را نیز نگه دارد.
+- دکمه افزودن Station کنار AP باید همان AP را در فرم بعدی خودکار انتخاب کند.
+- Station بدون AP در بخش مستقل نمایش داده شود.
+- دکمه‌های Edit، IPAM و Ping رفتارهای مستقل داشته باشند.
+- نتیجه Ping به‌صورت Online/Offline/Unknown و زمان آخرین بررسی نمایش داده شود.
+- فیلدهای Radio در صورت حذف پوشه ماژول پنهان باشند.

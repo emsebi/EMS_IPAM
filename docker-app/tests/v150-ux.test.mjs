@@ -9,7 +9,7 @@ test('v1.5 restores language control, editable device taxonomy and personnel tra
     fs.readFile(new URL('../server/main.mjs', import.meta.url), 'utf8'),
     fs.readFile(new URL('../server/schema.sql', import.meta.url), 'utf8'),
   ]);
-  for (const token of ['languageButton','deviceTypeForm','deviceTypesList','exportPersonnel','importPersonnel','usersBackSettings','personnelBackSettings']) assert.match(html, new RegExp(token));
+  for (const token of ['languageSelect','deviceTypeForm','deviceTypesList','exportPersonnel','importPersonnel','usersBackSettings','personnelBackSettings']) assert.match(html, new RegExp(token));
   assert.match(app, /ems-language/);
   assert.match(app, /refreshDeviceTypes/);
   assert.match(app, /\/api\/inventory\/export/);

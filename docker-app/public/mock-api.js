@@ -4,7 +4,7 @@
   const spaceId = "space-demo";
   const bootstrap = {
     ok: true,
-    version: "1.5.0-stage1-radio",
+    version: "1.6.1",
     user: { id: "admin-demo", username: "admin", displayName: "مدیر سیستم", role: "admin", active: true },
     companies: [
       { id: companyId, parentCompanyId: null, kind: "company", code: "HQ", name: "Example Company", description: "دفتر مرکزی و مدیریت زیرساخت", address: "Demo City, Example Street", postalCode: "1111111111", phone: "021-88770000", managerName: "Test User 1001", latitude: 35.7219, longitude: 51.3347, notes: "ارتباط اضطراری از طریق لینک پشتیبان برقرار می‌شود.", contactCount: 3, connectionCount: 2 },
@@ -63,7 +63,10 @@
       { ip: "198.18.2.20", online: false, checkedAt: new Date().toISOString(), lastSeenAt: null },
     ],
   };
-  const inventoryItem = (item) => ({ ...item, spaceId, spaceName: "Demo Core Network", spaceCidr: "198.18.0.0/16", companyId, companyName: "Example Company", connectionMethods: item.connectionMethods || [] });
+  const inventoryItem = (item) => {
+    const ping = data.pings.find((entry) => entry.ip === item.ip);
+    return { ...item, spaceId, spaceName: "Demo Core Network", spaceCidr: "198.18.0.0/16", companyId, companyName: "Example Company", connectionMethods: item.connectionMethods || [], pingOnline: ping?.online ?? null, pingCheckedAt: ping?.checkedAt || null, pingLastSeenAt: ping?.lastSeenAt || null };
+  };
   const inventory = data.hosts.map(inventoryItem);
   const companyDetail = { ok: true, company: bootstrap.companies[0], contacts: [
     { id: "c1", fullName: "Test User 1001", jobTitle: "مدیر شعبه", phone: "021-88770001", mobile: "09121234567", email: "a.rezaei@example.com", isPrimary: true },
@@ -74,7 +77,7 @@
   ], personnel: [
     { id:"per-1", employeeCode:"1001", fullName:"Test User 1001", mobile:"+000000001", department:"Demo IT", jobTitle:"Network Engineer", active:true },
     { id:"per-2", employeeCode:"1002", fullName:"Test User 1002", mobile:"+000000002", department:"Demo Support", jobTitle:"Support", active:true }
-  ], spaces: bootstrap.spaces.filter((item) => item.companyId === companyId), stats: { hosts: data.hosts.length, prefixes: data.prefixes.length, radios: data.hosts.filter((item) => item.radioMode).length } };
+  ], spaces: bootstrap.spaces.filter((item) => item.companyId === companyId).map((item) => ({ ...item, hostCount: data.hosts.filter((host) => host.spaceId === item.id || item.id === spaceId).length, prefixCount: data.prefixes.length })), stats: { hosts: data.hosts.length, prefixes: data.prefixes.length, radios: data.hosts.filter((item) => item.radioMode).length } };
   const map = { id: "map-demo", companyId, companyName: "Example Company", name: "Demo Network Map", description: "ارتباط روتر، سرور و رادیو" };
   const mapData = { ok: true, map, nodes: [
     { ...inventory.find((item) => item.id === "h2"), id: "node-1", hostId: "h2", x: 130, y: 120, width: 170, height: 76 },
@@ -118,6 +121,12 @@
       const inventoryCurrent = inventory.find((item) => item.id === saved.id || item.ip === saved.ip);
       if (inventoryCurrent) Object.assign(inventoryCurrent, inventoryItem(saved)); else inventory.push(inventoryItem(saved));
       payload = { ok: true, id: saved.id };
+    }
+    else if (url === "/api/ping/host" && method === "POST") {
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body || {};
+      const item = inventory.find((entry) => entry.id === body.id);
+      if (item) { item.pingOnline = true; item.pingCheckedAt = new Date().toISOString(); item.pingLastSeenAt = item.pingCheckedAt; }
+      payload = { ok: true, ip: item?.ip || "", online: true };
     }
     else if (url === "/api/prefixes" && method === "POST") {
       const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body || {};

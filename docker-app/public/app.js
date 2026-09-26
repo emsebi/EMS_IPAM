@@ -1,4 +1,4 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount } from "./subnet-model.mjs?v=1.5.0-stage1-radio";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.6.1";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -9,6 +9,9 @@ const state = {
   data: null,
   currentCompanyId: null,
   currentSpaceId: null,
+  lastIpamSpaceId: localStorage.getItem("ems-last-ipam-space") || "",
+  lastIpamSheetCidr: localStorage.getItem("ems-last-ipam-sheet") || "",
+  lastIpamView: localStorage.getItem("ems-last-ipam-view") || "overview",
   view: "companies",
   sheetCidr: null,
   displayMode: localStorage.getItem("ems-display-mode") || "table",
@@ -38,7 +41,11 @@ const state = {
   inventoryType: "",
   deviceTypes: [],
   language: localStorage.getItem("ems-language") || "en",
+  languages: [],
   routeBusy: false,
+  hostReturnView: null,
+  personnelReturnToSettings: false,
+  usersReturnToSettings: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -47,46 +54,59 @@ const page = $("page");
 const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
 
-const EN_TEXT = new Map(Object.entries({
-  "داشبورد و شرکت‌ها":"Dashboard & Companies","مدیریت IP":"IP Management","تجهیزات":"Inventory","رادیوها":"Radios","تنظیمات":"Settings",
-  "کاربران و دسترسی‌ها":"Users & Access","پشتیبان‌گیری":"Backup","درباره EMS_IPAM":"About EMS IPAM","خروج از حساب":"Logout",
-  "شرکت‌ها، شعبه‌ها و مشتریان":"Companies, Branches & Customers","افزودن شرکت یا شعبه":"Add Company / Branch","مشاهده شرکت":"Open Company","ویرایش":"Edit","حذف":"Delete","افزودن رنج":"Add Network",
-  "کل تجهیزات":"Total Devices","شرکت‌ها":"Companies","نوع تجهیز":"Device Type","همه انواع تجهیزات":"All Device Types","به‌روزرسانی فهرست":"Refresh","مشاهده و ویرایش":"View / Edit","اتصال":"Connect",
-  "مدیریت تجهیزات":"Device Management","رادیوها و ارتباط AP / Station":"Radio AP / Station Map","نمای درختی":"Tree View","نمای فهرست":"List View","ثبت AP جدید":"New AP","افزودن Station":"Add Station","کل رادیوها":"Total Radios",
-  "تنظیمات EMS_IPAM":"EMS IPAM Settings","عمومی":"General","پرسنل":"Personnel","ظاهر":"Appearance","ابزارهای IP":"IP Tools","ماژول‌ها":"Modules","سیستم":"System","انواع تجهیزات":"Device Types",
-  "مدیریت کاربران":"Manage Users","مدیریت پرسنل":"Manage Personnel","تنظیم Backup":"Backup Settings","اعمال ظاهر":"Apply Appearance","بستن تنظیمات":"Close Settings",
-  "کاربر جدید":"New User","نام کاربری":"Username","نام نمایشی":"Display Name","رمز عبور":"Password","نقش":"Role","مدیر کل":"Admin","پشتیبانی":"Support","هلپ‌دسک":"Helpdesk","مشاهده‌گر":"Viewer","ذخیره کاربر":"Save User",
-  "پرسنل جدید":"New Personnel","کد پرسنلی":"Employee Code","نام و نام خانوادگی":"Full Name","موبایل":"Mobile","تلفن":"Phone","ایمیل":"Email","واحد":"Department","سمت":"Job Title","شرکت":"Company","توضیحات":"Notes","فعال":"Active","ذخیره":"Save","انصراف":"Cancel",
-  "اطلاعات IP":"IP Details","IP قبلی":"Previous IP","IP بعدی":"Next IP","نام سیستم / Hostname":"System Name / Hostname","وضعیت":"Status","سیستم‌عامل":"Operating System","مسئول / مالک":"Owner","موقعیت":"Location","سازنده":"Vendor","مدل":"Model","شماره سریال":"Serial Number","نسخه سیستم‌عامل / Firmware":"OS / Firmware","روش‌های اتصال این IP":"IP Connection Services","پورت اختصاصی سرویس‌ها":"Custom Service Ports",
-  "اطلاعات رادیو":"Radio Information","حالت رادیو":"Radio Mode","اتصال به AP":"Parent AP","رادیو نیست":"Not a Radio","انتخاب نوع تجهیز":"Select Device Type",
-  "نام رنج":"Network Name","کاربرد":"Purpose","رنگ":"Color","ذخیره و اعمال رنگ":"Save & Apply Color","حذف رنج":"Delete Network","خروجی قابل انتقال":"Portable Export",
-  "جست‌وجو...":"Search...","جست‌وجوی سریع IP، MAC، Hostname، شرکت، رنج…":"Search IP, MAC, hostname, company, network...",
-  "روشن":"Light","تیره":"Dark","پوسته":"Theme","افزودن شخص":"Add Contact","افراد و راه‌های تماس":"Contacts","افراد تماس":"Contacts",
-  "نام شرکت یا شعبه":"Company / Branch Name","نوع":"Type","شرکت مادر":"Parent Company","کد داخلی":"Internal Code","نام مدیر":"Manager","شماره تماس":"Phone","کد پستی":"Postal Code","آدرس":"Address","عرض جغرافیایی":"Latitude","طول جغرافیایی":"Longitude","توضیح کوتاه":"Description","یادداشت‌های شرکت":"Company Notes",
-  "آزاد":"Free","فعال":"Active","رزروشده":"Reserved","برنامه‌ریزی‌شده":"Planned","قرنطینه":"Quarantine","غیرفعال":"Disabled","خاموش":"Offline","نیازمند بررسی":"Needs Review",
-  "مدیریت تصویری شبکه":"Visual Network Management","ورود به سامانه EMS IPAM":"Sign in to EMS IPAM","ورود":"Sign In","نام کاربری":"Username","رمز عبور":"Password",
-  "داشبورد":"Dashboard","نمای شرکت":"Company View","همه شرکت‌ها":"All Companies","رنج اصلی":"Address Space","افزودن رنج اصلی":"Add Address Space","ثبت رنج":"Register Network","شبکه /24":"/24 Network",
-  "نتیجه فیلتر":"Filtered Results","نوع انتخاب‌شده":"Selected Type","نتیجه جست‌وجو":"Search Results","ادامه":"Continue","انتخاب AP":"Select AP","بدون SSID":"No SSID",
-  "ثبت سریع رادیو":"Quick Radio Registration","ذخیره نوع":"Save Type","انصراف از ویرایش":"Cancel Edit","کاربر فعال باشد":"User is active"
-}));
-
+let LANGUAGE_PACK = {};
+let LANGUAGE_ENTRIES = [];
+async function loadLanguageCatalog() {
+  const supported = new Set(["en", "fa"]);
+  try {
+    const response = await fetch("/i18n/languages.json?v=1.6.1", { cache: "no-store" });
+    const items = response.ok ? await response.json() : [];
+    state.languages = Array.isArray(items) ? items.filter((item) => supported.has(item?.id) && item?.label) : [];
+    if (state.languages.length !== supported.size) throw new Error("Language catalog must contain English and Persian only.");
+  } catch {
+    state.languages = [{ id: "en", label: "English", dir: "ltr" }, { id: "fa", label: "فارسی", dir: "rtl" }];
+  }
+  if (!state.languages.some((item) => item.id === state.language)) {
+    state.language = state.languages[0].id;
+    localStorage.setItem("ems-language", state.language);
+  }
+}
+async function loadLanguagePack(lang) {
+  try {
+    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.6.1`, { cache: "no-store" });
+    LANGUAGE_PACK = response.ok ? await response.json() : {};
+  } catch { LANGUAGE_PACK = {}; }
+  LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
+}
+function translateValue(value) {
+  let output = String(value ?? "");
+  for (const [source,target] of LANGUAGE_ENTRIES) if (source && output.includes(source)) output = output.split(source).join(target);
+  return output;
+}
 function translateTree(root = document) {
-  if (state.language !== "en") return;
-  document.documentElement.lang = "en";
-  document.documentElement.dir = "ltr";
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) { const raw=node.nodeValue; const key=raw?.trim(); if (!key || !EN_TEXT.has(key)) continue; node.nodeValue=raw.replace(key,EN_TEXT.get(key)); }
-  root.querySelectorAll?.("input[placeholder],textarea[placeholder]").forEach((el)=>{ const key=el.getAttribute("placeholder"); if(EN_TEXT.has(key)) el.setAttribute("placeholder",EN_TEXT.get(key)); });
-  const btn=$("languageButton"); if(btn) btn.textContent="FA";
+  for (const node of nodes) { const raw=node.nodeValue; if (!raw?.trim()) continue; node.nodeValue=translateValue(raw); }
+  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el)=>{
+    for (const attr of ["placeholder","title","aria-label"]) if (el.hasAttribute(attr)) el.setAttribute(attr,translateValue(el.getAttribute(attr)));
+  });
 }
-
-function applyLanguage() {
-  if (state.language === "fa") { document.documentElement.lang="fa"; document.documentElement.dir="rtl"; const btn=$("languageButton"); if(btn) btn.textContent="EN"; return; }
+async function applyLanguage() {
+  await loadLanguageCatalog();
+  await loadLanguagePack(state.language);
+  const descriptor = state.languages.find((item) => item.id === state.language) || state.languages[0];
+  document.documentElement.lang = state.language;
+  document.documentElement.dir = "ltr"; // Sidebar/layout always stays on the left.
+  document.documentElement.dataset.language = state.language;
+  document.documentElement.dataset.contentDirection = descriptor?.dir === "rtl" ? "rtl" : "ltr";
   translateTree(document);
+  const select = $("languageSelect");
+  if (select) {
+    select.innerHTML = state.languages.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("");
+    select.value = state.language;
+  }
 }
-
-const langObserver = new MutationObserver((records)=>{ if(state.language!=="en") return; for(const record of records) for(const node of record.addedNodes) if(node.nodeType===1) translateTree(node); });
+const langObserver = new MutationObserver((records)=>{ for(const record of records) for(const node of record.addedNodes) if(node.nodeType===1) translateTree(node); });
 langObserver.observe(document.documentElement,{subtree:true,childList:true});
 const nativeShowModal = HTMLDialogElement.prototype.showModal;
 HTMLDialogElement.prototype.showModal = function showCleanDialog() {
@@ -102,6 +122,31 @@ function navActive(name) {
   document.querySelectorAll(".navbtn").forEach((node) => node.classList.toggle("active", node.id === `${name}Button`));
 }
 
+function rememberIpamContext(view = state.view) {
+  if (!state.currentSpaceId || !["overview", "sheet"].includes(view)) return;
+  state.lastIpamSpaceId = state.currentSpaceId;
+  state.lastIpamView = view;
+  state.lastIpamSheetCidr = view === "sheet" ? (state.sheetCidr || "") : "";
+  localStorage.setItem("ems-last-ipam-space", state.lastIpamSpaceId);
+  localStorage.setItem("ems-last-ipam-view", state.lastIpamView);
+  if (state.lastIpamSheetCidr) localStorage.setItem("ems-last-ipam-sheet", state.lastIpamSheetCidr);
+  else localStorage.removeItem("ems-last-ipam-sheet");
+}
+
+function syncIpamViewportHeight() {
+  const container = page.querySelector(".root-table-container,.vertical-table-wrap");
+  if (!container) return;
+  const minimum = window.innerWidth <= 760 ? 300 : 420;
+  const bottomGap = window.innerWidth <= 760 ? 76 : 24;
+  const height = viewportMapHeight(window.innerHeight, container.getBoundingClientRect().top, { minimum, bottomGap });
+  document.documentElement.style.setProperty("--ipam-map-height", `${height}px`);
+}
+
+function scheduleIpamViewportSync() {
+  cancelAnimationFrame(scheduleIpamViewportSync.frame);
+  scheduleIpamViewportSync.frame = requestAnimationFrame(syncIpamViewportHeight);
+}
+
 function setRoute(path, replace = false) {
   const hash = `#${path}`;
   if (location.hash === hash) return;
@@ -114,6 +159,10 @@ function escapeHtml(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat(state.language === "en" ? "en-US" : "fa-IR").format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleString(state.language === "en" ? "en-US" : "fa-IR");
 }
 
 function toast(message) {
@@ -250,7 +299,7 @@ function existingPrefixAt(address) {
 }
 
 function roleLabel(role) {
-  return role === "admin" ? "Administrator" : role === "support" ? "Support" : role === "helpdesk" ? "Helpdesk" : "Viewer";
+  return role === "admin" ? "Administrator" : role === "support" ? "Support" : role === "helpdesk" ? "Helpdesk" : role === "branch" ? "Branch" : "Viewer";
 }
 
 function renderModuleNavigation() {
@@ -260,7 +309,7 @@ function renderModuleNavigation() {
   const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
   host.innerHTML = modules
     .filter((item) => item.id !== "radio")
-    .filter((item) => !Array.isArray(item.permissions) || !item.permissions.length || item.permissions.includes(role))
+    .filter((item) => !Array.isArray(item.roles) || !item.roles.length || item.roles.includes(role))
     .sort((a, b) => Number(a.navigation?.order || 100) - Number(b.navigation?.order || 100))
     .map((item) => { const path = item.navigation?.path || `/m/${item.id}/`; const label = item.navigation?.label || item.name || item.id; const icon = item.navigation?.icon || "◫"; return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`; }).join("");
 }
@@ -288,10 +337,18 @@ async function boot() {
     state.bootstrap = await request("/api/bootstrap");
     setLoginVisible(false);
     applyRoleVisibility();
-    applyLanguage();
+    await applyLanguage();
     const savedCompany = localStorage.getItem("ems-company");
     state.currentCompanyId = state.bootstrap.companies.some((item) => item.id === savedCompany)
       ? savedCompany : "";
+    if (!state.bootstrap.spaces.some((item) => item.id === state.lastIpamSpaceId)) {
+      state.lastIpamSpaceId = "";
+      state.lastIpamSheetCidr = "";
+      state.lastIpamView = "overview";
+      localStorage.removeItem("ems-last-ipam-space");
+      localStorage.removeItem("ems-last-ipam-sheet");
+      localStorage.removeItem("ems-last-ipam-view");
+    }
     updateSelectors();
     await renderRoute(true);
     connectEvents();
@@ -313,6 +370,8 @@ function applyRoleVisibility() {
   $("ipamButton")?.classList.toggle("hidden", !hasClientModule("ipam"));
   $("inventoryButton")?.classList.toggle("hidden", !hasClientModule("inventory"));
   $("radiosButton")?.classList.toggle("hidden", !isModuleInstalled("radio") || !hasClientModule("radio"));
+  $("personnelButton")?.classList.toggle("hidden", !isAdmin());
+  document.querySelectorAll(".radio-module-field").forEach((node) => node.classList.toggle("hidden", !isModuleInstalled("radio")));
   const user = state.bootstrap?.user || {};
   if ($("loggedInUserName")) $("loggedInUserName").textContent = user.displayName || user.username || "User";
   if ($("userRoleName")) $("userRoleName").textContent = roleLabel(user.role);
@@ -393,6 +452,7 @@ async function loadSpace(spaceId, { sheetCidr = null, fromRoute = false } = {}) 
   updateSelectors();
   navActive("ipam");
   if (!fromRoute) setRoute(`/ipam/${encodeURIComponent(spaceId)}${sheetCidr ? `/${encodeURIComponent(sheetCidr)}` : ""}`);
+  rememberIpamContext(state.view);
   renderCurrent();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -451,11 +511,18 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
   const mapUrl = company.latitude !== null && company.longitude !== null ? `https://www.google.com/maps?q=${encodeURIComponent(`${company.latitude},${company.longitude}`)}` : "";
   const contacts = (result.contacts || []).map((item) => `<article class="contact-card"><span class="contact-icon">${escapeHtml((item.fullName || "؟").slice(0, 1))}</span><div class="contact-body"><b>${escapeHtml(item.fullName)}</b><small>${escapeHtml(item.jobTitle || "بدون سمت")}</small><div class="contact-meta"><span><strong>تلفن:</strong> <span class="ltr">${escapeHtml(item.phone || "—")}</span></span><span><strong>موبایل:</strong> <span class="ltr">${escapeHtml(item.mobile || "—")}</span></span><span><strong>ایمیل:</strong> <span class="ltr">${escapeHtml(item.email || "—")}</span></span></div></div>${item.isPrimary ? `<span class="company-tree-badge">تماس اصلی</span>` : ""}</article>`).join("") || `<div class="empty-state compact-empty">فردی ثبت نشده است.</div>`;
   const connections = (result.connections || []).map((item) => `<article class="connection-card"><span class="contact-icon">↗</span><div><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.provider || "بدون شرکت اینترنتی")} — ${escapeHtml(item.deviceName || "تجهیز نامشخص")}</small></div><div><b class="connection-ip">${escapeHtml(item.ip)}</b>${normalizedConnectionMethods(item).length ? `<button class="btn sm company-tool" data-ip="${escapeHtml(item.ip)}">اتصال</button>` : ""}</div></article>`).join("") || `<div class="empty-state compact-empty">ارتباطی ثبت نشده است.</div>`;
-  const personnel = (result.personnel || []).map((item) => `<article class="contact-card"><span class="contact-icon">${escapeHtml((item.fullName || "؟").slice(0,1))}</span><div><b>${escapeHtml(item.fullName)}</b><small>کد ${escapeHtml(item.employeeCode)} — ${escapeHtml(item.department || item.jobTitle || "بدون واحد")} ${item.mobile ? `— ${escapeHtml(item.mobile)}` : ""}</small></div><span class="status-pill">${item.active === false ? "غیرفعال" : "فعال"}</span></article>`).join("") || `<div class="empty-state compact-empty">پرسنلی برای این شرکت ثبت نشده است.</div>`;
-  const spaces = (result.spaces || []).map((space) => `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`).join("") || `<div class="empty-state compact-empty">رنج اصلی تعریف نشده است.</div>`;
+  const personnel = (result.personnel || []).map((item) => `<article class="contact-card"><span class="contact-icon">${escapeHtml((item.fullName || "؟").slice(0,1))}</span><div><b>${escapeHtml(item.fullName)}</b><small>کد ${escapeHtml(item.employeeCode || "—")} — ${escapeHtml(item.department || item.jobTitle || "بدون واحد")} ${item.mobile ? `— ${escapeHtml(item.mobile)}` : ""}</small></div><span class="status-pill">${item.active === false ? "غیرفعال" : "فعال"}</span></article>`).join("") || `<div class="empty-state compact-empty">پرسنلی برای این شرکت ثبت نشده است.</div>`;
+  const spaces = (result.spaces || []).map((space) => {
+    const total = parseCidr(space.cidr)?.size || 0;
+    const used = Number(space.hostCount || 0);
+    const free = Math.max(0, total - used);
+    const prefixCount = Number(space.prefixCount || 0);
+    const percent = total ? Math.round((used / total) * 1000) / 10 : 0;
+    return `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small><span class="space-usage"><span><strong>${formatNumber(used)}</strong> IP ثبت‌شده از ${formatNumber(total)} · <strong>${formatNumber(free)}</strong> آزاد</span><span>${formatNumber(prefixCount)} رنج تعریف‌شده · مصرف ${formatNumber(percent)}٪</span><i><em style="width:${Math.min(100, percent)}%"></em></i></span></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`;
+  }).join("") || `<div class="empty-state compact-empty">رنج اصلی تعریف نشده است.</div>`;
   page.innerHTML = `<section class="company-hero"><div class="company-identity"><span class="company-avatar">${escapeHtml(company.name.slice(0, 1))}</span><div><span class="company-tree-badge">${escapeHtml(kind)}${parent ? ` زیرمجموعه ${escapeHtml(parent.name)}` : ""}</span><h2>${escapeHtml(company.name)}</h2><p>${escapeHtml(company.description || company.address || "اطلاعات تکمیلی ثبت نشده است.")}</p></div></div><div class="company-hero-actions"><button id="backCompanies" class="btn">بازگشت به شرکت‌ها</button>${canManageCompany(companyId) ? `<button id="editCurrentCompany" class="btn">ویرایش اطلاعات</button><button id="addCurrentSpace" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></section>
     <section class="company-quick-info"><article class="info-card"><span>مدیر شرکت</span><b>${escapeHtml(company.managerName || "ثبت نشده")}</b></article><article class="info-card"><span>شماره تماس</span><b class="ltr">${escapeHtml(company.phone || "—")}</b></article><article class="info-card"><span>کد پستی</span><b class="ltr">${escapeHtml(company.postalCode || "—")}</b></article><article class="info-card"><span>موقعیت</span>${mapUrl ? `<a href="${mapUrl}" target="_blank" rel="noopener noreferrer">نمایش در Google Maps</a>` : `<b>ثبت نشده</b>`}</article></section>
-    <section class="company-layout"><div><article class="company-section"><div class="section-title"><div><h4>رنج‌ها و مدیریت IP</h4><span>${formatNumber(result.stats?.prefixes || 0)} زیرشبکه و ${formatNumber(result.stats?.hosts || 0)} تجهیز ثبت‌شده</span></div></div><div class="company-section-body">${spaces}</div></article><article class="company-section"><div class="section-title"><div><h4>یادداشت‌های شرکت</h4><span>اطلاعات آزاد پشتیبانی</span></div></div><div class="company-section-body company-notes">${escapeHtml(company.notes || "یادداشتی ثبت نشده است.")}</div></article></div><aside><article class="company-section"><div class="section-title split"><div><h4>پرسنل این شعبه / شرکت</h4><span>${formatNumber(result.personnel?.length || 0)} نفر با کد پرسنلی</span></div>${isAdmin() ? `<button id="manageCompanyPersonnel" class="btn sm">مدیریت پرسنل</button>` : ""}</div><div class="company-section-body">${personnel}</div></article><article class="company-section"><div class="section-title"><div><h4>افراد تماس</h4><span>${formatNumber(result.contacts?.length || 0)} نفر</span></div></div><div class="company-section-body">${contacts}</div></article><article class="company-section"><div class="section-title"><div><h4>IP معتبر و ارتباط‌ها</h4><span>${formatNumber(result.connections?.length || 0)} ارتباط</span></div></div><div class="company-section-body">${connections}</div></article></aside></section>`;
+    <section class="company-layout"><div><article class="company-section"><div class="section-title"><div><h4>رنج‌ها و مدیریت IP</h4><span>${formatNumber(result.stats?.prefixes || 0)} زیرشبکه و ${formatNumber(result.stats?.hosts || 0)} تجهیز ثبت‌شده</span></div></div><div class="company-section-body">${spaces}</div></article><article class="company-section"><div class="section-title"><div><h4>یادداشت‌های شرکت</h4><span>اطلاعات آزاد پشتیبانی</span></div></div><div class="company-section-body company-notes">${escapeHtml(company.notes || "یادداشتی ثبت نشده است.")}</div></article></div><aside><article class="company-section"><div class="section-title split"><div><h4>پرسنل این شعبه / شرکت</h4><span>${formatNumber(result.personnel?.length || 0)} نفر</span></div>${isAdmin() ? `<button id="manageCompanyPersonnel" class="btn sm">مدیریت پرسنل</button>` : ""}</div><div class="company-section-body">${personnel}</div></article><article class="company-section"><div class="section-title"><div><h4>افراد تماس</h4><span>${formatNumber(result.contacts?.length || 0)} نفر</span></div></div><div class="company-section-body">${contacts}</div></article><article class="company-section"><div class="section-title"><div><h4>IP معتبر و ارتباط‌ها</h4><span>${formatNumber(result.connections?.length || 0)} ارتباط</span></div></div><div class="company-section-body">${connections}</div></article></aside></section>`;
   $("backCompanies").addEventListener("click", () => renderCompanies());
   $("editCurrentCompany")?.addEventListener("click", () => openCompanyDialog(companyId));
   $("addCurrentSpace")?.addEventListener("click", () => openSpaceDialog(companyId));
@@ -585,6 +652,7 @@ function prefixButtons(minimum, maximum) {
 
 function renderOverview() {
   navActive("ipam");
+  rememberIpamContext("overview");
   if (state.currentSpaceId) setRoute(`/ipam/${encodeURIComponent(state.currentSpaceId)}`);
   const space = state.data.space;
   const root = parseCidr(space.cidr);
@@ -627,7 +695,7 @@ function renderOverview() {
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
     <section class="panel"><div class="toolbar"><div class="toolgroup">${state.overviewMode === "table" ? `<b>نقشه رنج‌ها</b><span class="mode-note">روی متن CIDR برای ورود به همان رنج کلیک کنید؛ مربع کوچک کنار هر کادر فقط نام‌گذاری و رنگ همان رنج را باز می‌کند.</span>` : `<b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت رنج جدید"}</button>` : ""}`}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کاشی</button></div></div><div class="legend"><span><i class="dot used"></i>گروه ثبت‌شده</span><span><i class="dot record"></i>IP دارای اطلاعات</span><span><i class="dot free"></i>خالی/بدون گروه</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
-  $("companyBack").addEventListener("click", renderCompanies);
+  $("companyBack").addEventListener("click", () => openCompanyPage(space.companyId));
   $("editCurrentSpace")?.addEventListener("click", () => openSpaceDialog(null, space.id));
   $("paintToggle")?.addEventListener("click", () => { state.paint = !state.paint; renderOverview(); });
   page.querySelectorAll(".overview-mode").forEach((node) => node.addEventListener("click", () => {
@@ -667,6 +735,7 @@ function renderOverview() {
   }));
   attachPrefixEditHandlers();
   attachPrefixDeleteHandlers();
+  scheduleIpamViewportSync();
 }
 
 function pingClass(ip, system, pings) {
@@ -767,6 +836,7 @@ function renderSheet() {
   const space = state.data.space;
   const root = parseCidr(space.cidr);
   if (!selected || selected.prefix > 24 || !contains(root, selected)) { state.view = "overview"; renderOverview(); return; }
+  rememberIpamContext("sheet");
   if (state.currentSpaceId) setRoute(`/ipam/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent(selected.cidr)}`);
   const blockCount = tableBlockCount(selected.prefix);
   const hosts = hostMap();
@@ -852,6 +922,7 @@ function renderSheet() {
   page.querySelectorAll(".ping-dot.connectable,.table-connect-button").forEach((node) => node.addEventListener("click", (event) => { event.stopPropagation(); openToolMenu(event, node.dataset.ip); }));
   attachPrefixEditHandlers();
   attachPrefixDeleteHandlers();
+  scheduleIpamViewportSync();
 }
 
 async function runPing() {
@@ -1074,17 +1145,18 @@ function populateHostTypes(selected = "") {
 function renderInventory() {
   state.view = "inventory"; navActive("inventory"); setRoute("/inventory"); updateSelectors();
   const query = state.inventoryQuery.trim().toLowerCase();
-  const all = state.inventory || [];
+  const all = (state.inventory || []).filter((item) => !state.currentCompanyId || item.companyId === state.currentCompanyId);
   const types = [...new Set(state.deviceTypes.map((item)=>item.name).concat(all.map((item)=>item.type).filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
   const items = all.filter((item) => (!state.inventoryType || item.type === state.inventoryType) && (!query || [item.name,item.ip,item.mac,item.type,item.vendor,item.model,item.serial,item.owner,item.location,item.companyName,item.spaceName].some((value)=>String(value||"").toLowerCase().includes(query))));
   const typeCount = state.inventoryType ? all.filter((item)=>item.type===state.inventoryType).length : all.length;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">Inventory</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">هر تجهیز از همان رکورد IPAM استفاده می‌کند؛ نوع تجهیزات قابل مدیریت است.</div></div><div class="head-actions">${isAdmin() ? `<button id="manageDeviceTypes" class="btn">انواع تجهیزات</button>` : ""}<button id="exportInventory" class="btn">Export CSV</button></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(all.length)}</div></article><article class="stat"><div class="label">نتیجه فیلتر</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">نوع انتخاب‌شده</div><div class="value">${formatNumber(typeCount)}</div></article><article class="stat"><div class="label">انواع تجهیزات</div><div class="value">${formatNumber(types.length)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل، سریال یا مالک…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type)=>`<option value="${escapeHtml(type)}" ${type===state.inventoryType?"selected":""}>${escapeHtml(type)} (${formatNumber(all.filter((i)=>i.type===type).length)})</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی فهرست</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>مالک / موقعیت</th><th>عملیات</th></tr></thead><tbody>${items.map((item)=>`<tr><td class="inventory-name"><b>${escapeHtml(item.name||"بدون نام")}</b><small>${escapeHtml(item.serial||"—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac||"—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type||"نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ")||"—")}</small></td><td>${escapeHtml(item.owner||"—")}<small>${escapeHtml(item.location||"—")}</small></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button>${normalizedConnectionMethods(item).length?`<button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button>`:""}</div></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
+  page.innerHTML = `<div class="headline"><div><div class="crumb">Inventory</div><h2>تجهیزات و اطلاعات IP</h2><div class="subtitle">هر تجهیز از همان رکورد IPAM استفاده می‌کند؛ نوع تجهیزات قابل مدیریت است.</div></div><div class="head-actions">${canWrite() ? `<button id="newInventoryDevice" class="btn primary">تجهیز جدید</button>` : ""}${isAdmin() ? `<button id="manageDeviceTypes" class="btn">انواع تجهیزات</button>` : ""}<button id="exportInventory" class="btn">Export CSV</button></div></div><section class="stats"><article class="stat"><div class="label">کل تجهیزات</div><div class="value">${formatNumber(all.length)}</div></article><article class="stat"><div class="label">نتیجه فیلتر</div><div class="value">${formatNumber(items.length)}</div></article><article class="stat"><div class="label">نوع انتخاب‌شده</div><div class="value">${formatNumber(typeCount)}</div></article><article class="stat"><div class="label">انواع تجهیزات</div><div class="value">${formatNumber(types.length)}</div></article></section><div class="inventory-toolbar"><div class="inventory-filters"><input id="inventorySearch" value="${escapeHtml(state.inventoryQuery)}" placeholder="نام، IP، MAC، مدل، سریال یا مالک…"><select id="inventoryType"><option value="">همه انواع تجهیزات</option>${types.map((type)=>`<option value="${escapeHtml(type)}" ${type===state.inventoryType?"selected":""}>${escapeHtml(type)} (${formatNumber(all.filter((i)=>i.type===type).length)})</option>`).join("")}</select></div><button id="refreshInventory" class="btn">به‌روزرسانی فهرست</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>تجهیز</th><th>IP و MAC</th><th>شرکت و رنج</th><th>نوع و مدل</th><th>مالک / موقعیت</th><th>عملیات</th></tr></thead><tbody>${items.map((item)=>`<tr><td class="inventory-name"><b>${escapeHtml(item.name||"بدون نام")}</b><small>${escapeHtml(item.serial||"—")}</small></td><td><b class="ltr mono">${escapeHtml(item.ip)}</b><small class="ltr mono">${escapeHtml(item.mac||"—")}</small></td><td>${escapeHtml(item.companyName)}<small>${escapeHtml(item.spaceName)}</small></td><td>${escapeHtml(item.type||"نامشخص")}<small>${escapeHtml([item.vendor,item.model].filter(Boolean).join(" ")||"—")}</small></td><td>${escapeHtml(item.owner||"—")}<small>${escapeHtml(item.location||"—")}</small></td><td><div class="row-actions"><button class="btn sm edit-inventory" data-id="${escapeHtml(item.id)}">مشاهده و ویرایش</button>${normalizedConnectionMethods(item).length?`<button class="btn sm inventory-tools" data-id="${escapeHtml(item.id)}">اتصال</button>`:""}</div></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty-state">تجهیزی مطابق فیلتر پیدا نشد.</div></td></tr>`}</tbody></table></div>`;
   $("inventorySearch").addEventListener("input",(event)=>{state.inventoryQuery=event.target.value;renderInventory();requestAnimationFrame(()=>{$("inventorySearch")?.focus();$("inventorySearch")?.setSelectionRange(state.inventoryQuery.length,state.inventoryQuery.length);});});
   $("inventoryType").addEventListener("change",(event)=>{state.inventoryType=event.target.value;renderInventory();});
   $("refreshInventory").addEventListener("click",()=>openInventoryPage(true));
-  $("exportInventory").addEventListener("click",()=>window.location.assign(`/api/inventory/export?q=${encodeURIComponent(state.inventoryQuery)}&type=${encodeURIComponent(state.inventoryType)}`));
+  $("exportInventory").addEventListener("click",()=>window.location.assign(`/api/inventory/export?q=${encodeURIComponent(state.inventoryQuery)}&type=${encodeURIComponent(state.inventoryType)}&companyId=${encodeURIComponent(state.currentCompanyId || "")}`));
+  $("newInventoryDevice")?.addEventListener("click", openInventoryCreateDialog);
   $("manageDeviceTypes")?.addEventListener("click",()=>openSettingsDialog("device-types"));
-  page.querySelectorAll(".edit-inventory").forEach((node)=>node.addEventListener("click",()=>openInventoryItem(state.inventory.find((item)=>item.id===node.dataset.id))));
+  page.querySelectorAll(".edit-inventory").forEach((node)=>node.addEventListener("click",()=>openInventoryItem(state.inventory.find((item)=>item.id===node.dataset.id)).catch((error)=>toast(error.message))));
   page.querySelectorAll(".inventory-tools").forEach((node)=>node.addEventListener("click",(event)=>{const item=state.inventory.find((entry)=>entry.id===node.dataset.id);if(item)openToolMenu(event,item.ip);}));
   translateTree(page);
 }
@@ -1142,10 +1214,12 @@ function collectHostCustomFields() {
   return result;
 }
 
-function openHostDialog(ip) {
+function openHostDialog(ip, overrides = {}) {
   const item = state.data.hosts.find((entry) => entry.ip === ip) || null;
-  const value = item || { id: "", ip, name: "", status: "active", type: "", os: "", mac: "", vlan: "", username: "", owner: "", location: "", secretRef: "", notes: "", ports: {}, devicePorts: [] };
+  const base = item || { id: "", ip, name: "", status: "active", type: "", os: "", mac: "", vlan: "", username: "", owner: "", location: "", secretRef: "", notes: "", ports: {}, devicePorts: [] };
+  const value = { ...base, ...overrides, id: base.id || "", ip };
   $("hostIpTitle").textContent = ip;
+  $("hostFormError").textContent = "";
   populateHostTypes(value.type || "");
   ensureDeviceTypes().then(()=>populateHostTypes(value.type || "")).catch(()=>{});
   for (const [key, field] of [["id", "hostId"], ["ip", "hostIp"], ["name", "hostName"], ["status", "hostStatus"], ["type", "hostType"], ["os", "hostOs"], ["mac", "hostMac"], ["vlan", "hostVlan"], ["username", "hostUsername"], ["owner", "hostOwner"], ["location", "hostLocation"], ["vendor", "hostVendor"], ["model", "hostModel"], ["serial", "hostSerial"], ["firmware", "hostFirmware"], ["radioMode", "hostRadioMode"], ["ssid", "hostSsid"], ["frequency", "hostFrequency"], ["channel", "hostChannel"], ["signal", "hostSignal"], ["secretRef", "hostSecretRef"], ["notes", "hostNotes"]]) $(field).value = value[key] || "";
@@ -1154,7 +1228,11 @@ function openHostDialog(ip) {
   renderHostConnections(value);
   renderDevicePorts(value.devicePorts || []);
   renderHostCustomFields(value.customFields || {});
-  ensureInventory().then(() => updateRadioFields(value.radioParentHostId || "")).catch(() => updateRadioFields(value.radioParentHostId || ""));
+  const selectedParent = value.radioParentHostId || "";
+  if (state.inventory.length) updateRadioFields(selectedParent);
+  else ensureInventory().then(() => {
+    if ($("hostDialog").open && $("hostIp").value === ip) updateRadioFields(selectedParent);
+  }).catch(() => updateRadioFields(selectedParent));
   $("deleteHostButton").classList.toggle("hidden", !item || !canWrite());
   setFormWritable($("hostForm"), canWrite());
   const sheet = parseCidr(state.sheetCidr || `${ip}/24`);
@@ -1165,6 +1243,19 @@ function openHostDialog(ip) {
   $("nextHostButton").disabled = !next; $("nextHostButton").dataset.ip = next;
   markFormClean($("hostForm"));
   $("hostDialog").showModal();
+}
+
+async function prepareHostEditor(spaceId, ip, returnView, overrides = {}) {
+  const space = (state.bootstrap?.spaces || []).find((item) => item.id === spaceId);
+  const address = ipv4ToInt(ip);
+  if (!space || address === null || !contains(space.cidr, address)) throw new Error("IP یا رنج انتخاب‌شده معتبر نیست.");
+  state.hostReturnView = returnView;
+  state.currentSpaceId = spaceId;
+  state.currentCompanyId = space.companyId;
+  state.sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`;
+  state.data = await request(`/api/spaces/${encodeURIComponent(spaceId)}/data`);
+  updateSelectors();
+  openHostDialog(ip, overrides);
 }
 
 function openToolMenu(event, ip, allowedMethods = null, connection = {}) {
@@ -1192,7 +1283,7 @@ function openToolMenu(event, ip, allowedMethods = null, connection = {}) {
       menu.classList.add("hidden");
       return;
     }
-    const url = new URL("emsipam://open");
+    const url = new URL("emsipam-client://open");
     url.searchParams.set("tool", node.dataset.tool);
     url.searchParams.set("host", ip);
     url.searchParams.set("port", node.dataset.port || "0");
@@ -1215,7 +1306,11 @@ async function chooseSearchItem(item) {
   state.searchIndex = -1;
   if (!item) return;
   if (item.kind === "company") { await openCompanyPage(item.companyId || item.id); return; }
-  if (item.kind === "personnel") { await openPersonnelDialog(); editPersonnel(item); return; }
+  if (item.kind === "personnel") {
+    if (isAdmin()) { await openPersonnelDialog(); editPersonnel(item); }
+    else if (item.companyId) await openCompanyPage(item.companyId);
+    return;
+  }
   const address = item.ip ? ipv4ToInt(item.ip) : parseCidr(item.cidr)?.start;
   const sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`;
   await loadSpace(item.spaceId, { sheetCidr });
@@ -1252,7 +1347,7 @@ async function refreshDeviceTypes() {
   const result=await request("/api/device-types"); state.deviceTypes=result.items||[]; populateHostTypes($("hostType")?.value||"");
   const list=$("deviceTypesList"); if(!list) return;
   list.innerHTML=state.deviceTypes.map((item)=>`<div class="user-row"><div><b>${escapeHtml(item.name)}</b><small><i class="swatch" style="background:${escapeHtml(item.color)}"></i> ${formatNumber(state.inventory.filter((h)=>h.type===item.name).length)} دستگاه</small></div><div class="row-actions"><button class="btn sm edit-device-type" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-device-type" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("")||`<div class="empty-state">نوع تجهیزی ثبت نشده است.</div>`;
-  list.querySelectorAll(".edit-device-type").forEach((node)=>node.addEventListener("click",()=>{const item=state.deviceTypes.find((i)=>i.id===node.dataset.id);$("deviceTypeId").value=item.id;$("deviceTypeName").value=item.name;$("cancelDeviceTypeEdit").classList.remove("hidden");}));
+  list.querySelectorAll(".edit-device-type").forEach((node)=>node.addEventListener("click",()=>{const item=state.deviceTypes.find((i)=>i.id===node.dataset.id);$("deviceTypeId").value=item.id;$("deviceTypeName").value=item.name;$("deviceTypeColor").value=item.color||"#3157d5";$("cancelDeviceTypeEdit").classList.remove("hidden");}));
   list.querySelectorAll(".delete-device-type").forEach((node)=>node.addEventListener("click",async()=>{if(!confirm("این نوع تجهیز حذف شود؟"))return;try{await request(`/api/device-types/${encodeURIComponent(node.dataset.id)}`,{method:"DELETE"});await refreshDeviceTypes();toast("نوع تجهیز حذف شد.");}catch(error){toast(error.message);}}));
 }
 
@@ -1266,7 +1361,7 @@ function parseCsv(text) {
 async function refreshPersonnel(query = "") {
   const result = await request(`/api/personnel${query ? `?q=${encodeURIComponent(query)}` : ""}`);
   const items = result.items || [];
-  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">کد:</span> ${escapeHtml(item.employeeCode)} · <span class="meta-label">واحد:</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">شرکت:</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("") || `<div class="empty-state">پرسنلی ثبت نشده است.</div>`;
+  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">کد:</span> ${escapeHtml(item.employeeCode || "—")} · <span class="meta-label">واحد:</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">شرکت:</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("") || `<div class="empty-state">پرسنلی ثبت نشده است.</div>`;
   $("personnelList").querySelectorAll(".edit-personnel").forEach((node) => node.addEventListener("click", () => editPersonnel(items.find((item) => item.id === node.dataset.id))));
   $("personnelList").querySelectorAll(".delete-personnel").forEach((node) => node.addEventListener("click", async () => {
     const item = items.find((entry) => entry.id === node.dataset.id); if (!item || !confirm(`پرسنل «${item.fullName}» حذف شود؟`)) return;
@@ -1282,14 +1377,16 @@ function editPersonnel(item) {
   if (!item) return; $("personnelId").value = item.id; $("personnelCode").value = item.employeeCode || ""; $("personnelName").value = item.fullName || ""; $("personnelMobile").value = item.mobile || ""; $("personnelPhone").value = item.phone || ""; $("personnelEmail").value = item.email || ""; $("personnelDepartment").value = item.department || ""; $("personnelJobTitle").value = item.jobTitle || ""; $("personnelCompany").value = item.companyId || ""; $("personnelNotes").value = item.notes || ""; $("personnelActive").checked = item.active !== false; $("personnelFormTitle").textContent = "ویرایش پرسنل"; $("cancelPersonnelEdit").classList.remove("hidden");
 }
 
-async function openPersonnelDialog(companyId = "") {
+async function openPersonnelDialog(companyId = "", { returnToSettings = false } = {}) {
+  state.personnelReturnToSettings = returnToSettings;
   $("personnelCompany").innerHTML = `<option value="">بدون شرکت</option>${(state.bootstrap?.companies || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
   resetPersonnelForm();
   if (companyId) $("personnelCompany").value = companyId;
   $("personnelSearch").value = ""; await refreshPersonnel(); $("personnelDialog").showModal();
 }
 
-async function openUsersDialog() {
+async function openUsersDialog({ returnToSettings = false } = {}) {
+  state.usersReturnToSettings = returnToSettings;
   resetUserForm();
   renderCompanyAccess();
   $("usersDialog").showModal();
@@ -1329,7 +1426,7 @@ function renderCompanyAccess(selectedCompanies = [], selectedSpaces = [], select
 
 async function refreshUsers() {
   const result = await request("/api/users");
-  $("usersList").innerHTML = result.users.map((user) => `<div class="user-row"><div><b>${escapeHtml(user.displayName || user.username)}</b><small>${escapeHtml(user.username)}</small></div><span class="status-pill">${user.role === "admin" ? "مدیر" : user.role === "support" ? "پشتیبانی" : user.role === "helpdesk" ? "هلپ‌دسک" : "مشاهده‌گر"}</span><small>${user.role === "admin" ? "همه ماژول‌ها" : `${formatNumber((user.moduleIds || []).length)} دسترسی`}</small><div class="row-actions"><button class="btn sm edit-user" data-id="${escapeHtml(user.id)}">ویرایش</button><button class="btn sm danger delete-user" data-id="${escapeHtml(user.id)}">حذف</button></div></div>`).join("");
+  $("usersList").innerHTML = result.users.map((user) => `<div class="user-row"><div><b>${escapeHtml(user.displayName || user.username)}</b><small>${escapeHtml(user.username)}</small></div><span class="status-pill">${user.role === "admin" ? "مدیر" : user.role === "support" ? "پشتیبانی" : user.role === "helpdesk" ? "هلپ‌دسک" : user.role === "branch" ? "کاربر شعبه" : "مشاهده‌گر"}</span><small>${user.role === "admin" ? "همه ماژول‌ها" : `${formatNumber((user.moduleIds || []).length)} دسترسی`}</small><div class="row-actions"><button class="btn sm edit-user" data-id="${escapeHtml(user.id)}">ویرایش</button><button class="btn sm danger delete-user" data-id="${escapeHtml(user.id)}">حذف</button></div></div>`).join("");
   $("usersList").querySelectorAll(".edit-user").forEach((node) => node.addEventListener("click", () => editUser(result.users.find((item) => item.id === node.dataset.id))));
   $("usersList").querySelectorAll(".delete-user").forEach((node) => node.addEventListener("click", async () => {
     const account = result.users.find((item) => item.id === node.dataset.id);
@@ -1349,9 +1446,31 @@ function editUser(user) {
 
 async function openInventoryItem(item) {
   if (!item) return;
-  const address = ipv4ToInt(item.ip);
-  await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(address & 0xffffff00)}/24` });
-  openHostDialog(item.ip);
+  await prepareHostEditor(item.spaceId, item.ip, "inventory");
+}
+
+function openInventoryCreateDialog() {
+  const spaces = state.bootstrap?.spaces || [];
+  const select = $("inventoryCreateSpace");
+  select.innerHTML = spaces.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.companyName || state.bootstrap.companies.find((c)=>c.id===item.companyId)?.name || "")} — ${escapeHtml(item.name)} — ${escapeHtml(item.cidr)}</option>`).join("");
+  $("inventoryCreateIp").value = "";
+  $("inventoryCreateError").textContent = "";
+  markFormClean($("inventoryCreateForm"));
+  $("inventoryCreateDialog").showModal();
+}
+
+async function continueInventoryCreate() {
+  const spaceId = $("inventoryCreateSpace").value;
+  const ip = $("inventoryCreateIp").value.trim();
+  const space = (state.bootstrap?.spaces || []).find((item)=>item.id===spaceId);
+  const info = parseCidr(space?.cidr || "");
+  const ipValue = ipv4ToInt(ip);
+  if (!space || ipValue === null || !info || ipValue < info.start || ipValue > info.end) {
+    $("inventoryCreateError").textContent = "IP باید داخل رنج انتخاب‌شده باشد.";
+    return;
+  }
+  await prepareHostEditor(spaceId, ip, "inventory");
+  $("inventoryCreateDialog").close();
 }
 
 async function quickOpenIp(ip) {
@@ -1367,6 +1486,10 @@ async function quickOpenIp(ip) {
 }
 
 async function openRadiosPage(force = true, { fromRoute = false } = {}) {
+  if (!isModuleInstalled("radio") || !hasClientModule("radio")) {
+    toast("ماژول Radio نصب نیست یا برای این کاربر فعال نشده است.");
+    return;
+  }
   try {
     await ensureInventory(force);
     state.view = "radios";
@@ -1380,6 +1503,7 @@ async function openRadiosPage(force = true, { fromRoute = false } = {}) {
 }
 
 async function quickOpenRadio(ip, mode, parentId = "") {
+  if (!canWrite()) return toast("ثبت و ویرایش رادیو فقط برای مدیر سیستم مجاز است.");
   const value = String(ip || "").trim();
   if (ipv4ToInt(value) === null) return toast("یک IP معتبر برای رادیو وارد کنید.");
   if (!['ap', 'station'].includes(mode)) return toast("حالت رادیو را انتخاب کنید.");
@@ -1388,37 +1512,81 @@ async function quickOpenRadio(ip, mode, parentId = "") {
     const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
     const item = (result.items || []).find((entry) => entry.ip === value);
     if (!item) return toast("این IP داخل شبکه‌های قابل دسترسی نیست.");
-    await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(ipv4ToInt(value) & 0xffffff00)}/24` });
-    openHostDialog(value);
-    $("hostRadioMode").value = mode;
-    updateRadioFields(parentId);
-    if (mode === "station") {
-      $("hostRadioParent").value = parentId;
-      const parent = state.inventory.find((entry) => entry.id === parentId);
-      if (parent?.ssid) $("hostSsid").value = parent.ssid;
-    }
-    if (!$("hostType").value) $("hostType").value = "Radio";
+    const parent = state.inventory.find((entry) => entry.id === parentId);
+    await prepareHostEditor(item.spaceId, value, "radios", {
+      radioMode: mode,
+      radioParentHostId: mode === "station" ? parentId : null,
+      ...(mode === "station" && parent?.ssid ? { ssid: parent.ssid } : {}),
+      type: "Radio",
+    });
     $("hostName").focus();
   } catch (error) { toast(error.message); }
 }
 
-function radioSignalClass() { return ""; }
+function radioMatches(item, query) {
+  return !query || [item.name,item.ip,item.mac,item.ssid,item.companyName,item.spaceName,item.location].some((value)=>String(value||"").toLowerCase().includes(query));
+}
+
+function radioStatus(item) {
+  if (item.pingOnline === true) return { className: "online", label: "آنلاین" };
+  if (item.pingOnline === false) return { className: "offline", label: "آفلاین" };
+  return { className: "unknown", label: "نامشخص" };
+}
+
+function radioStatusBadge(item) {
+  const status = radioStatus(item);
+  const title = item.pingCheckedAt ? `آخرین بررسی: ${formatDateTime(item.pingCheckedAt)}` : "هنوز Ping نشده است";
+  return `<span class="radio-status ${status.className}" title="${escapeHtml(title)}"><i></i>${status.label}</span>`;
+}
+
+async function openRadioEditor(item) {
+  if (!item) return;
+  await prepareHostEditor(item.spaceId, item.ip, "radios");
+}
+
+async function openRadioInIpam(item) {
+  if (!item) return;
+  const address = ipv4ToInt(item.ip);
+  await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(address & 0xffffff00)}/24` });
+}
+
+async function pingRadio(item, button) {
+  if (!item) return;
+  const original = button?.textContent || "Ping";
+  if (button) { button.disabled = true; button.textContent = "…"; }
+  try {
+    const result = await request("/api/ping/host", { method: "POST", body: { id: item.id } });
+    await ensureInventory(true);
+    renderRadios();
+    toast(result.online ? `${item.ip} آنلاین است.` : `${item.ip} پاسخ نداد.`);
+  } catch (error) {
+    if (button) { button.disabled = false; button.textContent = original; }
+    toast(error.message);
+  }
+}
 
 function renderRadios() {
   const radios=state.inventory.filter((item)=>(!state.currentCompanyId||item.companyId===state.currentCompanyId)&&(item.radioMode==="ap"||item.radioMode==="station"));
   const q=(state.radioQuery||"").trim().toLowerCase();
-  const filtered=radios.filter((item)=>!q||[item.name,item.ip,item.mac,item.ssid,item.companyName,item.spaceName].some((v)=>String(v||"").toLowerCase().includes(q)));
-  const aps=filtered.filter((item)=>item.radioMode==="ap"); const allAps=radios.filter((item)=>item.radioMode==="ap"); const stations=filtered.filter((item)=>item.radioMode==="station");
-  const stationNode=(item)=>`<article class="radio-station-node"><button class="open-inventory-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name||item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid||"SSID —")}</em></span></button><div class="row-actions"><button class="btn sm open-ipam-radio" data-id="${escapeHtml(item.id)}">IPAM</button><button class="btn sm edit-radio" data-id="${escapeHtml(item.id)}">ویرایش</button></div></article>`;
-  const cards=aps.map((ap)=>{const children=radios.filter((item)=>item.radioMode==="station"&&item.radioParentHostId===ap.id&&(!q||[item.name,item.ip,item.mac,item.ssid].some((v)=>String(v||"").toLowerCase().includes(q))));return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name||ap.ip)}</h3><div class="radio-health"><span class="mono ltr">${escapeHtml(ap.ip)}</span><span>${escapeHtml(ap.ssid||"SSID —")}</span></div></div><div class="row-actions"><button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm edit-radio" data-id="${escapeHtml(ap.id)}">ویرایش</button><button class="btn sm open-ipam-radio" data-id="${escapeHtml(ap.id)}">IPAM</button></div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-inventory-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name||ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid||"SSID تعریف نشده")}</em></span></button>${children.length?`<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item)=>`<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>`:`<div class="radio-empty-branch"><span>Station ثبت نشده است.</span></div>`}</div></div></article>`;}).join("");
+  const filtered=radios.filter((item)=>radioMatches(item,q));
+  const allAps=radios.filter((item)=>item.radioMode==="ap");
+  const allStations=radios.filter((item)=>item.radioMode==="station");
+  const aps=allAps.filter((ap)=>radioMatches(ap,q)||allStations.some((item)=>item.radioParentHostId===ap.id&&radioMatches(item,q)));
+  const stationNode=(item)=>`<article class="radio-station-node"><button class="open-radio-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name||item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid||"SSID —")}</em>${radioStatusBadge(item)}</span></button><div class="row-actions"><button class="btn sm ping-radio" data-id="${escapeHtml(item.id)}">Ping</button><button class="btn sm open-ipam-radio" data-id="${escapeHtml(item.id)}">IPAM</button>${canWrite()?`<button class="btn sm edit-radio" data-id="${escapeHtml(item.id)}">ویرایش</button>`:""}</div></article>`;
+  const cards=aps.map((ap)=>{const ownMatch=radioMatches(ap,q);const children=allStations.filter((item)=>item.radioParentHostId===ap.id&&(ownMatch||radioMatches(item,q)));return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name||ap.ip)}</h3><div class="radio-health"><span class="mono ltr">${escapeHtml(ap.ip)}</span><span>${escapeHtml(ap.ssid||"SSID —")}</span>${radioStatusBadge(ap)}</div></div><div class="row-actions">${canWrite()?`<button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm edit-radio" data-id="${escapeHtml(ap.id)}">ویرایش</button>`:""}<button class="btn sm ping-radio" data-id="${escapeHtml(ap.id)}">Ping</button><button class="btn sm open-ipam-radio" data-id="${escapeHtml(ap.id)}">IPAM</button></div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-radio-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name||ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid||"SSID تعریف نشده")}</em></span></button>${children.length?`<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item)=>`<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>`:`<div class="radio-empty-branch"><span>Station ثبت نشده است.</span></div>`}</div></div></article>`;}).join("");
+  const orphans=allStations.filter((item)=>!item.radioParentHostId&&radioMatches(item,q));
+  const orphanCard=orphans.length?`<article class="radio-tree-card orphan-stations"><div class="radio-tree-card-head"><div><h3>Stationهای بدون AP</h3><div class="radio-health"><span>${formatNumber(orphans.length)} مورد نیازمند اتصال</span></div></div></div><div class="radio-station-branches standalone">${orphans.map(stationNode).join("")}</div></article>`:"";
   const parentOptions=allAps.map((ap)=>`<option value="${escapeHtml(ap.id)}">${escapeHtml(ap.name||ap.ip)} — ${escapeHtml(ap.ssid||"بدون SSID")} — ${escapeHtml(ap.ip)}</option>`).join("");
-  page.innerHTML=`<div class="headline"><div><div class="crumb">Radio Management</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">نقشه ساده رادیوها؛ IP، نام، MAC و SSID با IPAM مشترک است.</div></div><div class="head-actions"><button id="newApShortcut" class="btn primary">ثبت AP جدید</button></div></div><section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو</b><small>IP باید داخل یکی از رنج‌های IPAM باشد.</small></div></div><div class="radio-register-form"><input id="radioSearch" value="${escapeHtml(state.radioQuery||"")}" placeholder="جست‌وجوی نام، IP، MAC یا SSID…"><input id="radioQuickIp" class="ltr mono" placeholder="192.0.2.10"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه</button></div></section><section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(radios.filter((i)=>i.radioMode==="ap").length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(radios.filter((i)=>i.radioMode==="station").length)}</div></div><div class="stat"><div class="label">نتیجه جست‌وجو</div><div class="value">${formatNumber(filtered.length)}</div></div></section><section class="radio-tree-grid">${cards||`<div class="panel empty-state">AP مطابق جست‌وجو پیدا نشد.</div>`}</section>`;
-  const syncMode=()=>$("radioQuickParent").classList.toggle("hidden",$("radioQuickMode").value!=="station");
-  $("radioQuickMode").addEventListener("change",syncMode); $("radioQuickOpen").addEventListener("click",()=>quickOpenRadio($("radioQuickIp").value,$("radioQuickMode").value,$("radioQuickParent").value));
+  const quickRegister=canWrite()?`<section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو</b><small>IP باید داخل یکی از رنج‌های IPAM باشد.</small></div></div><div class="radio-register-form"><input id="radioSearch" value="${escapeHtml(state.radioQuery||"")}" placeholder="جست‌وجوی نام، IP، MAC یا SSID…"><input id="radioQuickIp" class="ltr mono" placeholder="192.0.2.10"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه</button></div></section>`:`<section class="panel radio-register-panel"><div class="radio-register-form readonly"><input id="radioSearch" value="${escapeHtml(state.radioQuery||"")}" placeholder="جست‌وجوی نام، IP، MAC یا SSID…"></div></section>`;
+  page.innerHTML=`<div class="headline"><div><div class="crumb">Radio Management</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">نقشه ساده رادیوها؛ IP، نام، MAC و SSID با IPAM مشترک است.</div></div><div class="head-actions">${canWrite()?`<button id="newApShortcut" class="btn primary">ثبت AP جدید</button>`:""}</div></div>${quickRegister}<section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(allAps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(allStations.length)}</div></div><div class="stat"><div class="label">نتیجه جست‌وجو</div><div class="value">${formatNumber(filtered.length)}</div></div></section><section class="radio-tree-grid">${cards}${orphanCard}${!cards&&!orphanCard?`<div class="panel empty-state">رادیویی مطابق جست‌وجو پیدا نشد.</div>`:""}</section>`;
+  const syncMode=()=>$("radioQuickParent")?.classList.toggle("hidden",$("radioQuickMode")?.value!=="station");
+  $("radioQuickMode")?.addEventListener("change",syncMode); $("radioQuickOpen")?.addEventListener("click",()=>quickOpenRadio($("radioQuickIp").value,$("radioQuickMode").value,$("radioQuickParent").value));
   $("radioSearch").addEventListener("input",(e)=>{state.radioQuery=e.target.value; renderRadios(); requestAnimationFrame(()=>{$("radioSearch")?.focus();$("radioSearch")?.setSelectionRange(state.radioQuery.length,state.radioQuery.length);});});
-  $("newApShortcut").addEventListener("click",()=>{$("radioQuickMode").value="ap";syncMode();$("radioQuickIp").focus();});
+  $("newApShortcut")?.addEventListener("click",()=>{$("radioQuickMode").value="ap";syncMode();$("radioQuickIp").focus();});
   page.querySelectorAll(".radio-add-station").forEach((node)=>node.addEventListener("click",()=>{$("radioQuickMode").value="station";$("radioQuickParent").value=node.dataset.id;syncMode();$("radioQuickIp").focus();window.scrollTo({top:0,behavior:"smooth"});}));
-  page.querySelectorAll(".open-inventory-host,.edit-radio,.open-ipam-radio").forEach((node)=>node.addEventListener("click",()=>openInventoryItem(state.inventory.find((item)=>item.id===node.dataset.id))));
+  page.querySelectorAll(".open-radio-host,.edit-radio").forEach((node)=>node.addEventListener("click",()=>openRadioEditor(state.inventory.find((item)=>item.id===node.dataset.id)).catch((error)=>toast(error.message))));
+  page.querySelectorAll(".open-ipam-radio").forEach((node)=>node.addEventListener("click",()=>openRadioInIpam(state.inventory.find((item)=>item.id===node.dataset.id))));
+  page.querySelectorAll(".ping-radio").forEach((node)=>node.addEventListener("click",()=>pingRadio(state.inventory.find((item)=>item.id===node.dataset.id),node)));
   syncMode(); translateTree(page);
 }
 
@@ -1549,9 +1717,9 @@ async function refreshBackups() {
   $("backupIntervalDays").value = result.settings?.intervalDays || 1;
   $("backupHour").value = result.settings?.hour ?? 2;
   $("backupRetentionDays").value = result.settings?.retentionDays || 30;
-  $("backupNextRun").textContent = result.nextRunAt ? new Date(result.nextRunAt).toLocaleString("fa-IR") : "غیرفعال";
+  $("backupNextRun").textContent = result.nextRunAt ? formatDateTime(result.nextRunAt) : "غیرفعال";
   markFormClean($("backupSettingsForm"));
-  $("backupsList").innerHTML = (result.items || []).map((item) => `<div class="backup-row"><div><b class="ltr mono">${escapeHtml(item.name)}</b><small>${new Date(item.createdAt).toLocaleString("fa-IR")} — ${formatNumber(Math.ceil(item.size / 1024))} KB</small></div><div class="row-actions"><a class="btn sm" href="/api/backups/${encodeURIComponent(item.name)}/download">دانلود</a><button class="btn sm danger delete-backup" data-name="${escapeHtml(item.name)}">حذف</button></div></div>`).join("") || `<div class="empty-state">هنوز فایل پشتیبانی وجود ندارد.</div>`;
+  $("backupsList").innerHTML = (result.items || []).map((item) => `<div class="backup-row"><div><b class="ltr mono">${escapeHtml(item.name)}</b><small>${formatDateTime(item.createdAt)} — ${formatNumber(Math.ceil(item.size / 1024))} KB</small></div><div class="row-actions"><a class="btn sm" href="/api/backups/${encodeURIComponent(item.name)}/download">دانلود</a><button class="btn sm danger delete-backup" data-name="${escapeHtml(item.name)}">حذف</button></div></div>`).join("") || `<div class="empty-state">هنوز فایل پشتیبانی وجود ندارد.</div>`;
   $("backupsList").querySelectorAll(".delete-backup").forEach((node) => node.addEventListener("click", async () => {
     if (!confirm("این فایل پشتیبان حذف شود؟")) return;
     try { await request(`/api/backups/${encodeURIComponent(node.dataset.name)}`, { method: "DELETE" }); await refreshBackups(); } catch (error) { toast(error.message); }
@@ -1601,7 +1769,7 @@ async function openTrashDialog() {
   try {
     const result = await request("/api/trash");
     const labels = { company: "شرکت", space: "رنج اصلی", prefix: "زیرشبکه", host: "تجهیز / IP" };
-    $("trashList").innerHTML = (result.items || []).map((item) => `<div class="trash-row"><b>${labels[item.kind] || item.kind}</b><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.companyName || "")}</small></div><small>${new Date(item.deletedAt).toLocaleString("fa-IR")}</small><div class="row-actions"><button class="btn sm restore-trash" data-kind="${item.kind}" data-id="${escapeHtml(item.id)}">بازگردانی</button><button class="btn sm danger purge-trash" data-kind="${item.kind}" data-id="${escapeHtml(item.id)}">حذف نهایی</button></div></div>`).join("") || `<div class="empty-state">سطل بازیافت خالی است.</div>`;
+    $("trashList").innerHTML = (result.items || []).map((item) => `<div class="trash-row"><b>${labels[item.kind] || item.kind}</b><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.companyName || "")}</small></div><small>${formatDateTime(item.deletedAt)}</small><div class="row-actions"><button class="btn sm restore-trash" data-kind="${item.kind}" data-id="${escapeHtml(item.id)}">بازگردانی</button><button class="btn sm danger purge-trash" data-kind="${item.kind}" data-id="${escapeHtml(item.id)}">حذف نهایی</button></div></div>`).join("") || `<div class="empty-state">سطل بازیافت خالی است.</div>`;
     $("trashList").querySelectorAll(".restore-trash").forEach((node) => node.addEventListener("click", async () => { try { await request(`/api/trash/${node.dataset.kind}/${encodeURIComponent(node.dataset.id)}`, { method: "POST" }); state.bootstrap = await request("/api/bootstrap"); await openTrashDialog(); toast("اطلاعات بازگردانده شد."); } catch (error) { toast(error.message); } }));
     $("trashList").querySelectorAll(".purge-trash").forEach((node) => node.addEventListener("click", async () => { if (!confirm("این مورد برای همیشه حذف شود؟")) return; try { await request(`/api/trash/${node.dataset.kind}/${encodeURIComponent(node.dataset.id)}`, { method: "DELETE" }); await openTrashDialog(); toast("حذف نهایی انجام شد."); } catch (error) { toast(error.message); } }));
   } catch (error) { toast(error.message); }
@@ -1646,6 +1814,9 @@ window.addEventListener("beforeunload", (event) => {
   if ([...document.querySelectorAll("dialog[open] form")].some((form) => form.dataset.dirty === "1")) { event.preventDefault(); event.returnValue = ""; }
 });
 window.addEventListener("popstate", () => renderRoute().catch((error) => toast(error.message)));
+window.addEventListener("resize", () => {
+  if (state.view === "overview" || state.view === "sheet") scheduleIpamViewportSync();
+});
 
 $("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault(); $("loginError").classList.add("hidden");
@@ -1659,11 +1830,15 @@ $("logoutButton").addEventListener("click", async () => { $("userMenu").classLis
 $("homeButton").addEventListener("click", () => renderCompanies());
 $("companiesButton").addEventListener("click", () => renderCompanies());
 $("ipamButton").addEventListener("click", () => {
-  const target = state.currentSpaceId || state.bootstrap.spaces.find((item) => !state.currentCompanyId || item.companyId === state.currentCompanyId)?.id;
-  if (target) loadSpace(target); else toast("ابتدا برای یک شرکت رنج اصلی تعریف کنید.");
+  const target = state.bootstrap.spaces.some((item) => item.id === state.lastIpamSpaceId)
+    ? state.lastIpamSpaceId
+    : state.currentSpaceId || state.bootstrap.spaces.find((item) => !state.currentCompanyId || item.companyId === state.currentCompanyId)?.id;
+  const sheetCidr = target === state.lastIpamSpaceId && state.lastIpamView === "sheet" ? state.lastIpamSheetCidr : null;
+  if (target) loadSpace(target, { sheetCidr }); else toast("ابتدا برای یک شرکت رنج اصلی تعریف کنید.");
 });
 $("inventoryButton").addEventListener("click", () => openInventoryPage(true));
 $("radiosButton").addEventListener("click", () => openRadiosPage(true));
+$("personnelButton").addEventListener("click", () => openPersonnelDialog());
 $("networkMapButton").addEventListener("click", () => { window.location.href = "/network-map/"; });
 $("topologyButton").addEventListener("click", () => { window.location.href = "/network-map/"; });
 $("backupsButton").addEventListener("click", openBackupsDialog);
@@ -1671,7 +1846,7 @@ $("trashButton").addEventListener("click", openTrashDialog);
 $("importButton").addEventListener("click", openImportDialog);
 $("aboutButton").addEventListener("click", openAboutDialog);
 $("themeButton").addEventListener("click", toggleTheme);
-$("languageButton").addEventListener("click", () => { localStorage.setItem("ems-language", state.language === "en" ? "fa" : "en"); location.reload(); });
+$("languageSelect").addEventListener("change", (event) => { localStorage.setItem("ems-language", event.target.value); location.reload(); });
 $("themeButton").textContent = savedTheme === "dark" ? "☀" : "☾";
 $("userMenuButton").addEventListener("click", () => { const menu = $("userMenu"); const show = menu.classList.contains("hidden"); menu.classList.toggle("hidden", !show); $("userMenuButton").setAttribute("aria-expanded", show ? "true" : "false"); });
 document.addEventListener("click", (event) => { if (!$("userMenuButton").contains(event.target) && !$("userMenu").contains(event.target)) $("userMenu").classList.add("hidden"); });
@@ -1687,12 +1862,12 @@ $("companySelect").addEventListener("change", (event) => {
 });
 $("spaceSelect").addEventListener("change", (event) => event.target.value ? loadSpace(event.target.value) : (state.currentCompanyId ? openCompanyPage(state.currentCompanyId) : renderCompanies()));
 $("searchInput").addEventListener("input", (event) => doSearch(event.target.value));
-$("usersButton").addEventListener("click", openUsersDialog);
+$("usersButton").addEventListener("click", () => openUsersDialog());
 $("settingsButton").addEventListener("click", () => openSettingsDialog("general"));
-$("openUsersFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openUsersDialog(); });
-$("openPersonnelFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openPersonnelDialog(); });
-$("usersBackSettings").addEventListener("click", () => { $("usersDialog").close(); openSettingsDialog("users"); });
-$("personnelBackSettings").addEventListener("click", () => { $("personnelDialog").close(); openSettingsDialog("personnel"); });
+$("openUsersFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openUsersDialog({ returnToSettings: true }); });
+$("openPersonnelFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openPersonnelDialog("", { returnToSettings: true }); });
+$("usersBackSettings").addEventListener("click", () => { $("usersDialog").close(); if (state.usersReturnToSettings) openSettingsDialog("users"); });
+$("personnelBackSettings").addEventListener("click", () => { $("personnelDialog").close(); if (state.personnelReturnToSettings) openSettingsDialog("personnel"); });
 $("openBackupsFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openBackupsDialog(); });
 $("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast("تنظیم ظاهر اعمال شد."); });
 document.querySelectorAll(".settings-tab").forEach((node) => node.addEventListener("click", () => { document.querySelectorAll(".settings-tab").forEach((n) => n.classList.toggle("active", n === node)); document.querySelectorAll(".settings-pane").forEach((pane) => pane.classList.toggle("active", pane.dataset.settingsPane === node.dataset.settingsTab)); }));
@@ -1733,8 +1908,15 @@ $("exportPrefixButton").addEventListener("click", () => {
   if (id) window.location.assign(`/api/prefixes/${encodeURIComponent(id)}/export`);
 });
 
+$("inventoryCreateForm")?.addEventListener("submit", async (event)=>{
+  event.preventDefault();
+  $("inventoryCreateError").textContent = "";
+  try { await continueInventoryCreate(); }
+  catch (error) { $("inventoryCreateError").textContent = error.message; }
+});
 $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  $("hostFormError").textContent = "";
   const ports = {};
   $("hostPorts").querySelectorAll(".host-port").forEach((node) => { if (node.value !== "") ports[node.dataset.tool] = Number(node.value); });
   const body = {
@@ -1767,7 +1949,7 @@ $("hostForm").addEventListener("submit", async (event) => {
     devicePorts: collectDevicePorts(),
     customFields: collectHostCustomFields(),
   };
-  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else if(returnView==="radios") await openRadiosPage(false); else renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { $("hostFormError").textContent = error.message; toast(error.message); }
 });
 
 $("addDevicePort").addEventListener("click", () => appendDevicePort());
@@ -1792,7 +1974,7 @@ $("nextHostButton").addEventListener("click", () => navigateHostFromDialog($("ne
 
 $("deleteHostButton").addEventListener("click", async () => {
   if (!confirm("اطلاعات این IP حذف شود؟")) return;
-  try { await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}`, { method: "DELETE" }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); renderCurrent(); toast("اطلاعات IP حذف شد."); } catch (error) { toast(error.message); }
+  try { await request(`/api/hosts/${encodeURIComponent(state.currentSpaceId)}/${encodeURIComponent($("hostIp").value)}`, { method: "DELETE" }); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else if(returnView==="radios") await openRadiosPage(false); else renderCurrent(); toast("اطلاعات IP حذف شد."); } catch (error) { toast(error.message); }
 });
 
 $("userRole").addEventListener("change", () => renderCompanyAccess(
@@ -1813,11 +1995,37 @@ $("saveToolsSettings").addEventListener("click", async () => {
   try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارهای IP ذخیره شد."); } catch (error) { toast(error.message); }
 });
 
-$("deviceTypeForm").addEventListener("submit", async (event)=>{event.preventDefault();const id=$("deviceTypeId").value;try{await request(id?`/api/device-types/${encodeURIComponent(id)}`:"/api/device-types",{method:id?"PUT":"POST",body:{name:$("deviceTypeName").value}});$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");await refreshDeviceTypes();await ensureInventory(true);toast("نوع تجهیز ذخیره شد.");}catch(error){toast(error.message);}});
+$("deviceTypeForm").addEventListener("submit", async (event)=>{event.preventDefault();const id=$("deviceTypeId").value;try{await request(id?`/api/device-types/${encodeURIComponent(id)}`:"/api/device-types",{method:id?"PUT":"POST",body:{name:$("deviceTypeName").value,color:$("deviceTypeColor").value}});$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");await refreshDeviceTypes();await ensureInventory(true);toast("نوع تجهیز ذخیره شد.");}catch(error){toast(error.message);}});
 $("cancelDeviceTypeEdit").addEventListener("click",()=>{$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");});
+$("personnelForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const id = $("personnelId").value;
+  const fullName = $("personnelName").value.trim();
+  if (!fullName) return toast("نام و نام خانوادگی الزامی است.");
+  const body = {
+    employeeCode: $("personnelCode").value.trim(),
+    fullName,
+    mobile: $("personnelMobile").value,
+    phone: $("personnelPhone").value,
+    email: $("personnelEmail").value,
+    department: $("personnelDepartment").value,
+    jobTitle: $("personnelJobTitle").value,
+    companyId: $("personnelCompany").value || null,
+    notes: $("personnelNotes").value,
+    active: $("personnelActive").checked,
+  };
+  try {
+    await request(id ? `/api/personnel/${encodeURIComponent(id)}` : "/api/personnel", { method: id ? "PUT" : "POST", body });
+    markFormClean(event.currentTarget);
+    resetPersonnelForm();
+    await refreshPersonnel($("personnelSearch").value);
+    toast(id ? "اطلاعات پرسنل ویرایش شد." : "پرسنل اضافه شد.");
+  } catch (error) { toast(error.message); }
+});
+$("cancelPersonnelEdit").addEventListener("click", resetPersonnelForm);
 $("exportPersonnel").addEventListener("click",()=>window.location.assign(`/api/personnel/export?q=${encodeURIComponent($("personnelSearch").value||"")}`));
 $("importPersonnel").addEventListener("click",()=>$("personnelImportFile").click());
-$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error("CSV خالی است.");const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.code<0||ix.name<0)throw new Error("ستون‌های Employee Code و Full Name الزامی است.");const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:r[ix.code]||"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(`Import: ${result.created} جدید، ${result.updated} ویرایش، ${result.skipped} رد شد.`);}catch(error){toast(error.message);}finally{event.target.value="";}});
+$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error("CSV خالی است.");const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.name<0)throw new Error("ستون Full Name الزامی است.");const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:ix.code>=0?r[ix.code]||"":"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(`Import: ${result.created} جدید، ${result.updated} ویرایش، ${result.skipped} رد شد.`);}catch(error){toast(error.message);}finally{event.target.value="";}});
 
 $("createBackupButton").addEventListener("click", async () => {
   const button = $("createBackupButton"); button.disabled = true; button.textContent = "در حال ساخت…";
@@ -1901,7 +2109,7 @@ $("deleteMapLink").addEventListener("click", async () => {
 
 $("mapLinkDialog").addEventListener("close", () => { if (!$("mapLinkDialog").open) state.linkSelection = []; });
 
-applyLanguage();
+await applyLanguage();
 boot();
 
 export { contains, intToIpv4, ipv4ToInt, networkAt, parseCidr };

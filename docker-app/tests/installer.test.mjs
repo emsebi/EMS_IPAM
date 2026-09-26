@@ -19,11 +19,12 @@ test("installer validates GitHub archive before extraction", async () => {
   assert.match(installer, /Downloaded GitHub archive is invalid/);
 });
 
-test("installer exposes exactly the four supported lifecycle actions and asks fresh secrets", async () => {
+test("installer exposes five safe lifecycle actions and asks fresh settings", async () => {
   const installer = await fs.readFile(installerUrl, "utf8");
-  for (const label of ["1) Install", "2) Update", "3) Uninstall application (keep database)", "4) Uninstall application + database"]) assert.match(installer, new RegExp(label.replace(/[()+]/g, "\\$&")));
+  for (const label of ["1) Install", "2) Update", "3) Backup database", "4) Uninstall application (keep database)", "5) Uninstall application + database"]) assert.match(installer, new RegExp(label.replace(/[()+]/g, "\\$&")));
   assert.match(installer, /read_secret_twice db_pass "Database password"/);
   assert.match(installer, /read_secret_twice admin_pass "Admin password"/);
+  assert.match(installer, /Secure cookies \(true requires HTTPS\)/);
   assert.match(installer, /Preserved database and configuration found/);
   assert.match(installer, /Creating mandatory pre-update database backup/);
   assert.match(installer, /Update failed; restoring previous application files/);
@@ -33,6 +34,9 @@ test("installer exposes exactly the four supported lifecycle actions and asks fr
   assert.doesNotMatch(updateBlock, /down -v/);
   assert.match(installer, /modules\/\*\/compose\.module\.yml/);
   assert.match(installer, /module\.json/);
+  assert.match(installer, /Using project files next to install\.sh/);
+  assert.match(installer, /Creating manual database backup/);
+  assert.match(installer, /chown 1000:1000 "\$STATE_DIR\/backups"/);
   assert.doesNotMatch(installer, /EMS_SECRET_KEY/);
 });
 

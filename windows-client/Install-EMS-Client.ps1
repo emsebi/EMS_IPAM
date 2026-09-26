@@ -40,18 +40,30 @@ $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $target 
 
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $command = '"' + $powershell + '" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $target 'EMS-IPAM-Protocol.ps1') + '" "%1"'
-$root = 'HKCU:\Software\Classes\emsipam'
-if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
-New-Item -Path $root -Force | Out-Null
-Set-Item -Path $root -Value 'URL:EMS IPAM Client'
-New-ItemProperty -Path $root -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
-New-ItemProperty -Path $root -Name 'FriendlyTypeName' -Value 'EMS IPAM Client' -PropertyType String -Force | Out-Null
-$iconKey = Join-Path $root 'DefaultIcon'
-New-Item -Path $iconKey -Force | Out-Null
-Set-Item -Path $iconKey -Value ($powershell + ',0')
-$commandKey = Join-Path $root 'shell\open\command'
-New-Item -Path $commandKey -Force | Out-Null
-Set-Item -Path $commandKey -Value $command
+function Register-EmsProtocol([string]$Scheme) {
+    $root = 'HKCU:\Software\Classes\' + $Scheme
+    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    New-Item -Path $root -Force | Out-Null
+    Set-Item -Path $root -Value 'URL:EMS IPAM Client'
+    New-ItemProperty -Path $root -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+    New-ItemProperty -Path $root -Name 'FriendlyTypeName' -Value 'EMS IPAM Client' -PropertyType String -Force | Out-Null
+    $iconKey = Join-Path $root 'DefaultIcon'
+    New-Item -Path $iconKey -Force | Out-Null
+    Set-Item -Path $iconKey -Value ($powershell + ',0')
+    $commandKey = Join-Path $root 'shell\open\command'
+    New-Item -Path $commandKey -Force | Out-Null
+    Set-Item -Path $commandKey -Value $command
+    $registered = (Get-Item -LiteralPath $commandKey).GetValue('')
+    if ($registered -notmatch 'EMS-IPAM-Protocol\.ps1' -or $registered -match 'winbox\.exe') {
+        throw ('EMS IPAM protocol registration verification failed for ' + $Scheme)
+    }
+}
+
+# The web application uses emsipam-client so an obsolete emsipam association
+# can never forward the complete internal URI to WinBox. emsipam is repaired
+# as well for links created by older EMS IPAM releases.
+Register-EmsProtocol 'emsipam-client'
+Register-EmsProtocol 'emsipam'
 
 Add-Type -TypeDefinition @'
 using System;
@@ -63,7 +75,8 @@ public static class EmsShellRefresh {
 [EmsShellRefresh]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
 
 Write-Host 'EMS Client Pack installed successfully.' -ForegroundColor Green
-Write-Host 'Protocol: emsipam -> EMS IPAM Client (not WinBox directly)' -ForegroundColor Cyan
+Write-Host 'Protocol: emsipam-client -> EMS IPAM Client (not WinBox directly)' -ForegroundColor Cyan
+Write-Host 'WinBox receives only IP:PORT.' -ForegroundColor Cyan
 foreach ($item in @(@('WinBox',$winbox),@('RDP',$rdp),@('SSH',$ssh),@('Telnet',$telnet),@('VNC',$vnc))) {
     if ($item[1]) { Write-Host ($item[0] + ': found') -ForegroundColor Green }
     else { Write-Host ($item[0] + ': not found - file selection will open on first use') -ForegroundColor Yellow }

@@ -10,5 +10,6 @@
     "path": "/m/sample-module/",
     "order": 100
   },
-  "permissions": ["admin", "support", "helpdesk", "viewer"]
+  "permissions": ["sample.read", "sample.write"],
+  "roles": ["admin", "support", "helpdesk", "branch", "viewer"]
 }

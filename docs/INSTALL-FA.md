@@ -1,4 +1,10 @@
-# نصب و Update — EMS_IPAM v1.5.0-stage1-radio
+# نصب و Update — EMS_IPAM v1.6.1
+
+## پیش‌نیازها
+
+- Ubuntu یا Debian با دسترسی `sudo` یا `root`
+- دسترسی اینترنت برای نصب Docker و دریافت Imageها
+- Docker Engine، Docker Compose Plugin و Portainer CE؛ Installer وجود آن‌ها را بررسی می‌کند و موارد موجود را دوباره نصب نمی‌کند.
 
 ## نصب معمولی
 
@@ -17,6 +23,7 @@ Database password
 Admin username
 Admin password
 Web port
+Secure cookies (true requires HTTPS)
 ```
 
 State و Secretهای نصب در GitHub ذخیره نمی‌شوند:
@@ -30,8 +37,9 @@ State و Secretهای نصب در GitHub ذخیره نمی‌شوند:
 ```text
 1) Install
 2) Update
-3) Uninstall application (keep database)
-4) Uninstall application + database
+3) Backup database
+4) Uninstall application (keep database)
+5) Uninstall application + database
 ```
 
 ### 1 — Install
@@ -45,7 +53,7 @@ State و Secretهای نصب در GitHub ذخیره نمی‌شوند:
 - Health Check
 - Start ماژول‌های معتبر
 
-اگر قبلاً گزینه 3 اجرا شده باشد و Database + State هر دو وجود داشته باشند، Install دوباره همان اطلاعات را استفاده می‌کند.
+اگر قبلاً گزینه 4 اجرا شده باشد و Database + State هر دو وجود داشته باشند، Install دوباره همان اطلاعات را استفاده می‌کند.
 
 ### 2 — Update — حالت حفظ اطلاعات
 
@@ -76,24 +84,30 @@ Backup قبل از Update:
 /var/lib/ems-ipam/backups/pre-update-YYYYMMDD-HHMMSS.sql.gz
 ```
 
-### 3 — حذف App با حفظ اطلاعات
+### 3 — Backup دستی دیتابیس
 
-Application حذف می‌شود ولی موارد زیر باقی می‌مانند:
+یک فایل `manual-YYYYMMDD-HHMMSS.sql.gz` با `pg_dump` در مسیر زیر می‌سازد و غیرخالی بودن آن را کنترل می‌کند:
 
 ```text
-ems_ipam_db_data
-/var/lib/ems-ipam/.env
 /var/lib/ems-ipam/backups
 ```
 
-### 4 — حذف کامل
+### 4 — حذف App با حفظ اطلاعات
 
-فقط این گزینه Database volume و State را حذف می‌کند و قبل از اجرا Confirmation می‌گیرد.
+Containerها و فایل‌های Application را حذف می‌کند، اما PostgreSQL volume، فایل `.env` و Backupها باقی می‌مانند.
+
+### 5 — حذف کامل App و Database
+
+پس از تأیید صریح، Application، Database volume، تنظیمات و Backupها حذف می‌شوند. Docker و Portainer حذف نمی‌شوند.
+
+## نصب از ZIP
+
+اگر `install.sh` کنار `compose.yml` و پوشه `docker-app` باشد، Installer همان فایل‌های Extractشده را نصب می‌کند. در حالت اجرای Installer نصب‌شده برای Update، نسخه جدید از GitHub دریافت می‌شود.
 
 ## نصب فقط پیش‌نیازها
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/scripts/install-prerequisites.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install-prerequisites.sh | sudo bash
 ```
 
 ## عیب‌یابی
