@@ -1,179 +1,45 @@
+# EMS_IPAM — Part 1 / v1.7.0-rc.1
 
-## v1.6.1 — Base + IPAM + Radio defect fixes
+Core + IPAM + Radio؛ خروجی مرحله اول برای تست، بر پایه سورس v1.6.1 ارسالی کاربر.
+طراح پروژه: Ebrahim Mamani / ابراهیم مامانی — مخزن موردنظر: https://github.com/emsebi/EMS_IPAM
 
-- Personnel now requires only Full Name; every other field is optional.
-- Inventory Create/Edit loads the selected IP context directly and shows save errors in the form.
-- WinBox uses the repaired `emsipam-client` handler and receives only validated `IP[:port]`.
-- Station creation from an AP keeps that AP selected automatically.
-- IP maps grow with the actual viewport, and IPAM returns to the last selected space/sheet.
-- Address Space cards show registered, free, total, range count, and usage percent.
-- Device Types support create, edit, delete, color, counts, filters, and export.
-- رابط فقط دو زبان فارسی و انگلیسی دارد. توسعه زبان‌های دیگر، در صورت نیاز، پروژه‌ای جدا خواهد بود.
-- Navigation remains on the left in all languages. English is the default.
-- WinBox launching uses the Windows EMS IPAM client protocol and passes only the validated `IP[:port]` target to WinBox.
+**از [START-HERE-FA.md](START-HERE-FA.md) شروع کنید.** این بسته سورس واقعی و قابل نصب است. RADIUS، کشف شبکه، ردیابی MAC و اعمال VLAN هنوز پیاده‌سازی نشده‌اند.
 
-# EMS_IPAM — BASE + IPAM + Radio v1.6.1
+## تغییرات این پارت
 
-Repository: `github.com/emsebi/EMS_IPAM`  
-طراح و توسعه‌دهنده: **Ebrahim Mamani / ابراهیم مامانی**
-
-این خروجی **Base پایدار پروژه + IPAM + اولین افزونه Radio** است. پنل مرکزی، دیتابیس مشترک، مدیریت شرکت/شعب، کاربران، پرسنل، Inventory و IPAM در Base قرار دارند و `modules/radio` به عنوان اولین افزونه مستقل همراه این نسخه ارائه می‌شود. افزونه‌های RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی روی همین Base اضافه می‌شوند و Base نباید برای توسعه آن‌ها از نو ساخته شود.
-
-> تمام داده‌های Demo داخل سورس ساختگی هستند و برای GitHub تهیه شده‌اند. هیچ نام شرکت، شعبه، رنج یا تجهیز واقعی در Seed/Mock/Documentation قرار داده نشده است.
-
-![طرح مفهومی نمای Subnet](docs/screenshots/subnet-overview-concept.png)
+- Device Types با افزودن، ویرایش، حذف و شمارش، زیر IP Manager قرار گرفت و از Settings حذف شد.
+- انتخاب نوع دستگاه در فرم IP؛ تغییر نام نوع، رکوردهای مرتبط را به‌روزرسانی می‌کند. حذف نوعِ در حال استفاده رد می‌شود.
+- بخش 802.1X / MAC فعلاً دو تب MACهای موجود در IPAM و پرسنل دارد؛ منوی مستقل پرسنل حذف شد.
+- در Radios با انتخاب هر AP فقط Stationهای همان AP نمایش داده می‌شوند. Ping دستی است.
+- کد رابط و API نوع دستگاه و رابط/API Ping رادیو در پوشه‌های modules جدا شده‌اند.
+- مهاجرت دیتابیس ثبت نسخه دارد؛ راه‌اندازی مجدد نوع حذف‌شده و دسترسی لغوشده را برنمی‌گرداند.
+- اصلاح به‌روزرسانی فهرست پرسنل، جست‌وجو/Export پرسنل، منوی موبایل و health دیتابیس.
+- PostgreSQL client نسخه 16 در Dockerfile با سرور نسخه 16 هماهنگ شده است.
 
 ## پیش‌نیازهای نصب
 
-- Ubuntu یا Debian با دسترسی `sudo`/`root`
-- اینترنت برای دریافت بسته‌ها و Imageها
-- Docker Engine، Docker Compose Plugin و Portainer؛ نصب‌کننده نبودن آن‌ها را بررسی می‌کند و در صورت نیاز نصب را انجام می‌دهد.
+ماشین آزمایشی Ubuntu/Debian، دسترسی sudo و اینترنت برای دریافت Docker Engine، Docker Compose و وابستگی‌ها. نصب‌کننده نبودن Docker را بررسی و نصب می‌کند. Portainer اختیاری است و به‌صورت پیش‌فرض نصب نمی‌شود.
 
 ## نصب با خط فرمان
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh | sudo bash
-```
-
-منو:
-
-```text
-1) Install
-2) Update
-3) Backup database
-4) Uninstall application (keep database)
-5) Uninstall application + database
-```
-
-### ایمنی Update
-
-گزینه **Update** برای حفظ اطلاعات طراحی شده است:
-
-- قبل از تغییر Application، Backup اجباری PostgreSQL ساخته و غیرخالی بودن آن بررسی می‌شود.
-- Docker volume با نام `ems_ipam_db_data` در Update حذف نمی‌شود.
-- فایل تنظیمات `/var/lib/ems-ipam/.env` در Update بازنویسی نمی‌شود.
-- فایل‌های برنامه به صورت Staged جایگزین می‌شوند.
-- اگر Health Check نسخه جدید Fail شود، فایل‌های Application به نسخه قبلی Rollback می‌شوند.
-- Backup قبل از Update در `/var/lib/ems-ipam/backups` باقی می‌ماند.
-- تنها گزینه **5** اجازه حذف Database/State را دارد و قبل از حذف تأیید می‌گیرد.
-
-راهنمای کامل: [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
-
-## امکانات Base فعلی
-
-### Core
-
-- Login / Logout و Session
-- Admin / Support / Helpdesk / Branch / Viewer
-- Create / Edit / Delete / Enable / Disable کاربران
-- دسترسی به شرکت‌ها و Address Spaceها
-- **دسترسی مستقل به ماژول‌ها برای هر User**
-- Settings متمرکز
-- Light / Dark Theme
-- فقط English و فارسی، با English به‌عنوان پیش‌فرض؛ Sidebar همیشه سمت چپ باقی می‌ماند
-- Profile menu و About
-- Personnel مرکزی با کد پرسنلی، CRUD، Import/Export CSV و جستجوی سریع
-- Inventory مشترک تجهیزات با Device Type قابل تعریف/ویرایش/حذف، شمارش بر اساس Type و Export کل/فیلترشده
-- Custom Fields
-- Audit Log
-- Backup دستی و زمان‌بندی‌شده
-- Global Search با پیشنهاد لحظه‌ای و Keyboard navigation
-
-### Company / Branch / Site
-
-- Company / Branch / Site / Customer
-- Parent/Child
-- کد، آدرس، تلفن، مدیر، کدپستی
-- Latitude / Longitude
-- چند Contact با نام، سمت، تلفن، موبایل و Email
-- Personnel مرتبط با همان شعبه/شرکت و کد پرسنلی
-- چند IP/Link برای Router/WAN
-- روش اتصال Web / HTTPS / SSH / WinBox و Custom Port
-- Notes
-- Create / Edit / Delete
-
-### IPAM
-
-- Root Address Space از `/16` تا `/24`
-- نمای پیش‌فرض **جدول عمودی CIDR**
-- `/24` سمت چپ و `/23 ... /16` با ارتفاع واقعی بر اساس تعداد `/24`های زیرمجموعه
-- کلیک روی **متن CIDR** = ورود دقیقاً به همان Range
-- کلیک روی **مربع کوچک رنگ** = فقط Name / Description / Color همان Range
-- رنگ Range به Childها ارث داده نمی‌شود
-- Range بدون Group خاکستری باقی می‌ماند
-- رنگ پیشنهادی خودکار برای Group جدید و تلاش برای جلوگیری از تکرار رنگ هم‌سطح
-- Tile view اختیاری
-- Drill-down تا `/30` و سپس چهار IP مجزا
-- `/31` به عنوان مرحله جدا در UI نمایش داده نمی‌شود
-- IP detail با Previous / Next
-- Hostname / MAC / VLAN / Owner / Location / Vendor / Model / Serial / Firmware / Notes
-- Ping status
-- Service shortcuts قابل انتخاب برای هر IP (SSH/RDP/HTTP/HTTPS/Winbox/Telnet/Custom) و پورت اختصاصی
-- Import / Export
-
-
-### Radio — افزونه همراه این نسخه
-
-- AP و Station با نمایش درختی ساده
-- Add Station مستقیم از روی AP
-- Sync کامل IP با IPAM/Inventory؛ رکورد جداگانه و تکراری ساخته نمی‌شود
-- Search سریع با Name / IP / MAC / SSID
-- فیلدهای پایه: Name / IP / MAC / Model / SSID / Location / Notes
-- Edit / Delete، ورود مستقل به IPAM و Ping تک‌رادیو با وضعیت Online/Offline
-- بدون Signal Monitoring، Performance Monitoring و Credential Management
-
-## اتصال Base به افزونه‌های آینده
-
-همه بخش‌ها از **یک PostgreSQL مشترک** و IDهای مشترک استفاده خواهند کرد. افزونه‌ها نباید رکورد IP/Device جداگانه بسازند.
-
-```text
-Core + IPAM
-├── Inventory
-├── Personnel
-├── modules/radio
-├── modules/radius
-├── modules/network-map
-├── modules/mac-finder
-└── modules/network-access
-```
-
-Module access از همین نسخه در فرم User وجود دارد. افزونه‌های جدید نیز با `module.json` به Catalog دسترسی‌ها اضافه می‌شوند.
-
-## Upload به GitHub
-
-ZIP تحویلی پوشه والد اضافی ندارد. محتویات ZIP را مستقیم در Root مخزن زیر Extract/Upload کنید:
-
-```text
-https://github.com/emsebi/EMS_IPAM
-```
-
-بعد همان یک دستور Installer را اجرا کنید.
-
-## تست محلی UI بدون دیتابیس
-
-برای توسعه Frontend، Mock data فقط داده‌های ساختگی دارد. در صورت Serve کردن `docker-app/public`، آدرس را با `?mock` باز کنید.
-
-## تست Release روی Docker
-
-روی میزبان دارای Docker و Compose، Smoke test ایزوله زیر Build، Health، Login، API، Backup و ماندگاری دیتابیس را کنترل می‌کند:
+بسته را در یک پوشه جدید باز کنید؛ از داخل همان پوشه اجرا کنید:
 
 ```bash
-sudo ./scripts/docker-release-smoke.sh
+sudo bash install.sh
 ```
 
-## مستندات
+روی VM جدید گزینه 1 را انتخاب کنید. راهنمای کامل نصب، تست Docker و ارتقا در [START-HERE-FA.md](START-HERE-FA.md) است. تا قبل از بارگذاری این نسخه در GitHub، دستور دانلود از شاخه main نسخه جدید را دریافت نمی‌کند.
 
-- [`docs/INSTALL-FA.md`](docs/INSTALL-FA.md)
-- [`docs/ARCHITECTURE-FA.md`](docs/ARCHITECTURE-FA.md)
-- [`docs/MODULE-SDK-FA.md`](docs/MODULE-SDK-FA.md)
-- [`docs/TEST-REPORT-FA.md`](docs/TEST-REPORT-FA.md)
-- [`docs/RELEASE-v1.6.1-FA.md`](docs/RELEASE-v1.6.1-FA.md)
+## نتیجه تست
 
+۵۶ تست کد/منطق/دیتابیس و ۱۰ سناریوی مرورگر/API اجرا و پاس شده‌اند. تست مرورگر از سرور واقعی برنامه و دیتابیس موقت PGlite استفاده می‌کند، نه Mock API. Docker، PostgreSQL سرویس واقعی و تجهیزات Cisco/MikroTik در این محیط تست نشده‌اند. این نسخه RC است، نه تأیید انتشار عملیاتی.
 
-## محدوده مرحله اول
+- [گزارش تست](docs/TEST-REPORT-FA.md)
+- [برنامه تحویل پنج‌مرحله‌ای](docs/ROADMAP-FA.md)
+- [فایل ادامه کار](CONTINUATION.md)
+- [قرارداد ماژول‌ها](docs/MODULE-SDK-FA.md)
+- [تصویر واقعی Radios از تست](docs/test-results/radios.png)
+- [تصویر واقعی Device Types](docs/test-results/device-types.png)
+- [طرح مفهومی قدیمی Subnet](docs/screenshots/subnet-overview-concept.png) — تصویر اجرای نسخه جاری نیست.
 
-- [Stage 01 Scope](docs/STAGE-01-SCOPE-FA.md)
-- [Update Safety](docs/UPDATE-SAFETY-FA.md)
-
-
-> پوشه `modules/radio` همراه انتشار v1.6.1 تحویل می‌شود و Installer آن را کشف می‌کند. با حذف این پوشه، BASE + IPAM همچنان مستقل اجرا می‌شود. RADIUS، Network Map، MAC Finder و Network Access در مراحل بعدی اضافه می‌شوند.
+ابزار اتصال ویندوز موجود در public/downloads از نسخه ورودی حفظ شده است؛ در این مرحله روی Windows اجرا نشده است.

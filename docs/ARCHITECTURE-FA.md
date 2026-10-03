@@ -1,59 +1,11 @@
-# معماری Base و Modules
+# معماری پارت اول و مسیر تکمیل
 
-## اصل اصلی
+اجرای فعلی: مرورگر → Node.js Core/ماژول‌ها → PostgreSQL16. Compose دو سرویس app و db دارد. افزونه‌های backend داخل پردازش Core بارگذاری می‌شوند و فایل‌های رابط از modules/*/public ارائه می‌شوند. پایگاه داده در volume و بکاپ در state بیرون کد نگهداری می‌شود.
 
-Core + IPAM همیشه مستقل و قابل استفاده است. افزونه خراب یا حذف‌شده نباید Core را Down کند.
+ساختار واقعی و محدودیت استقلال: [MODULE-SDK-FA.md](MODULE-SDK-FA.md). برنامه نهایی: [ROADMAP-FA.md](ROADMAP-FA.md). وضعیت قابل ادامه: [../CONTINUATION.md](../CONTINUATION.md).
 
-یک PostgreSQL مشترک منبع اطلاعات است. IP، Company، Personnel و Device توسط افزونه‌ها Duplicate نمی‌شوند.
+Core مسئول session، کاربران پنل، شرکت/رنج، IP، Inventory، Personnel، Audit، بکاپ و قرارداد ماژول است. رکورد AP/Station در همان hosts قرار دارد. نمایش و عملیات مختص رادیو در modules/radio است. صفحه MAC فعلی یک نمای داده ذخیره‌شده IPAM است؛ هنوز registry مستقل MAC و سیاست دسترسی نیست.
 
-## Base
+دیتابیس از PGlite استفاده نمی‌کند؛ PGlite فقط در تست‌هاست. داده‌های تست، شرکت ساختگی و آدرس‌های 192.0.2.0/24 هستند. Secrets تجهیزات هنوز در این پارت نگهداری نمی‌شوند. MAC collection خودکار وجود ندارد؛ تایمر بکاپ سامانه، پاک‌سازی سطل زباله و اتصال زنده رابط به این شرط ارتباطی ندارند.
 
-```text
-Core
-├── Authentication
-├── Users / Roles / Module Permissions
-├── Settings
-├── Company / Site / Branch
-├── Personnel
-├── Inventory
-├── Search
-├── Audit
-├── Backup
-└── IPAM
-```
-
-## افزونه‌ها
-
-```text
-modules/radio          # همراه v1.6.1
-modules/radius
-modules/network-map
-modules/mac-finder
-modules/network-access
-```
-
-### Radio — همراه v1.6.1
-
-AP/Station به همان Host/IP موجود در IPAM متصل می‌شود و رکورد Shadow ایجاد نمی‌کند. Search شامل Name/IP/MAC/SSID است. Ping دستی هر رادیو، وضعیت Online/Offline و مسیرهای مستقل Edit و IPAM دارد. Signal/Performance/Credential Monitoring در این ماژول وجود ندارد.
-
-### RADIUS
-
-FreeRADIUS برای Device AAA و System User. Network Access نیز از همین Backend استفاده می‌کند.
-
-### Network Map
-
-Cisco discovery فقط Read-only و Sync با Inventory/IPAM.
-
-### MAC Finder
-
-Current location + history و اتصال به Network Map.
-
-### Network Access
-
-802.1X/MAB، MAC Registry، Static/Dynamic VLAN و Unknown policy با FreeRADIUS.
-
-## Module permissions
-
-جدول `user_module_access` مستقل از Role است. Admin همه دسترسی‌ها را دارد. برای Userهای دیگر Admin می‌تواند Moduleها را جدا انتخاب کند.
-
-Module جدیدی که در آینده به Repository اضافه شود می‌تواند با `module.json` به Loader معرفی شود؛ Core برای اضافه شدن Feature جدید نیاز به بازنویسی ندارد.
+تصویرهای docs/screenshots متعلق به طرح مفهومی/نسخه قبلی‌اند؛ docs/test-results تصاویر اجرای جاری هستند. مدارک RELEASE-v1.x تاریخچه‌اند و جای وضعیت جاری را نمی‌گیرند.

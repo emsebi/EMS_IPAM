@@ -10,3 +10,5 @@ This module provides a simple AP/Station relationship view. It deliberately does
 - Stations without a parent AP remain visible in a dedicated section.
 - IP details remain editable from IPAM/Inventory by administrators; read-only users can inspect and Ping.
 - Removing this module folder disables the Radio navigation after restart/update.
+
+Version 2.0.0-rc.1 uses API 1. Select one AP to view its stations, with pagination and an orphan group. `backend/index.mjs` owns manual host Ping; `public/index.mjs` owns this page. For non-admin users, the current shared-data flow requires IPAM, Inventory and Radio grants plus assigned company/space access. Core 1.7.0-rc.1 is required for this loader. See docs/MODULE-SDK-FA.md.

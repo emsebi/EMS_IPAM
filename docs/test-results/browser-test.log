@@ -1,0 +1,16 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ems-ipam-container@1.7.0-rc.1 test:browser
+> node tests/browser.part1.mjs
+
+PASS: database health and unauthenticated API protection
+PASS: real login and application bootstrap
+PASS: standalone Device Types creation
+PASS: IP/device creation, type selection, MAC/VLAN storage and edit
+PASS: type rename propagates; used type deletion blocked; unused type deletion works
+PASS: AP selection shows only its stations; parent retained; responsive widths and mobile submenu
+PASS: MAC and Personnel tabs; name-only personnel create; refresh, search and export
+PASS: Settings opens; Device Types/Personnel removed from Settings and standalone personnel navigation
+PASS: viewer can read assigned inventory; cannot mutate hosts/types or list personnel
+PASS: no uncaught browser errors throughout tested flows
+10 browser/API scenarios passed.

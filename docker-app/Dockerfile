@@ -1,8 +1,17 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates iputils-ping postgresql-client tar tini \
+    && apt-get install -y --no-install-recommends ca-certificates curl iputils-ping tar tini \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && printf '%s\n' 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
+
+# Match the PostgreSQL 16 server used in compose.yml (pg_dump cannot back up
+# a newer server major). Keep the selected client ahead of wrapper binaries.
+ENV PATH="/usr/lib/postgresql/16/bin:${PATH}"
 
 WORKDIR /app
 COPY package.json package-lock.json ./

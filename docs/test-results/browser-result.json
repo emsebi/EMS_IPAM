@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "timestamp": "2026-09-29T20:13:45.888Z",
+  "database": "PGlite test adapter; production pg driver not exercised",
+  "browser": "153.0.8010.0",
+  "checks": [
+    "database health and unauthenticated API protection",
+    "real login and application bootstrap",
+    "standalone Device Types creation",
+    "IP/device creation, type selection, MAC/VLAN storage and edit",
+    "type rename propagates; used type deletion blocked; unused type deletion works",
+    "AP selection shows only its stations; parent retained; responsive widths and mobile submenu",
+    "MAC and Personnel tabs; name-only personnel create; refresh, search and export",
+    "Settings opens; Device Types/Personnel removed from Settings and standalone personnel navigation",
+    "viewer can read assigned inventory; cannot mutate hosts/types or list personnel",
+    "no uncaught browser errors throughout tested flows"
+  ]
+}

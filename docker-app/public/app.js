@@ -1,4 +1,4 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.6.1";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.1";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -50,6 +50,14 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const page = $("page");
+const compactNavigation = matchMedia("(max-width:720px)");
+const ipamMenu = document.querySelector(".nav-group");
+const syncNavigation = () => { ipamMenu.open = !compactNavigation.matches; };
+compactNavigation.addEventListener("change", syncNavigation);
+syncNavigation();
+ipamMenu.querySelectorAll(".navbtn").forEach((button) => button.addEventListener("click", () => {
+  if (compactNavigation.matches) ipamMenu.open = false;
+}));
 
 const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
@@ -59,7 +67,7 @@ let LANGUAGE_ENTRIES = [];
 async function loadLanguageCatalog() {
   const supported = new Set(["en", "fa"]);
   try {
-    const response = await fetch("/i18n/languages.json?v=1.6.1", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.1", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
     state.languages = Array.isArray(items) ? items.filter((item) => supported.has(item?.id) && item?.label) : [];
     if (state.languages.length !== supported.size) throw new Error("Language catalog must contain English and Persian only.");
@@ -73,7 +81,7 @@ async function loadLanguageCatalog() {
 }
 async function loadLanguagePack(lang) {
   try {
-    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.6.1`, { cache: "no-store" });
+    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.1`, { cache: "no-store" });
     LANGUAGE_PACK = response.ok ? await response.json() : {};
   } catch { LANGUAGE_PACK = {}; }
   LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
@@ -302,13 +310,32 @@ function roleLabel(role) {
   return role === "admin" ? "Administrator" : role === "support" ? "Support" : role === "helpdesk" ? "Helpdesk" : role === "branch" ? "Branch" : "Viewer";
 }
 
+const moduleUiCache = new Map();
+async function loadModuleUi(id) {
+  if (moduleUiCache.has(id)) return moduleUiCache.get(id);
+  const info = state.bootstrap?.modules?.find((item) => item.id === id);
+  if (!info) throw new Error("ماژول مورد نیاز نصب یا فعال نیست.");
+  const { createUi } = await import(`/m/${id}/index.mjs?v=${encodeURIComponent(info.version)}`);
+  const link = document.createElement("link");
+  link.rel = "stylesheet"; link.href = `/m/${id}/style.css?v=${encodeURIComponent(info.version)}`;
+  document.head.appendChild(link);
+  const ui = createUi({ state,$,page,isModuleInstalled,hasClientModule,ensureInventory,ensureDeviceTypes,
+    updateSelectors,navActive,setRoute,toast,canWrite,isAdmin,ipv4ToInt,intToIpv4,request,prepareHostEditor,
+    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,populateHostTypes,openPersonnelDialog,editPersonnel });
+  moduleUiCache.set(id,ui);
+  return ui;
+}
+async function openNetworkAccessPage(tab = "mac") {
+  try { return (await loadModuleUi("network-access")).openNetworkAccessPage(tab); } catch (error) { toast(error.message); }
+}
+
 function renderModuleNavigation() {
   const host = $("moduleNavigation");
   if (!host) return;
   const role = state.bootstrap?.user?.role || "viewer";
   const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
   host.innerHTML = modules
-    .filter((item) => item.id !== "radio")
+    .filter((item) => !["radio","ipam","network-access"].includes(item.id))
     .filter((item) => !Array.isArray(item.roles) || !item.roles.length || item.roles.includes(role))
     .sort((a, b) => Number(a.navigation?.order || 100) - Number(b.navigation?.order || 100))
     .map((item) => { const path = item.navigation?.path || `/m/${item.id}/`; const label = item.navigation?.label || item.name || item.id; const icon = item.navigation?.icon || "◫"; return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`; }).join("");
@@ -370,7 +397,8 @@ function applyRoleVisibility() {
   $("ipamButton")?.classList.toggle("hidden", !hasClientModule("ipam"));
   $("inventoryButton")?.classList.toggle("hidden", !hasClientModule("inventory"));
   $("radiosButton")?.classList.toggle("hidden", !isModuleInstalled("radio") || !hasClientModule("radio"));
-  $("personnelButton")?.classList.toggle("hidden", !isAdmin());
+  $("deviceTypesButton")?.classList.toggle("hidden", !isAdmin());
+  $("networkAccessButton")?.classList.toggle("hidden", !isAdmin());
   document.querySelectorAll(".radio-module-field").forEach((node) => node.classList.toggle("hidden", !isModuleInstalled("radio")));
   const user = state.bootstrap?.user || {};
   if ($("loggedInUserName")) $("loggedInUserName").textContent = user.displayName || user.username || "User";
@@ -400,6 +428,8 @@ async function renderRoute(replace = false) {
       renderCompanies({ keepRoute: true });
     } else if (parts[0] === "company" && parts[1]) await openCompanyPage(parts[1], { fromRoute: true });
     else if (parts[0] === "ipam" && parts[1]) await loadSpace(parts[1], { sheetCidr: parts[2] || null, fromRoute: true });
+    else if (parts[0] === "device-types") await openDeviceTypesPage();
+    else if (parts[0] === "network-access") await openNetworkAccessPage(parts[1] || "mac");
     else if (parts[0] === "inventory") await openInventoryPage(true, { fromRoute: true });
     else if (parts[0] === "radios") await openRadiosPage(true, { fromRoute: true });
     else if (parts[0] === "topology") await openTopologyPage(true, { fromRoute: true });
@@ -461,6 +491,8 @@ function renderCurrent() {
   if (state.view === "sheet") renderSheet();
   else if (state.view === "overview") renderOverview();
   else if (state.view === "radios") renderRadios();
+  else if (state.view === "device-types") openDeviceTypesPage();
+  else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
   else if (state.view === "inventory") renderInventory();
   else if (state.view === "topology") renderTopology();
   else if (state.view === "company" && state.currentCompanyId) openCompanyPage(state.currentCompanyId, { fromRoute: true }).catch((error) => toast(error.message));
@@ -1155,7 +1187,7 @@ function renderInventory() {
   $("refreshInventory").addEventListener("click",()=>openInventoryPage(true));
   $("exportInventory").addEventListener("click",()=>window.location.assign(`/api/inventory/export?q=${encodeURIComponent(state.inventoryQuery)}&type=${encodeURIComponent(state.inventoryType)}&companyId=${encodeURIComponent(state.currentCompanyId || "")}`));
   $("newInventoryDevice")?.addEventListener("click", openInventoryCreateDialog);
-  $("manageDeviceTypes")?.addEventListener("click",()=>openSettingsDialog("device-types"));
+  $("manageDeviceTypes")?.addEventListener("click",()=>openDeviceTypesPage());
   page.querySelectorAll(".edit-inventory").forEach((node)=>node.addEventListener("click",()=>openInventoryItem(state.inventory.find((item)=>item.id===node.dataset.id)).catch((error)=>toast(error.message))));
   page.querySelectorAll(".inventory-tools").forEach((node)=>node.addEventListener("click",(event)=>{const item=state.inventory.find((entry)=>entry.id===node.dataset.id);if(item)openToolMenu(event,item.ip);}));
   translateTree(page);
@@ -1343,12 +1375,8 @@ function doSearch(query) {
   }, 180);
 }
 
-async function refreshDeviceTypes() {
-  const result=await request("/api/device-types"); state.deviceTypes=result.items||[]; populateHostTypes($("hostType")?.value||"");
-  const list=$("deviceTypesList"); if(!list) return;
-  list.innerHTML=state.deviceTypes.map((item)=>`<div class="user-row"><div><b>${escapeHtml(item.name)}</b><small><i class="swatch" style="background:${escapeHtml(item.color)}"></i> ${formatNumber(state.inventory.filter((h)=>h.type===item.name).length)} دستگاه</small></div><div class="row-actions"><button class="btn sm edit-device-type" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-device-type" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("")||`<div class="empty-state">نوع تجهیزی ثبت نشده است.</div>`;
-  list.querySelectorAll(".edit-device-type").forEach((node)=>node.addEventListener("click",()=>{const item=state.deviceTypes.find((i)=>i.id===node.dataset.id);$("deviceTypeId").value=item.id;$("deviceTypeName").value=item.name;$("deviceTypeColor").value=item.color||"#3157d5";$("cancelDeviceTypeEdit").classList.remove("hidden");}));
-  list.querySelectorAll(".delete-device-type").forEach((node)=>node.addEventListener("click",async()=>{if(!confirm("این نوع تجهیز حذف شود؟"))return;try{await request(`/api/device-types/${encodeURIComponent(node.dataset.id)}`,{method:"DELETE"});await refreshDeviceTypes();toast("نوع تجهیز حذف شد.");}catch(error){toast(error.message);}}));
+async function openDeviceTypesPage() {
+  try { return (await loadModuleUi("ipam")).openDeviceTypesPage(); } catch (error) { toast(error.message); }
 }
 
 function parseCsv(text) {
@@ -1485,109 +1513,11 @@ async function quickOpenIp(ip) {
   } catch (error) { toast(error.message); }
 }
 
-async function openRadiosPage(force = true, { fromRoute = false } = {}) {
-  if (!isModuleInstalled("radio") || !hasClientModule("radio")) {
-    toast("ماژول Radio نصب نیست یا برای این کاربر فعال نشده است.");
-    return;
-  }
-  try {
-    await ensureInventory(force);
-    state.view = "radios";
-    state.currentSpaceId = null;
-    state.data = null;
-    updateSelectors();
-    navActive("radios");
-    if (!fromRoute) setRoute("/radios");
-    renderRadios();
-  } catch (error) { toast(error.message); }
+async function openRadiosPage(...args) {
+  try { return (await loadModuleUi("radio")).openRadiosPage(...args); } catch (error) { toast(error.message); }
 }
-
-async function quickOpenRadio(ip, mode, parentId = "") {
-  if (!canWrite()) return toast("ثبت و ویرایش رادیو فقط برای مدیر سیستم مجاز است.");
-  const value = String(ip || "").trim();
-  if (ipv4ToInt(value) === null) return toast("یک IP معتبر برای رادیو وارد کنید.");
-  if (!['ap', 'station'].includes(mode)) return toast("حالت رادیو را انتخاب کنید.");
-  if (mode === "station" && !parentId) return toast("برای Station یک AP انتخاب کنید.");
-  try {
-    const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
-    const item = (result.items || []).find((entry) => entry.ip === value);
-    if (!item) return toast("این IP داخل شبکه‌های قابل دسترسی نیست.");
-    const parent = state.inventory.find((entry) => entry.id === parentId);
-    await prepareHostEditor(item.spaceId, value, "radios", {
-      radioMode: mode,
-      radioParentHostId: mode === "station" ? parentId : null,
-      ...(mode === "station" && parent?.ssid ? { ssid: parent.ssid } : {}),
-      type: "Radio",
-    });
-    $("hostName").focus();
-  } catch (error) { toast(error.message); }
-}
-
-function radioMatches(item, query) {
-  return !query || [item.name,item.ip,item.mac,item.ssid,item.companyName,item.spaceName,item.location].some((value)=>String(value||"").toLowerCase().includes(query));
-}
-
-function radioStatus(item) {
-  if (item.pingOnline === true) return { className: "online", label: "آنلاین" };
-  if (item.pingOnline === false) return { className: "offline", label: "آفلاین" };
-  return { className: "unknown", label: "نامشخص" };
-}
-
-function radioStatusBadge(item) {
-  const status = radioStatus(item);
-  const title = item.pingCheckedAt ? `آخرین بررسی: ${formatDateTime(item.pingCheckedAt)}` : "هنوز Ping نشده است";
-  return `<span class="radio-status ${status.className}" title="${escapeHtml(title)}"><i></i>${status.label}</span>`;
-}
-
-async function openRadioEditor(item) {
-  if (!item) return;
-  await prepareHostEditor(item.spaceId, item.ip, "radios");
-}
-
-async function openRadioInIpam(item) {
-  if (!item) return;
-  const address = ipv4ToInt(item.ip);
-  await loadSpace(item.spaceId, { sheetCidr: `${intToIpv4(address & 0xffffff00)}/24` });
-}
-
-async function pingRadio(item, button) {
-  if (!item) return;
-  const original = button?.textContent || "Ping";
-  if (button) { button.disabled = true; button.textContent = "…"; }
-  try {
-    const result = await request("/api/ping/host", { method: "POST", body: { id: item.id } });
-    await ensureInventory(true);
-    renderRadios();
-    toast(result.online ? `${item.ip} آنلاین است.` : `${item.ip} پاسخ نداد.`);
-  } catch (error) {
-    if (button) { button.disabled = false; button.textContent = original; }
-    toast(error.message);
-  }
-}
-
-function renderRadios() {
-  const radios=state.inventory.filter((item)=>(!state.currentCompanyId||item.companyId===state.currentCompanyId)&&(item.radioMode==="ap"||item.radioMode==="station"));
-  const q=(state.radioQuery||"").trim().toLowerCase();
-  const filtered=radios.filter((item)=>radioMatches(item,q));
-  const allAps=radios.filter((item)=>item.radioMode==="ap");
-  const allStations=radios.filter((item)=>item.radioMode==="station");
-  const aps=allAps.filter((ap)=>radioMatches(ap,q)||allStations.some((item)=>item.radioParentHostId===ap.id&&radioMatches(item,q)));
-  const stationNode=(item)=>`<article class="radio-station-node"><button class="open-radio-host radio-station-main" data-id="${escapeHtml(item.id)}"><span class="radio-node-icon">ST</span><span><b>${escapeHtml(item.name||item.ip)}</b><small class="ltr mono">${escapeHtml(item.ip)}</small><em>${escapeHtml(item.ssid||"SSID —")}</em>${radioStatusBadge(item)}</span></button><div class="row-actions"><button class="btn sm ping-radio" data-id="${escapeHtml(item.id)}">Ping</button><button class="btn sm open-ipam-radio" data-id="${escapeHtml(item.id)}">IPAM</button>${canWrite()?`<button class="btn sm edit-radio" data-id="${escapeHtml(item.id)}">ویرایش</button>`:""}</div></article>`;
-  const cards=aps.map((ap)=>{const ownMatch=radioMatches(ap,q);const children=allStations.filter((item)=>item.radioParentHostId===ap.id&&(ownMatch||radioMatches(item,q)));return `<article class="radio-tree-card"><div class="radio-tree-card-head"><div><h3>${escapeHtml(ap.name||ap.ip)}</h3><div class="radio-health"><span class="mono ltr">${escapeHtml(ap.ip)}</span><span>${escapeHtml(ap.ssid||"SSID —")}</span>${radioStatusBadge(ap)}</div></div><div class="row-actions">${canWrite()?`<button class="btn sm radio-add-station" data-id="${escapeHtml(ap.id)}">افزودن Station</button><button class="btn sm edit-radio" data-id="${escapeHtml(ap.id)}">ویرایش</button>`:""}<button class="btn sm ping-radio" data-id="${escapeHtml(ap.id)}">Ping</button><button class="btn sm open-ipam-radio" data-id="${escapeHtml(ap.id)}">IPAM</button></div></div><div class="radio-tree-scroll"><div class="radio-tree-canvas"><button class="radio-ap-node open-radio-host" data-id="${escapeHtml(ap.id)}"><span class="radio-node-icon ap">AP</span><span><b>${escapeHtml(ap.name||ap.ip)}</b><small class="ltr mono">${escapeHtml(ap.ip)}</small><em>${escapeHtml(ap.ssid||"SSID تعریف نشده")}</em></span></button>${children.length?`<div class="radio-tree-stem"></div><div class="radio-station-branches">${children.map((item)=>`<div class="radio-branch"><i></i>${stationNode(item)}</div>`).join("")}</div>`:`<div class="radio-empty-branch"><span>Station ثبت نشده است.</span></div>`}</div></div></article>`;}).join("");
-  const orphans=allStations.filter((item)=>!item.radioParentHostId&&radioMatches(item,q));
-  const orphanCard=orphans.length?`<article class="radio-tree-card orphan-stations"><div class="radio-tree-card-head"><div><h3>Stationهای بدون AP</h3><div class="radio-health"><span>${formatNumber(orphans.length)} مورد نیازمند اتصال</span></div></div></div><div class="radio-station-branches standalone">${orphans.map(stationNode).join("")}</div></article>`:"";
-  const parentOptions=allAps.map((ap)=>`<option value="${escapeHtml(ap.id)}">${escapeHtml(ap.name||ap.ip)} — ${escapeHtml(ap.ssid||"بدون SSID")} — ${escapeHtml(ap.ip)}</option>`).join("");
-  const quickRegister=canWrite()?`<section class="panel radio-register-panel"><div class="radio-register-title"><div><b>ثبت سریع رادیو</b><small>IP باید داخل یکی از رنج‌های IPAM باشد.</small></div></div><div class="radio-register-form"><input id="radioSearch" value="${escapeHtml(state.radioQuery||"")}" placeholder="جست‌وجوی نام، IP، MAC یا SSID…"><input id="radioQuickIp" class="ltr mono" placeholder="192.0.2.10"><select id="radioQuickMode"><option value="ap">AP</option><option value="station">Station</option></select><select id="radioQuickParent" class="hidden"><option value="">انتخاب AP</option>${parentOptions}</select><button id="radioQuickOpen" class="btn primary">ادامه</button></div></section>`:`<section class="panel radio-register-panel"><div class="radio-register-form readonly"><input id="radioSearch" value="${escapeHtml(state.radioQuery||"")}" placeholder="جست‌وجوی نام، IP، MAC یا SSID…"></div></section>`;
-  page.innerHTML=`<div class="headline"><div><div class="crumb">Radio Management</div><h2>رادیوها و ارتباط AP / Station</h2><div class="subtitle">نقشه ساده رادیوها؛ IP، نام، MAC و SSID با IPAM مشترک است.</div></div><div class="head-actions">${canWrite()?`<button id="newApShortcut" class="btn primary">ثبت AP جدید</button>`:""}</div></div>${quickRegister}<section class="stats"><div class="stat"><div class="label">کل رادیوها</div><div class="value">${formatNumber(radios.length)}</div></div><div class="stat"><div class="label">Access Point</div><div class="value">${formatNumber(allAps.length)}</div></div><div class="stat"><div class="label">Station</div><div class="value">${formatNumber(allStations.length)}</div></div><div class="stat"><div class="label">نتیجه جست‌وجو</div><div class="value">${formatNumber(filtered.length)}</div></div></section><section class="radio-tree-grid">${cards}${orphanCard}${!cards&&!orphanCard?`<div class="panel empty-state">رادیویی مطابق جست‌وجو پیدا نشد.</div>`:""}</section>`;
-  const syncMode=()=>$("radioQuickParent")?.classList.toggle("hidden",$("radioQuickMode")?.value!=="station");
-  $("radioQuickMode")?.addEventListener("change",syncMode); $("radioQuickOpen")?.addEventListener("click",()=>quickOpenRadio($("radioQuickIp").value,$("radioQuickMode").value,$("radioQuickParent").value));
-  $("radioSearch").addEventListener("input",(e)=>{state.radioQuery=e.target.value; renderRadios(); requestAnimationFrame(()=>{$("radioSearch")?.focus();$("radioSearch")?.setSelectionRange(state.radioQuery.length,state.radioQuery.length);});});
-  $("newApShortcut")?.addEventListener("click",()=>{$("radioQuickMode").value="ap";syncMode();$("radioQuickIp").focus();});
-  page.querySelectorAll(".radio-add-station").forEach((node)=>node.addEventListener("click",()=>{$("radioQuickMode").value="station";$("radioQuickParent").value=node.dataset.id;syncMode();$("radioQuickIp").focus();window.scrollTo({top:0,behavior:"smooth"});}));
-  page.querySelectorAll(".open-radio-host,.edit-radio").forEach((node)=>node.addEventListener("click",()=>openRadioEditor(state.inventory.find((item)=>item.id===node.dataset.id)).catch((error)=>toast(error.message))));
-  page.querySelectorAll(".open-ipam-radio").forEach((node)=>node.addEventListener("click",()=>openRadioInIpam(state.inventory.find((item)=>item.id===node.dataset.id))));
-  page.querySelectorAll(".ping-radio").forEach((node)=>node.addEventListener("click",()=>pingRadio(state.inventory.find((item)=>item.id===node.dataset.id),node)));
-  syncMode(); translateTree(page);
+async function renderRadios() {
+  try { return (await loadModuleUi("radio")).renderRadios(); } catch (error) { toast(error.message); }
 }
 
 async function openTopologyPage(force = false, { fromRoute = false } = {}) {
@@ -1741,7 +1671,6 @@ function openSettingsDialog(tab = "general") {
   if ($("settingsVersion")) $("settingsVersion").textContent = state.bootstrap?.version || "";
   document.querySelectorAll(".settings-tab").forEach((node) => node.classList.toggle("active", node.dataset.settingsTab === tab));
   document.querySelectorAll(".settings-pane").forEach((node) => node.classList.toggle("active", node.dataset.settingsPane === tab));
-  refreshDeviceTypes().catch(()=>{});
   $("settingsDialog").showModal();
   translateTree($("settingsDialog"));
 }
@@ -1838,7 +1767,8 @@ $("ipamButton").addEventListener("click", () => {
 });
 $("inventoryButton").addEventListener("click", () => openInventoryPage(true));
 $("radiosButton").addEventListener("click", () => openRadiosPage(true));
-$("personnelButton").addEventListener("click", () => openPersonnelDialog());
+$("deviceTypesButton").addEventListener("click", () => openDeviceTypesPage());
+$("networkAccessButton").addEventListener("click", () => openNetworkAccessPage("mac"));
 $("networkMapButton").addEventListener("click", () => { window.location.href = "/network-map/"; });
 $("topologyButton").addEventListener("click", () => { window.location.href = "/network-map/"; });
 $("backupsButton").addEventListener("click", openBackupsDialog);
@@ -1857,6 +1787,8 @@ $("companySelect").addEventListener("change", (event) => {
   localStorage.setItem("ems-company", state.currentCompanyId);
   if (state.view === "inventory") renderInventory();
   else if (state.view === "radios") renderRadios();
+  else if (state.view === "device-types") openDeviceTypesPage();
+  else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
   else if (state.currentCompanyId) openCompanyPage(state.currentCompanyId);
   else renderCompanies();
 });
@@ -1865,9 +1797,12 @@ $("searchInput").addEventListener("input", (event) => doSearch(event.target.valu
 $("usersButton").addEventListener("click", () => openUsersDialog());
 $("settingsButton").addEventListener("click", () => openSettingsDialog("general"));
 $("openUsersFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openUsersDialog({ returnToSettings: true }); });
-$("openPersonnelFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openPersonnelDialog("", { returnToSettings: true }); });
+
 $("usersBackSettings").addEventListener("click", () => { $("usersDialog").close(); if (state.usersReturnToSettings) openSettingsDialog("users"); });
-$("personnelBackSettings").addEventListener("click", () => { $("personnelDialog").close(); if (state.personnelReturnToSettings) openSettingsDialog("personnel"); });
+$("personnelBackSettings").addEventListener("click", () => $("personnelDialog").close());
+$("personnelDialog").addEventListener("close", () => {
+  if (state.view === "network-access") openNetworkAccessPage("personnel");
+});
 $("openBackupsFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openBackupsDialog(); });
 $("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast("تنظیم ظاهر اعمال شد."); });
 document.querySelectorAll(".settings-tab").forEach((node) => node.addEventListener("click", () => { document.querySelectorAll(".settings-tab").forEach((n) => n.classList.toggle("active", n === node)); document.querySelectorAll(".settings-pane").forEach((pane) => pane.classList.toggle("active", pane.dataset.settingsPane === node.dataset.settingsTab)); }));
@@ -1916,6 +1851,7 @@ $("inventoryCreateForm")?.addEventListener("submit", async (event)=>{
 });
 $("hostForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const submittedForm = event.currentTarget;
   $("hostFormError").textContent = "";
   const ports = {};
   $("hostPorts").querySelectorAll(".host-port").forEach((node) => { if (node.value !== "") ports[node.dataset.tool] = Number(node.value); });
@@ -1949,7 +1885,7 @@ $("hostForm").addEventListener("submit", async (event) => {
     devicePorts: collectDevicePorts(),
     customFields: collectHostCustomFields(),
   };
-  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(event.currentTarget); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else if(returnView==="radios") await openRadiosPage(false); else renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { $("hostFormError").textContent = error.message; toast(error.message); }
+  try { await request("/api/hosts", { method: "PUT", body }); markFormClean(submittedForm); $("hostDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); await ensureInventory(true); const returnView=state.hostReturnView; state.hostReturnView=null; if(returnView==="inventory") await openInventoryPage(true); else if(returnView==="radios") await openRadiosPage(false); else renderCurrent(); toast("اطلاعات IP ذخیره شد؛ هیچ رمز تجهیزی نگهداری نشد."); } catch (error) { $("hostFormError").textContent = error.message; toast(error.message); }
 });
 
 $("addDevicePort").addEventListener("click", () => appendDevicePort());
@@ -1995,10 +1931,9 @@ $("saveToolsSettings").addEventListener("click", async () => {
   try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارهای IP ذخیره شد."); } catch (error) { toast(error.message); }
 });
 
-$("deviceTypeForm").addEventListener("submit", async (event)=>{event.preventDefault();const id=$("deviceTypeId").value;try{await request(id?`/api/device-types/${encodeURIComponent(id)}`:"/api/device-types",{method:id?"PUT":"POST",body:{name:$("deviceTypeName").value,color:$("deviceTypeColor").value}});$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");await refreshDeviceTypes();await ensureInventory(true);toast("نوع تجهیز ذخیره شد.");}catch(error){toast(error.message);}});
-$("cancelDeviceTypeEdit").addEventListener("click",()=>{$("deviceTypeForm").reset();$("deviceTypeId").value="";$("cancelDeviceTypeEdit").classList.add("hidden");});
 $("personnelForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const submittedForm = event.currentTarget;
   const id = $("personnelId").value;
   const fullName = $("personnelName").value.trim();
   if (!fullName) return toast("نام و نام خانوادگی الزامی است.");
@@ -2016,7 +1951,7 @@ $("personnelForm").addEventListener("submit", async (event) => {
   };
   try {
     await request(id ? `/api/personnel/${encodeURIComponent(id)}` : "/api/personnel", { method: id ? "PUT" : "POST", body });
-    markFormClean(event.currentTarget);
+    markFormClean(submittedForm);
     resetPersonnelForm();
     await refreshPersonnel($("personnelSearch").value);
     toast(id ? "اطلاعات پرسنل ویرایش شد." : "پرسنل اضافه شد.");

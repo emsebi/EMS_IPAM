@@ -1,0 +1,20 @@
+{
+  "version": "1.7.0-rc.1",
+  "part": 1,
+  "status": "release-candidate",
+  "sourceVersion": "1.6.1",
+  "sourceArchiveSha256": "304b34a523c3cc87602764dcf30a5f63d5ebe219bb241bb97545b02cb767f3f7",
+  "builtAt": "2026-09-29T20:15:29.799597+00:00",
+  "tests": {
+    "nodePassed": 56,
+    "browserApiScenariosPassed": 10,
+    "databaseForLocalTests": "PGlite",
+    "dockerVerified": false,
+    "hardwareVerified": false
+  },
+  "modules": {
+    "radio": "2.0.0-rc.1",
+    "network-access": "0.1.0-rc.1",
+    "ipam": "1.7.0-rc.1"
+  }
+}

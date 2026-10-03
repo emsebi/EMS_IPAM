@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.6.1">
+  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.1">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -30,10 +30,16 @@
       </button>
       <nav class="primary-nav" aria-label="بخش‌های اصلی">
         <button id="companiesButton" class="navbtn active" type="button"><span class="nav-icon">⌂</span><span>داشبورد و شرکت‌ها</span></button>
-        <button id="ipamButton" class="navbtn" type="button"><span class="nav-icon">⌗</span><span>مدیریت IP</span></button>
-        <button id="inventoryButton" class="navbtn" type="button"><span class="nav-icon">▣</span><span>تجهیزات</span></button>
-        <button id="radiosButton" class="navbtn" type="button"><span class="nav-icon">◉</span><span>رادیوها</span></button>
-        <button id="personnelButton" class="navbtn admin-only" type="button"><span class="nav-icon">♙</span><span>پرسنل</span></button>
+        <details class="nav-group" open>
+          <summary>IP Manager</summary>
+          <div class="nav-submenu">
+          <button id="ipamButton" class="navbtn" type="button"><span class="nav-icon">⌗</span><span>IP Manage</span></button>
+          <button id="inventoryButton" class="navbtn" type="button"><span class="nav-icon">▣</span><span>Device List</span></button>
+          <button id="deviceTypesButton" class="navbtn admin-only" type="button"><span class="nav-icon">◇</span><span>Device Types</span></button>
+          <button id="radiosButton" class="navbtn" type="button"><span class="nav-icon">◉</span><span>Radios</span></button>
+          </div>
+        </details>
+        <button id="networkAccessButton" class="navbtn admin-only" type="button"><span class="nav-icon">♙</span><span>802.1X / MAC</span></button>
         <div class="nav-divider"></div>
         <div id="moduleNavigation" class="module-navigation"></div>
         <button id="settingsButton" class="navbtn admin-only" type="button"><span class="nav-icon">⚙</span><span>تنظیمات</span></button>
@@ -253,10 +259,8 @@
         <nav class="settings-nav">
           <button type="button" class="settings-tab active" data-settings-tab="general">عمومی</button>
           <button type="button" class="settings-tab" data-settings-tab="users">کاربران و دسترسی‌ها</button>
-          <button type="button" class="settings-tab" data-settings-tab="personnel">پرسنل</button>
           <button type="button" class="settings-tab" data-settings-tab="backup">پشتیبان‌گیری</button>
           <button type="button" class="settings-tab" data-settings-tab="appearance">ظاهر</button>
-          <button type="button" class="settings-tab" data-settings-tab="device-types">انواع تجهیزات</button>
           <button type="button" class="settings-tab" data-settings-tab="tools">ابزارهای IP</button>
           <button type="button" class="settings-tab" data-settings-tab="modules">ماژول‌ها</button>
           <button type="button" class="settings-tab" data-settings-tab="system">سیستم</button>
@@ -264,10 +268,8 @@
         <div class="settings-content modal-body">
           <section class="settings-pane active" data-settings-pane="general"><h4>تنظیمات عمومی</h4><p>Company، Site، Address Space و اطلاعات پایه از بخش‌های اصلی پنل مدیریت می‌شوند.</p><div class="settings-card"><b>نسخه برنامه</b><span id="settingsVersion" class="ltr mono"></span></div><div class="settings-card"><b>منطقه زمانی</b><span>Asia/Tehran</span></div></section>
           <section class="settings-pane" data-settings-pane="users"><h4>کاربران و دسترسی‌ها</h4><p>ایجاد، ویرایش، غیرفعال‌سازی و حذف Admin / Support / Helpdesk / Viewer.</p><button id="openUsersFromSettings" class="btn primary" type="button">مدیریت کاربران</button></section>
-          <section class="settings-pane" data-settings-pane="personnel"><h4>پرسنل</h4><p>لیست مرکزی پرسنل برای اتصال به MACها و تجهیزات شخصی.</p><button id="openPersonnelFromSettings" class="btn primary" type="button">مدیریت پرسنل</button></section>
           <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
           <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
-          <section class="settings-pane" data-settings-pane="device-types"><h4>انواع تجهیزات</h4><p>لیست تجهیزات ثابت نیست؛ نوع جدید بسازید، ویرایش یا حذف کنید.</p><form id="deviceTypeForm" class="inline-form"><input id="deviceTypeId" type="hidden"><input id="deviceTypeName" placeholder="مثلاً Modem / Thin Client / Laptop" required><input id="deviceTypeColor" type="color" value="#3157d5" title="رنگ نوع تجهیز"><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></form><div id="deviceTypesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
           <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
           <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
@@ -403,6 +405,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.6.1"></script>
+  <script type="module" src="/app.js?v=1.7.0-rc.1"></script>
 </body>
 </html>

@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 
-const read = (path) => fs.readFile(new URL(path, import.meta.url), "utf8");
+const read = async (path) => {
+  let text=await fs.readFile(new URL(path, import.meta.url), "utf8");
+  if(path==="../public/app.js") text+=await fs.readFile(new URL("../../modules/radio/public/index.mjs",import.meta.url),"utf8");
+  if(path==="../server/main.mjs") text+=await fs.readFile(new URL("../../modules/radio/backend/index.mjs",import.meta.url),"utf8");
+  return text;
+};
 
 test("BASE navigation and restricted branch role are wired end to end", async () => {
   const [html, app, server, schema] = await Promise.all([
@@ -11,7 +16,8 @@ test("BASE navigation and restricted branch role are wired end to end", async ()
     read("../server/main.mjs"),
     read("../server/schema.sql"),
   ]);
-  assert.match(html, /id="personnelButton"/);
+  assert.doesNotMatch(html, /id="personnelButton"/);
+  assert.match(html, /id="networkAccessButton"/);
   assert.match(html, /option value="branch"/);
   assert.match(app, /role === "branch" \? "Branch"/);
   assert.match(server, /"branch"/);
@@ -50,7 +56,7 @@ test("only Persian and English languages are registered", async () => {
 
 test("Portainer stack matches the BASE IPAM Radio release", async () => {
   const stack = await read("../../portainer-stack.yml");
-  assert.match(stack, /ems-ipam-base:1\.6\.1/);
+  assert.match(stack, /ems-ipam-base:1\.7\.0-rc\.1/);
   assert.match(stack, /\.\/modules:\/modules:ro/);
   assert.doesNotMatch(stack, /EMS_SECRET_KEY|modules\/network-map|modules\/radius/);
 });

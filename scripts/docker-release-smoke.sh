@@ -43,8 +43,11 @@ compose build --pull app
 compose up -d --wait
 
 HEALTH="$(curl -fsS "http://127.0.0.1:${EMS_HTTP_PORT}/health")"
-[[ "$HEALTH" == *'"version":"1.6.1"'* && "$HEALTH" == *'"radio"'* ]] || fail "Health response does not report v1.6.1 and Radio."
+[[ "$HEALTH" == *'"version":"1.7.0-rc.1"'* && "$HEALTH" == *'"radio"'* ]] || fail "Health response does not report v1.7.0-rc.1 and Radio."
 pass "fresh install health"
+CLIENT_VERSION="$(compose exec -T app pg_dump --version)"
+[[ "$CLIENT_VERSION" == *' 16.'* ]] || fail "App backup client must use PostgreSQL 16: $CLIENT_VERSION"
+pass "PostgreSQL backup client version"
 
 COOKIE_JAR="$TEST_ROOT/cookies.txt"
 LOGIN="$(curl -fsS -c "$COOKIE_JAR" -H 'Content-Type: application/json' -H 'X-EMS-CSRF: 1' \
@@ -63,8 +66,16 @@ pass "authenticated write API"
 BACKUP="$(curl -fsS -b "$COOKIE_JAR" -H 'X-EMS-CSRF: 1' -X POST \
   "http://127.0.0.1:${EMS_HTTP_PORT}/api/backups")"
 [[ "$BACKUP" == *'"ok":true'* ]] || fail "Backup API failed."
-find "$EMS_STATE_DIR/backups" -type f -size +0c -name '*.sql.gz' -print -quit | grep -q . || fail "Backup file is missing or empty."
+BACKUP_FILE="$(find "$EMS_STATE_DIR/backups" -type f -size +0c -name '*.tar.gz' -print -quit)"
+[[ -n "$BACKUP_FILE" ]] || fail "Backup file is missing or empty."
+gzip -t "$BACKUP_FILE"
+tar -tzf "$BACKUP_FILE" | grep -qx 'database.dump' || fail "Database dump missing from backup."
 pass "database backup"
+compose exec -T db createdb -U "$POSTGRES_USER" ems_ipam_restore_test
+tar -xOzf "$BACKUP_FILE" database.dump | compose exec -T db pg_restore -U "$POSTGRES_USER" -d ems_ipam_restore_test --no-owner --no-privileges --exit-on-error
+RESTORED_COUNT="$(compose exec -T db psql -U "$POSTGRES_USER" -d ems_ipam_restore_test -Atc "SELECT count(*) FROM companies WHERE name='$COMPANY_NAME'")"
+[[ "$RESTORED_COUNT" == "1" ]] || fail "Backup restore did not recover the test company."
+pass "backup restores into a separate test database"
 
 compose down --remove-orphans
 compose up -d --wait

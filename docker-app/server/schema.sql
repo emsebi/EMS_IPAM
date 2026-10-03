@@ -343,14 +343,6 @@ CREATE TABLE IF NOT EXISTS user_module_access (
   PRIMARY KEY(user_id,module_id)
 );
 CREATE INDEX IF NOT EXISTS user_module_access_module_idx ON user_module_access(module_id,user_id);
--- Preserve access for users created before module permissions existed.
-INSERT INTO user_module_access(user_id,module_id)
-SELECT id,'ipam' FROM users WHERE role <> 'admin'
-ON CONFLICT DO NOTHING;
-INSERT INTO user_module_access(user_id,module_id)
-SELECT id,'inventory' FROM users WHERE role <> 'admin'
-ON CONFLICT DO NOTHING;
-
 -- Base v1.5: administrator-managed device taxonomy shared by IPAM, inventory and future modules.
 CREATE TABLE IF NOT EXISTS device_types (
   id text PRIMARY KEY,
@@ -359,19 +351,3 @@ CREATE TABLE IF NOT EXISTS device_types (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-INSERT INTO device_types(id,name,color) VALUES
-  ('builtin-server','Server','#3157d5'),
-  ('builtin-vm','Virtual Machine','#805ad5'),
-  ('builtin-pc','Desktop','#2fa36f'),
-  ('builtin-laptop','Laptop','#2b9ca8'),
-  ('builtin-thin-client','Thin Client','#64748b'),
-  ('builtin-router','Router','#e48a2d'),
-  ('builtin-switch','Switch','#3157d5'),
-  ('builtin-firewall','Firewall','#d94b5b'),
-  ('builtin-modem','Modem','#c2418c'),
-  ('builtin-radio','Radio','#2fa36f'),
-  ('builtin-camera','Camera','#64748b'),
-  ('builtin-ap','Access Point','#2b9ca8'),
-  ('builtin-printer','Printer','#e48a2d'),
-  ('builtin-other','Other','#64748b')
-ON CONFLICT(name) DO NOTHING;

@@ -1,44 +1,42 @@
-# گزارش تست EMS IPAM v1.6.1
+# گزارش تست پارت اول — 1.7.0-rc.1
 
-## نتیجه تست‌های اجراشده
+تاریخ اجرا: 2026-09-29. این گزارش جای گزارش قدیمی v1.6.1 را می‌گیرد.
 
-- `npm ci` از روی Lockfile — PASS
-- Node test suite — **54/54 PASS**
-- اجرای Schema روی PostgreSQL سازگار (PGlite) — PASS
-- اجرای دوباره Schema روی همان دیتابیس (Idempotency) — PASS
-- Migration نقش قدیمی `editor` به `support` و ثبت نقش `branch` — PASS
-- `node --check` برای Server، App و Mock API — PASS
-- `bash -n` برای Installer و Docker smoke test — PASS
-- Parse هر دو فایل `compose.yml` و `portainer-stack.yml` — PASS
-- نصب Production dependencyها با `npm ci --omit=dev --ignore-scripts` — PASS
-- `git diff --check` — PASS
+| لایه | نتیجه |
+|---|---|
+| npm test، Node 24.19 | ۵۶ تست، ۵۶ پاس، بدون Fail/Skip؛ شامل بررسی‌های ایستا، منطق IP/امنیت و SQL/PGlite |
+| npm run test:browser | ۱۰ سناریوی مرورگر و API پاس؛ سرور واقعی برنامه با جایگزین تست دیتابیس PGlite، Chromium 153 |
+| bash -n و node --check | نحو اسکریپت‌های نصب و فایل‌های JS/MJS بررسی شد |
+| Docker Build/Compose | اجرا نشده؛ Docker در این محیط موجود نیست |
+| PostgreSQL 16 از طریق pg/TCP و pg_dump/restore | اجرا نشده؛ اسکریپت تست جدا در بسته قرار دارد |
+| Cisco/MikroTik، Ping واقعی و Windows Client | روی تجهیز/ویندوز واقعی اجرا نشده |
+| بار ۱۰۰ تا ۵۰۰ دستگاه، ارتقا و Rollback سرتاسری | هنوز اجرا نشده؛ جزو گیت‌های بعدی |
 
-## پوشش اصلی
+## سناریوهای عملی اجراشده
 
-- Authentication، Session، آخرین Admin و نقش محدود Branch
-- Company/Branch/Site، Personnel و دسترسی Scopeشده
-- IPAM از `/16` تا IP، Migrationها و Import/Export
-- Inventory، فیلتر شرکت، Device Type و CSV
-- جداسازی Capability ماژول از Role و کشف `module.json`
-- Radio AP/Station، Station بدون AP، جستجوی والد/فرزند و عملیات مستقل Edit/IPAM/Ping
-- عدم ذخیره رمز تجهیزات و حذف Helper قدیمی Secret
-- Backup دستی/زمان‌بندی‌شده، Update ایمن و Rollback فایل برنامه
-- منوی پنج‌گزینه‌ای Installer، نصب مستقیم از ZIP و تنظیم Cookie Secure
-- فقط دو زبان فارسی و انگلیسی و ثابت‌ماندن Sidebar در سمت چپ
-- ثبت پرسنل فقط با نام و nullable بودن کد پرسنلی در Schema واقعی
-- افزودن و ویرایش Host/Equipment در Schema واقعی
-- حفظ AP والد در افزودن Station و حفظ آخرین رنج IPAM
-- ارتفاع واکنش‌گرای نقشه در Viewportهای 1080 و 1440
-- کلاینت Windows v0.7.1 و ارسال فقط `IP:PORT` به WinBox
+1. health دیتابیس و رد درخواست بدون ورود.
+2. ورود واقعی و دریافت Bootstrap.
+3. افزودن Device Type از صفحه مستقل.
+4. ساخت و ویرایش IP/تجهیز از رابط، انتخاب Type و ذخیره MAC/VLAN.
+5. انتقال تغییر نام Type به Host، رد حذف Type استفاده‌شده و حذف Type آزاد.
+6. انتخاب AP، نمایش فقط Stationهای همان AP، حفظ Parent هنگام افزودن، عرض‌های 1440/820/390 و منوی موبایل.
+7. نمایش MAC ثبت‌شده، ثبت پرسنل فقط با نام، تازه‌شدن فهرست پس از بستن فرم، جست‌وجو و Export.
+8. بازشدن Settings بدون فرم تودرتو و حذف محل قدیمی Type/Personnel.
+9. کاربر Viewer با دسترسی واگذارشده می‌خواند؛ ثبت Type/Host و دیدن فهرست پرسنل برای او رد می‌شود.
+10. بدون خطای JavaScript مدیریت‌نشده در جریان‌های بالا.
 
-## تست Docker
+آزمایش مهاجرت، راه‌اندازی تکراری و حفظ Type تغییرنام‌یافته/حذف‌شده و دسترسی لغوشده را بررسی می‌کند؛ همچنین حفظ فهرست عمداً خالی هنگام ارتقا را. این تست جای تمرین ارتقای دیتابیس واقعی کاربر را نمی‌گیرد.
 
-در محیط Build فعلی Docker CLI و Docker daemon وجود ندارد؛ بنابراین اجرای واقعی Containerها در همین محیط ممکن نبود و نباید به‌عنوان PASS گزارش شود.
+## اصلاحات حاصل از بررسی/تست
 
-اسکریپت `scripts/docker-release-smoke.sh` برای اجرای ایزوله روی میزبان Docker آماده شده است. این تست Compose config، Build، Fresh start، Health، Login، API نوشتن، Backup واقعی `pg_dump` و ماندگاری داده پس از بازسازی Containerها را بررسی می‌کند و در پایان Volume و Network آزمایشی خودش را حذف می‌کند.
+فرم تو‌در‌توی Device Types؛ اجرای مجدد Seed در startup؛ حفظ ثبت نسخه مهاجرت؛ نام مبهم ستون‌های جست‌وجو/Export پرسنل؛ تازه‌نشدن لیست پس از ثبت پرسنل؛ انتخاب AP به جای چند ستون موازی؛ نمایش زیرمنو در موبایل؛ health وابسته به آماده‌بودن دیتابیس؛ حذف نادرست سرویس‌های اختیاری هنگام update.
 
-```bash
-sudo ./scripts/docker-release-smoke.sh
-```
+بررسی Dockerfile نشان داد کلاینت دیتابیس باید با سرور هماهنگ باشد. client16 صریح نصب شد؛ بکاپ pg_dump نسخه قدیمی‌تر از major سرور را نمی‌توان معتبر دانست. مرجع: https://www.postgresql.org/docs/16/app-pgdump.html و روش مخزن رسمی: https://www.postgresql.org/download/linux/debian/ . ساخت واقعی این Dockerfile هنوز گیت باز است.
 
-این تنها مورد باقی‌مانده برای تأیید «اجرای واقعی Docker» است.
+## شواهد و تکرار
+
+test-results/unit-test.log، browser-test.log، browser-result.json و تصاویر اجرای واقعی همراه بسته هستند. آزمون مرورگر Mock API نیست، اما در لایه دیتابیس از آداپتور موقت PGlite استفاده می‌کند. خطاهای 403 عمدی در embedded-server.log مربوط به بررسی مجوزها هستند.
+
+تکرار توسعه: `cd docker-app`، `npm ci`، `npm test`؛ سپس `npx playwright install chromium` و `npm run test:browser`.
+
+تست نصب و بازیابی واقعی: از ریشه پروژه `sudo bash scripts/docker-release-smoke.sh` روی VM آزمایشی. موفقیت این تست و چک‌لیست START-HERE شرط پذیرش پارت ۱ است. عبارت «بدون ایراد شناخته‌شده در سناریوهای تست‌شده» با تضمین نبود هر خطا در هر شبکه متفاوت است.

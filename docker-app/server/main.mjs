@@ -5,7 +5,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createDatabase } from "./db.mjs";
 import {
   clearSessionCookie,
@@ -37,7 +37,7 @@ const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.7.0-rc.1";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
 const MODULE_CATALOG = Object.freeze([
@@ -64,6 +64,7 @@ async function discoverModules() {
       const manifest = JSON.parse(raw);
       if (manifest.id !== entry.name) throw new Error("module id must match folder name");
       if (manifest.enabled === false) continue;
+      if (manifest.apiVersion && manifest.apiVersion !== 1) throw new Error("Unsupported module API version");
       modules.push({
         id: manifest.id,
         name: cleanTextEnvironment(manifest.name || manifest.id),
@@ -73,6 +74,8 @@ async function discoverModules() {
         proxy: manifest.proxy && typeof manifest.proxy === "object" ? manifest.proxy : null,
         roles: Array.isArray(manifest.roles) ? manifest.roles.slice(0, 20).map((item) => cleanTextEnvironment(item)) : [],
         permissions: Array.isArray(manifest.permissions) ? manifest.permissions.slice(0, 50) : [],
+        backend: typeof manifest.backend === "string" ? manifest.backend : null,
+        apiVersion: manifest.apiVersion || 1,
         dir,
       });
     } catch (error) {
@@ -856,49 +859,11 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true, catalog: MODULE_CATALOG, modules: installedModules.filter((item) => user.role === "admin" || allowed.has(item.id)).map(({ dir, proxy, ...item }) => item) });
   }
 
+  const moduleHandler = moduleHandlers.find((handler) => handler.match(req,url));
+  if (moduleHandler) return await moduleHandler.handle(req,res,url,user);
+
   if (req.method === "GET" && pathname === "/api/search") {
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
-  }
-
-  if (req.method === "GET" && pathname === "/api/device-types") {
-    const rows = await pool.query(`SELECT id,name,color,created_at AS "createdAt",updated_at AS "updatedAt" FROM device_types ORDER BY lower(name)`);
-    return json(res, 200, { ok: true, items: rows.rows });
-  }
-
-  if (req.method === "POST" && pathname === "/api/device-types") {
-    requireAdmin(user);
-    const body = await readBody(req);
-    const name = cleanText(body.name, 100);
-    if (!name) throw new Error("نام نوع تجهیز الزامی است.");
-    const id = crypto.randomUUID();
-    await pool.query(`INSERT INTO device_types(id,name,color) VALUES($1,$2,$3)`, [id,name,validColor(body.color,"#3157d5")]);
-    await audit(user,"create","device_type",id,{detail:{name}});
-    return json(res,201,{ok:true,id});
-  }
-
-  const deviceTypeMatch = pathname.match(/^\/api\/device-types\/([^/]+)$/);
-  if (deviceTypeMatch && req.method === "PUT") {
-    requireAdmin(user);
-    const body = await readBody(req);
-    const name = cleanText(body.name,100);
-    if (!name) throw new Error("نام نوع تجهیز الزامی است.");
-    const before = await pool.query("SELECT name FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
-    if (!before.rowCount) throw Object.assign(new Error("نوع تجهیز پیدا نشد."),{status:404});
-    await pool.query("UPDATE device_types SET name=$2,color=$3,updated_at=now() WHERE id=$1",[deviceTypeMatch[1],name,validColor(body.color,"#3157d5")]);
-    await pool.query("UPDATE hosts SET type=$2,updated_at=now() WHERE type=$1",[before.rows[0].name,name]);
-    await audit(user,"update","device_type",deviceTypeMatch[1],{detail:{name}});
-    return json(res,200,{ok:true});
-  }
-
-  if (deviceTypeMatch && req.method === "DELETE") {
-    requireAdmin(user);
-    const found = await pool.query("SELECT name FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
-    if (!found.rowCount) throw Object.assign(new Error("نوع تجهیز پیدا نشد."),{status:404});
-    const used = await pool.query("SELECT count(*)::int AS count FROM hosts WHERE type=$1 AND deleted_at IS NULL",[found.rows[0].name]);
-    if (used.rows[0].count > 0) throw new Error(`این نوع تجهیز توسط ${used.rows[0].count} تجهیز استفاده می‌شود؛ ابتدا نوع آن تجهیزات را تغییر دهید.`);
-    await pool.query("DELETE FROM device_types WHERE id=$1",[deviceTypeMatch[1]]);
-    await audit(user,"delete","device_type",deviceTypeMatch[1]);
-    return json(res,200,{ok:true});
   }
 
   if (req.method === "GET" && pathname === "/api/inventory/export") {
@@ -920,7 +885,7 @@ async function api(req, res, url, user) {
     requireAdmin(user);
     const q = cleanText(url.searchParams.get("q") || "",120);
     const params=[]; let where="";
-    if (q) { params.push(`%${normalizePersian(q)}%`); where=`WHERE concat_ws(' ',employee_code,full_name,phone,mobile,email,department,job_title) ILIKE $1`; }
+    if (q) { params.push(`%${normalizePersian(q)}%`); where=`WHERE concat_ws(' ',p.employee_code,p.full_name,p.phone,p.mobile,p.email,p.department,p.job_title) ILIKE $1`; }
     const rows=await pool.query(`SELECT p.employee_code,p.full_name,p.mobile,p.phone,p.email,p.department,p.job_title,c.name AS company_name,p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name`,params);
     return csvResponse(res,"ems-ipam-personnel.csv",[["Employee Code","Full Name","Mobile","Phone","Email","Department","Job Title","Company","Notes","Active"],...rows.rows.map((r)=>[r.employee_code,r.full_name,r.mobile,r.phone,r.email,r.department,r.job_title,r.company_name,r.notes,r.active?"true":"false"])]);
   }
@@ -956,9 +921,13 @@ async function api(req, res, url, user) {
     const q = cleanText(url.searchParams.get("q") || "", 120);
     const params = [];
     let where = "";
-    if (q) { params.push(`%${normalizePersian(q)}%`); where = `WHERE concat_ws(' ',employee_code,full_name,phone,mobile,email,department) ILIKE $1`; }
-    const rows = await pool.query(`SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName",p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name LIMIT 50`, params);
-    return json(res, 200, { ok: true, items: rows.rows });
+    if (q) { params.push(`%${normalizePersian(q)}%`); where = `WHERE concat_ws(' ',p.employee_code,p.full_name,p.phone,p.mobile,p.email,p.department) ILIKE $1`; }
+    const rawLimit=Number(url.searchParams.get("limit")||50), rawOffset=Number(url.searchParams.get("offset")||0);
+    const limit=Number.isInteger(rawLimit)?Math.max(1,Math.min(200,rawLimit)):50;
+    const offset=Number.isInteger(rawOffset)?Math.max(0,rawOffset):0;
+    const rows = await pool.query(`SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName",p.notes,p.active FROM personnel p LEFT JOIN companies c ON c.id=p.company_id ${where} ORDER BY p.full_name,p.id LIMIT $${params.length+1} OFFSET $${params.length+2}`, [...params,limit,offset]);
+    const total=(await pool.query(`SELECT count(*)::int AS count FROM personnel p ${where}`,params)).rows[0].count;
+    return json(res, 200, { ok: true, items: rows.rows,total,limit,offset });
   }
 
   if (req.method === "POST" && pathname === "/api/personnel") {
@@ -1679,26 +1648,6 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true, online, total: ips.length, results: Object.fromEntries(results) });
   }
 
-  if (req.method === "POST" && pathname === "/api/ping/host") {
-    await requireModuleAccess(user, "radio");
-    const body = await readBody(req);
-    const id = cleanText(body.id, 80);
-    const found = await pool.query(
-      `SELECT h.id,h.space_id AS "spaceId",h.ip,s.company_id AS "companyId"
-         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
-        WHERE h.id=$1 AND h.radio_mode IN ('ap','station') AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,
-      [id],
-    );
-    const host = found.rows[0];
-    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("تجهیز پیدا نشد یا دسترسی ندارید."), { status: 404 });
-    const results = await pingMany([host.ip], { concurrency: 1, timeoutSeconds: 1 });
-    await storePingResults(host.spaceId, results);
-    const online = results.get(host.ip) === true;
-    await audit(user, "ping", "host", host.id, { companyId: host.companyId, spaceId: host.spaceId, detail: { ip: host.ip, online } });
-    broadcast({ type: "host", companyId: host.companyId, spaceId: host.spaceId, entityId: host.id });
-    return json(res, 200, { ok: true, ip: host.ip, online });
-  }
-
   if (req.method === "GET" && pathname === "/api/users") {
     requireAdmin(user);
     const users = await pool.query(
@@ -1917,6 +1866,24 @@ function proxyModule(req, res, module) {
   });
 }
 
+const moduleHandlers = [];
+for (const module of [...installedModules]) {
+  if (!module.backend) continue;
+  try {
+    const moduleRoot = await fs.realpath(module.dir);
+    const entry = await fs.realpath(path.resolve(moduleRoot,module.backend));
+    if (!entry.startsWith(moduleRoot + path.sep)) throw new Error("Invalid module backend path");
+    const { createModule } = await import(pathToFileURL(entry).href);
+    const handler = createModule({ pool,json,readBody,cleanText,validColor,requireAdmin,audit,broadcast,
+      requireModuleAccess,canAccessSpace,pingMany,storePingResults });
+    if (typeof handler.match !== "function" || typeof handler.handle !== "function") throw new Error("Invalid module contract");
+    moduleHandlers.push(handler);
+  } catch (error) {
+    console.warn(`[module] disabled ${module.id}: ${error.message}`);
+    installedModules = installedModules.filter((item) => item !== module);
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
@@ -1930,7 +1897,11 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "GET" && await staticModuleFile(res, module, url.pathname)) return;
       return errorResponse(res, 404, "فایل ماژول پیدا نشد.");
     }
-    if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, version: APP_VERSION, modules: installedModules.map((item) => item.id) });
+    if (req.method === "GET" && url.pathname === "/health") {
+      try { await pool.query("SELECT 1"); }
+      catch { return json(res,503,{ok:false,database:"unavailable",version:APP_VERSION}); }
+      return json(res,200,{ok:true,version:APP_VERSION,database:"ready",modules:installedModules.map((item)=>item.id)});
+    }
     if (url.pathname.startsWith("/api/")) {
       if (!csrfAllowed(req)) return errorResponse(res, 403, "درخواست فاقد نشان امنیتی معتبر است.");
       return await api(req, res, url, await currentUser(req));

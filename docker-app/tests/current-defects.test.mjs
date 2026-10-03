@@ -27,7 +27,7 @@ test("inventory create and edit use a loaded host editor and report save errors"
 });
 
 test("station shortcut keeps the AP selected", async () => {
-  const app = await read("../public/app.js");
+  const app = (await read("../public/app.js")) + (await read("../../modules/radio/public/index.mjs"));
   assert.match(app, /radioParentHostId: mode === "station" \? parentId : null/);
   assert.match(app, /openHostDialog\(ip, overrides = \{\}\)/);
   assert.match(app, /const selectedParent = value\.radioParentHostId \|\| ""/);

@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import { migrateDatabase } from "./migrations.mjs";
 import crypto from "node:crypto";
 import pg from "pg";
 import { hashPassword } from "./auth.mjs";
@@ -24,8 +24,7 @@ export function createDatabase(connectionString) {
 
   async function initialize({ adminUsername, adminPassword }) {
     await waitForDatabase();
-    const schema = await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8");
-    await pool.query(schema);
+    await migrateDatabase(pool);
     await pool.query("DELETE FROM sessions WHERE expires_at < now()");
 
     const userCount = Number((await pool.query("SELECT count(*) AS count FROM users")).rows[0].count);

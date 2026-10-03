@@ -24,6 +24,11 @@ validate_paths(){
   case "$INSTALL_DIR" in /|/opt|/usr|/var|/home|/root) fail "Unsafe install directory: $INSTALL_DIR" ;; esac
   case "$STATE_DIR" in /|/opt|/usr|/var|/home|/root) fail "Unsafe state directory: $STATE_DIR" ;; esac
   [[ "$INSTALL_DIR" != "$STATE_DIR" ]] || fail "Install and state directories must be different."
+  local install_real state_real
+  install_real="$(realpath -m "$INSTALL_DIR")"
+  state_real="$(realpath -m "$STATE_DIR")"
+  [[ "$install_real" == "$INSTALL_DIR" && "$state_real" == "$STATE_DIR" ]] || fail "Use canonical paths without symlinks or parent traversal."
+  [[ "$state_real/" != "$install_real/"* && "$install_real/" != "$state_real/"* ]] || fail "Install and state directories must not contain each other."
 }
 
 read_default(){
@@ -87,7 +92,7 @@ install_prerequisites(){
     apt-get update -y
     apt-get install -y docker-compose-plugin || fail "Docker Compose plugin installation failed."
   fi
-  ensure_portainer
+  if [[ "${EMS_INSTALL_PORTAINER:-false}" == "true" ]]; then ensure_portainer; fi
   log "Prerequisites are ready"
 }
 
@@ -161,7 +166,7 @@ start_optional_modules(){
   fi
   ((${#fragments[@]})) || return 0
   log "Starting optional modules"
-  if ! compose_all_cmd up -d --remove-orphans; then
+  if ! compose_all_cmd up -d; then
     warn "One or more optional modules failed to start. Core + IPAM remain installed; review the module logs separately."
     compose_core_cmd up -d >/dev/null 2>&1 || true
   fi
@@ -204,7 +209,7 @@ wait_health(){
     if curl -fsS --max-time 3 "http://127.0.0.1:${EMS_HTTP_PORT}/health" >/dev/null 2>&1; then
       local ip
       ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      printf '\n[EMS IPAM] READY\nPanel: http://%s:%s\nPortainer: https://%s:9443\nInstall dir: %s\nState dir: %s\n\n' "${ip:-SERVER-IP}" "$EMS_HTTP_PORT" "${ip:-SERVER-IP}" "$INSTALL_DIR" "$STATE_DIR"
+      printf '\n[EMS IPAM] READY\nPanel: http://%s:%s\nInstall dir: %s\nState dir: %s\n\n' "${ip:-SERVER-IP}" "$EMS_HTTP_PORT" "$INSTALL_DIR" "$STATE_DIR"
       return 0
     fi
     sleep 2
@@ -245,6 +250,7 @@ backup_database(){
     fail "Database backup failed. Update cancelled; application files and database were not changed."
   fi
   [[ -s "$tmp" ]] || { rm -f "$tmp"; fail "Database backup is empty. Update cancelled without changing application files."; }
+  gzip -t "$tmp" || { rm -f "$tmp"; fail "Backup integrity check failed."; }
   mv "$tmp" "$file"
   chown 1000:1000 "$file"
   chmod 600 "$file"
@@ -297,7 +303,7 @@ install_app(){
   log "Building and starting EMS IPAM Core + IPAM"
   compose_core_cmd pull db
   compose_core_cmd build --pull app
-  compose_core_cmd up -d --remove-orphans
+  compose_core_cmd up -d db app
   wait_health || fail "EMS IPAM did not become healthy. Logs are shown above."
   start_optional_modules
 }
@@ -309,24 +315,30 @@ update_app(){
   download_source
   local previous="${INSTALL_DIR}.previous.$(date +%Y%m%d-%H%M%S)" staged="${INSTALL_DIR}.new.$$"
   cp -a "$SOURCE_DIR" "$staged"
+  # Preserve separately installed modules absent from the core release.
+  local extra
+  for extra in "$INSTALL_DIR"/modules/*; do
+    [[ -d "$extra" && -f "$extra/module.json" ]] || continue
+    [[ -e "$staged/modules/$(basename "$extra")" ]] || cp -a "$extra" "$staged/modules/"
+  done
   touch "$staged/.ems-ipam-install"
   mv "$INSTALL_DIR" "$previous"
   mv "$staged" "$INSTALL_DIR"
   sync_env_link
   log "Updating application files"
-  if compose_core_cmd pull db && compose_core_cmd build --pull app && compose_core_cmd up -d --remove-orphans && wait_health; then
+  if compose_core_cmd build --pull app && compose_core_cmd up -d --no-deps app && wait_health; then
     start_optional_modules
     rm -rf "$previous"
     log "Update completed successfully"
     return
   fi
   warn "Update failed; restoring previous application files"
-  compose_core_cmd down --remove-orphans >/dev/null 2>&1 || true
+  compose_core_cmd stop app >/dev/null 2>&1 || true
   rm -rf "$INSTALL_DIR"
   mv "$previous" "$INSTALL_DIR"
   sync_env_link
   compose_core_cmd build app >/dev/null 2>&1 || true
-  compose_core_cmd up -d --remove-orphans >/dev/null 2>&1 || true
+  compose_core_cmd up -d db app >/dev/null 2>&1 || true
   wait_health || true
   fail "Update failed and application files were rolled back. Database/state were preserved."
 }

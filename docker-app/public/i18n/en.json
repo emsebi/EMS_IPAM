@@ -163,7 +163,7 @@
   "آدرس IP": "IP Address",
   "ادامه و تکمیل اطلاعات": "Continue to Details",
   "IP باید داخل رنج انتخاب‌شده باشد.": "The IP must be inside the selected network.",
-  "نوع تجهیزی ثبت نشده است.": "No device types have been defined.",
+  "نوع تجهیزی ثبت نشده است.": "No device types have been registered.",
   "نوع تجهیز ذخیره شد.": "Device type saved.",
   "این نوع تجهیز حذف شود؟": "Delete this device type?",
   "رنگ نوع تجهیز": "Device Type Color",
@@ -215,5 +215,17 @@
   "فایل پشتیبان ساخته شد.": "Backup created.",
   "برنامه پشتیبان‌گیری خودکار ذخیره شد.": "Automatic backup schedule saved.",
   "تغییرات ذخیره نشده است. بدون ذخیره خارج می‌شوید؟": "There are unsaved changes. Leave without saving?",
-  "تغییرات این IP ذخیره نشده است. بدون ذخیره به IP بعدی برویم؟": "This IP has unsaved changes. Move without saving?"
+  "تغییرات این IP ذخیره نشده است. بدون ذخیره به IP بعدی برویم؟": "This IP has unsaved changes. Move without saving?",
+  "نام نوع تجهیز": "Device Type Name",
+  "این فهرست در فرم اطلاعات IP و فیلتر دستگاه‌ها استفاده می‌شود.": "This catalog is used in IP records and device filters.",
+  "هر AP را انتخاب کنید تا فقط Stationهای همان AP نمایش داده شوند.": "Select an AP to display its stations.",
+  "Stationهای این AP": "Stations on this AP",
+  "Stationهای بدون AP": "Stations without an AP",
+  "رادیویی مطابق جست‌وجو پیدا نشد.": "No matching radios.",
+  "Station ثبت نشده است.": "No stations registered.",
+  "MAC و پرسنل": "MAC and Personnel",
+  "MACهای ثبت‌شده در IPAM. خواندن از سوئیچ و اعمال دسترسی Radius در مراحل بعدی اضافه می‌شود.": "MAC records stored in IPAM. Switch collection and RADIUS enforcement are planned for later parts.",
+  "فهرست پرسنل برای ارتباط با دستگاه‌ها و MACها.": "Personnel records for linking people to devices and MACs.",
+  "ثبت و مدیریت پرسنل": "Manage Personnel",
+  "موردی ثبت نشده است.": "No records found."
 }

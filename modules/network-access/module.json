@@ -1,0 +1,5 @@
+{
+  "id":"network-access", "name":"802.1X / MAC records", "version":"0.1.0-rc.1",
+  "apiVersion":1, "enabled":true, "roles":["admin"], "permissions":["network-access.read"],
+  "description":"Base records only: IPAM MAC list and personnel. RADIUS enforcement and switch collection arrive in later parts."
+}

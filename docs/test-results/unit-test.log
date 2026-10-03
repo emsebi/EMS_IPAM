@@ -1,0 +1,69 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ems-ipam-container@1.7.0-rc.1 test
+> node --test tests/*.test.mjs
+
+✔ passwords are salted and verified (306.966166ms)
+✔ short non-empty passwords are accepted without a forced length (95.929228ms)
+✔ BASE navigation and restricted branch role are wired end to end (17.683058ms)
+✔ module capabilities are not mistaken for user roles (7.187277ms)
+✔ Inventory company scope and Radio actions have distinct paths (18.334565ms)
+✔ only Persian and English languages are registered (1.365738ms)
+✔ Portainer stack matches the BASE IPAM Radio release (1.576556ms)
+✔ personnel creation requires only full name (13.547896ms)
+✔ inventory create and edit use a loaded host editor and report save errors (7.925353ms)
+✔ station shortcut keeps the AP selected (2.343692ms)
+✔ IPAM remembers the exact space and sheet across module navigation (2.03023ms)
+✔ larger viewport exposes more IP rows (0.381966ms)
+✔ WinBox uses the repaired client protocol and receives only target (7.825673ms)
+✔ schema keeps companies, IP, scoped access and topology in one database (8.059495ms)
+✔ server exposes inventory, global search, topology and downloadable backups (6.588188ms)
+✔ native VNC viewer uses its standard default port (3.52382ms)
+✔ destructive and scoped workflows keep their safety guards (2.85299ms)
+✔ installer uses the official repository and ASCII terminal messages (12.987953ms)
+✔ installer validates GitHub archive before extraction (1.739462ms)
+✔ installer exposes five safe lifecycle actions and asks fresh settings (4.37946ms)
+✔ Windows connection client auto-detects tools and passes usernames without passwords (1.568423ms)
+✔ IPv4 conversion is stable (1.14106ms)
+✔ CIDR is normalized and alignment is reported (0.63034ms)
+✔ parent child containment works (0.383919ms)
+✔ root ranges and ports are validated (0.726835ms)
+✔ gateway is calculated from the selected network (0.29192ms)
+✔ fresh install, revocation and renamed/deleted types survive repeated startup (2027.026956ms)
+✔ upgrade existing 1.6-style database preserves intentionally empty catalog and permissions (1237.635883ms)
+✔ generated MikroTik setup defaults to simple read-only API without a certificate (3.364279ms)
+✔ MikroTik helper has no device connection or polling implementation (7.252234ms)
+✔ Jalali helpers use Tehran time and filesystem-safe names (37.857794ms)
+✔ MikroTik backup metadata is normalized without changing Persian identity (3.127784ms)
+✔ backup implementation passes passwords only through the process environment (21.776627ms)
+✔ installation guide names Docker and Portainer before installation (2.181678ms)
+✔ portable subnet export stays scoped and excludes every secret (3.426734ms)
+✔ portable subnet import uses a transaction and valid SQL parameter counts (1.641424ms)
+✔ portable package rejects addresses outside its declared scope (0.5841ms)
+✔ PostgreSQL schema installs twice and migrates legacy roles (2016.938645ms)
+✔ equipment credentials have no persistence or encryption helper (11.009831ms)
+✔ stage01 UI keeps mandatory base workflows (1.521984ms)
+✔ stage01 update never removes the database volume (0.382186ms)
+✔ stage01 database keeps shared IDs for future modules (0.369056ms)
+✔ stage01 role migration selects constraint oid before reading it (0.281244ms)
+✔ installer exposes persistent env to ordinary docker compose commands (0.481967ms)
+✔ graphical interface contains the required workflows (7.776194ms)
+✔ browser modules are served with a JavaScript MIME type (6.786017ms)
+✔ Windows client is downloadable from the installed web service (2.07016ms)
+✔ every root size uses the same vertical subnet model (5.089179ms)
+✔ vertical detail boundaries start at zero and end at 255 (0.419182ms)
+✔ tree reaches individual IPs and the UI keeps all requested modes (7.05359ms)
+✔ v1.5 restores language control, editable device taxonomy and personnel transfer (5.440168ms)
+✔ radio module is simple IPAM-synchronized AP Station management (5.292556ms)
+✔ company contact summary keeps phone mobile and email separate (1.787173ms)
+✔ translations are file based (1.013147ms)
+✔ inventory create and edit path exists (0.373273ms)
+✔ winbox receives target not emsipam uri (0.217197ms)
+ℹ tests 56
+ℹ suites 0
+ℹ pass 56
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3496.1035

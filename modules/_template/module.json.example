@@ -10,6 +10,16 @@
     "path": "/m/sample-module/",
     "order": 100
   },
-  "permissions": ["sample.read", "sample.write"],
-  "roles": ["admin", "support", "helpdesk", "branch", "viewer"]
+  "permissions": [
+    "sample.read",
+    "sample.write"
+  ],
+  "roles": [
+    "admin",
+    "support",
+    "helpdesk",
+    "branch",
+    "viewer"
+  ],
+  "apiVersion": 1
 }
