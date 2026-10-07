@@ -1,4 +1,4 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.1";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.2";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -67,7 +67,7 @@ let LANGUAGE_ENTRIES = [];
 async function loadLanguageCatalog() {
   const supported = new Set(["en", "fa"]);
   try {
-    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.1", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.2", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
     state.languages = Array.isArray(items) ? items.filter((item) => supported.has(item?.id) && item?.label) : [];
     if (state.languages.length !== supported.size) throw new Error("Language catalog must contain English and Persian only.");
@@ -81,7 +81,7 @@ async function loadLanguageCatalog() {
 }
 async function loadLanguagePack(lang) {
   try {
-    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.1`, { cache: "no-store" });
+    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.2`, { cache: "no-store" });
     LANGUAGE_PACK = response.ok ? await response.json() : {};
   } catch { LANGUAGE_PACK = {}; }
   LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
@@ -1320,6 +1320,11 @@ function openToolMenu(event, ip, allowedMethods = null, connection = {}) {
     url.searchParams.set("host", ip);
     url.searchParams.set("port", node.dataset.port || "0");
     if (username) url.searchParams.set("username", username);
+    const target = node.dataset.tool === "MIK" && ["0", "8291", ""].includes(node.dataset.port || "") ? ip : `${ip}${node.dataset.port && node.dataset.port !== "0" ? `:${node.dataset.port}` : ""}`;
+    $("clientTarget").value = target;
+    $("clientLaunchLink").href = url.toString();
+    $("clientToolName").textContent = node.dataset.tool === "MIK" ? "WinBox" : node.dataset.tool;
+    $("clientLaunchDialog").showModal();
     window.location.href = url.toString();
     menu.classList.add("hidden");
   }));
@@ -1727,6 +1732,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.querySelectorAll("dialog form").forEach((form) => form.addEventListener("input", () => { form.dataset.dirty = "1"; }));
+$("clientTarget").addEventListener("click", () => $("clientTarget").select());
 document.querySelectorAll("[data-close]").forEach((node) => node.addEventListener("click", () => {
   const dialog = node.closest("dialog");
   const form = dialog.querySelector("form");

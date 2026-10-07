@@ -1,6 +1,33 @@
-EMS_IPAM Part 1 / 1.7.0-rc.1
-محتویات ZIP در ریشه مخزن emsebi/EMS_IPAM قرار می‌گیرند؛ پوشه والد اضافی ندارد.
-نسخه قبلی را با commit/tag نگه دارید. فایل .env، داده واقعی، بکاپ و node_modules را آپلود نکنید.
-در صورت استفاده از رابط وب GitHub، فایل‌ها را در چند دسته بارگذاری کنید تا محدودیت تعداد فایل مانع نشود. پوشه‌های حذف‌شده/نام‌عوض‌شده را با فهرست docs/CHANGES-v1.7.0-rc.1.txt تطبیق دهید.
-این خروجی توسط دستیار به GitHub Push نشده است. تا قبل از انتشار شما، دانلود install.sh از main ممکن است نسخه قدیمی را بیاورد. برای تست، از همین پوشه استخراج‌شده sudo bash install.sh اجرا کنید.
-برای نصب/ارتقا و تست از START-HERE-FA.md پیروی کنید.
+EMS_IPAM Part 1 / 1.7.0-rc.2 — Windows Client 0.8.0
+
+مرجع نصب و دانلود: README.md در ریشه مخزن emsebi/EMS_IPAM.
+دستور یک‌خطی، روش دانلود ZIP، استخراج در پوشه تازه، نصب و ارتقا در همان صفحه قرار دارند.
+
+این انتشار باید یک تغییر هماهنگ شامل سورس، تصاویر docs/test-results، کلاینت 0.8.0 و حذف مسیرهای docs/DELETED-PATHS-rc2.txt باشد.
+آپلود فایل‌های جدید روی مخزن قبلی، فایل‌های قدیمی را پاک نمی‌کند؛ فهرست حذف‌ها بخشی از انتشار است.
+از بین فایل‌های docker-app/public/downloads فقط EMS-IPAM-Windows-Client-v0.8.0.zip نگه داشته می‌شود.
+فایل .env، داده واقعی، بکاپ و node_modules را منتشر نکنید.
+
+برای توسعه بعدی، آخرین main را دریافت کنید و CONTINUATION.md، docs/ROADMAP-FA.md و docs/NEXT-RADIUS-FA.md را بخوانید.
+تاریخچه نسخه‌های قبل در Git باقی می‌ماند؛ نسخه‌های کلاینت قدیمی داخل دانلودهای پنل نگهداری نمی‌شوند.
+
+وضعیت این تحویل در 2026-10-06:
+تلاش انتشار مستقیم با GitHub API به علت 403 Resource not accessible by integration متوقف شد؛ شاخه main تغییر نکرده است. برای انتشار مستقیم باید اتصال GitHub مجوز Contents: Read and write داشته باشد.
+
+داخل ZIP تحویلی، کنار پوشه EMS_IPAM-main، فایل GITHUB-UPDATE.patch قرار دارد. این Patch روی commit زیر آماده و بررسی شده است:
+6f0cd5d4ced6dbe3931109f0b286fb206618f5b0
+
+روش اعمال روی کامپیوتری که Git و اجازه Push دارد:
+1. ZIP را استخراج کنید.
+2. در همان پوشه کنار GITHUB-UPDATE.patch اجرا کنید:
+
+git clone https://github.com/emsebi/EMS_IPAM.git EMS_IPAM-git
+cd EMS_IPAM-git
+git apply --check ../GITHUB-UPDATE.patch
+git apply ../GITHUB-UPDATE.patch
+git add -A
+git commit -m "Fix Windows client and finalize Part 1 RC2"
+git push origin main
+
+اگر git apply --check خطا داد، ادامه ندهید؛ مخزن پس از آماده‌سازی Patch تغییر کرده و باید تغییرات ادغام شوند. اگر Push خطای دسترسی داد، حساب GitHub باید مجوز نوشتن داشته باشد. نسخه‌های قبلی در تاریخچه Git باقی می‌مانند.
+روش جایگزین در رابط وب GitHub: محتویات پوشه EMS_IPAM-main را در ریشه بارگذاری و مسیرهای docs/DELETED-PATHS-rc2.txt را حذف کنید. فایل Patch را جزو کد برنامه بارگذاری نکنید.

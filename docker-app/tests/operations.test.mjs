@@ -29,11 +29,12 @@ test("backup implementation passes passwords only through the process environmen
   assert.doesNotMatch(source, /console\.(?:log|error)[^\n]*password/);
 });
 
-test("installation guide names Docker and Portainer before installation", async () => {
+test("installation guide provides automatic prerequisites and one download/install command", async () => {
   const readme = await fs.readFile(new URL("../../README.md", import.meta.url), "utf8");
-  const prerequisite = readme.indexOf("## پیش‌نیازهای نصب");
-  const install = readme.indexOf("## نصب با خط فرمان");
-  assert.ok(prerequisite >= 0 && prerequisite < install);
-  assert.match(readme.slice(prerequisite, install), /Docker Engine/);
-  assert.match(readme.slice(prerequisite, install), /Portainer/);
+  assert.match(readme, /Docker/);
+  assert.match(readme, /Compose/);
+  assert.match(readme, /Portainer/);
+  assert.match(readme, /sudo bash -c/);
+  assert.match(readme, /raw\.githubusercontent\.com\/emsebi\/EMS_IPAM\/main\/install\.sh/);
+  assert.match(readme, /apt-get install -y ca-certificates curl/);
 });

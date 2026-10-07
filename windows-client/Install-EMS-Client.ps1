@@ -1,8 +1,20 @@
+# Run with Windows PowerShell 5.1 (Install.cmd selects it explicitly).
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSEdition -eq 'Core') { throw 'Use Install.cmd with Windows PowerShell 5.1.' }
 $target = Join-Path $env:LOCALAPPDATA 'EMS-IPAM-Client'
 New-Item -ItemType Directory -Path $target -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'EMS-IPAM-Protocol.ps1') -Destination $target -Force
-
+$executable = Join-Path $target 'EMS-IPAM-Client.exe'
+$sourceExe = Join-Path $PSScriptRoot 'EMS-IPAM-Client.exe'
+if (-not (Test-Path -LiteralPath $sourceExe)) { throw 'Extract the whole ZIP first; EMS-IPAM-Client.exe is missing.' }
+if ([IO.Path]::GetFullPath($sourceExe) -ine [IO.Path]::GetFullPath($executable)) {
+    Copy-Item -LiteralPath $sourceExe -Destination $executable -Force
+}
+foreach ($file in @('EMS-IPAM-Protocol.ps1','EMS-IPAM-Common.ps1','Check-EMS-Client.ps1','Test-EMS-Client.ps1','README-FA.txt','Configure-WinBox.cmd','Check.cmd','Test.cmd')) {
+    $source = Join-Path $PSScriptRoot $file
+    if ([IO.Path]::GetFullPath($source) -ine [IO.Path]::GetFullPath((Join-Path $target $file))) {
+        Copy-Item -LiteralPath $source -Destination $target -Force
+    }
+}
 function Find-AppPath([string[]]$Names, [string[]]$Candidates) {
     foreach ($name in $Names) {
         foreach ($root in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\App Paths')) {
@@ -22,7 +34,7 @@ function Find-AppPath([string[]]$Names, [string[]]$Candidates) {
     return ''
 }
 
-$winbox = Find-AppPath @('winbox.exe','WinBox.exe') @('%LOCALAPPDATA%\Programs\WinBox\WinBox.exe','%ProgramFiles%\MikroTik\WinBox\WinBox.exe','%USERPROFILE%\Downloads\winbox64.exe','%USERPROFILE%\Downloads\winbox.exe')
+$winbox = Find-AppPath @('winbox.exe','WinBox.exe','winbox64.exe') @('%LOCALAPPDATA%\Programs\WinBox\WinBox.exe','%ProgramFiles%\MikroTik\WinBox\WinBox.exe','%USERPROFILE%\Downloads\winbox64.exe','%USERPROFILE%\Downloads\winbox.exe')
 $rdp = Find-AppPath @('mstsc.exe') @('%SystemRoot%\System32\mstsc.exe')
 $putty = Find-AppPath @('putty.exe') @('%ProgramFiles%\PuTTY\putty.exe')
 $ssh = if ($putty) { $putty } else { Find-AppPath @('ssh.exe') @('%SystemRoot%\System32\OpenSSH\ssh.exe') }
@@ -36,35 +48,55 @@ $config = [ordered]@{ tools = [ordered]@{
     SSH = [ordered]@{ path = $ssh; mode = $(if ($ssh -and [IO.Path]::GetFileName($ssh) -ieq 'ssh.exe') { 'openssh' } else { 'putty' }) }
     TELNET = [ordered]@{ path = $telnet; mode = $(if ($telnet -and [IO.Path]::GetFileName($telnet) -ieq 'telnet.exe') { 'telnet' } else { 'putty-telnet' }) }
 } }
-$config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $target 'ems-client.json') -Encoding UTF8
 
-$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$command = '"' + $powershell + '" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $target 'EMS-IPAM-Protocol.ps1') + '" "%1"'
+$configPath = Join-Path $target 'ems-client.json'
+if (Test-Path -LiteralPath $configPath) {
+    # Repair must retain custom tool paths chosen by the user.
+    $previous = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($name in @('MIK','RDP','SSH','TELNET','VNC')) {
+        $saved = $previous.tools.$name
+        if ($saved -and $saved.path) {
+            $config.tools[$name].path = [string]$saved.path
+            $config.tools[$name].mode = [string]$saved.mode
+        }
+    }
+}
+$config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding UTF8
+
+$command = '"' + $executable + '" "%1"'
 function Register-EmsProtocol([string]$Scheme) {
     $root = 'HKCU:\Software\Classes\' + $Scheme
-    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
     New-Item -Path $root -Force | Out-Null
     Set-Item -Path $root -Value 'URL:EMS IPAM Client'
     New-ItemProperty -Path $root -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
-    New-ItemProperty -Path $root -Name 'FriendlyTypeName' -Value 'EMS IPAM Client' -PropertyType String -Force | Out-Null
-    $iconKey = Join-Path $root 'DefaultIcon'
-    New-Item -Path $iconKey -Force | Out-Null
-    Set-Item -Path $iconKey -Value ($powershell + ',0')
-    $commandKey = Join-Path $root 'shell\open\command'
+    New-ItemProperty -Path $root -Name 'FriendlyTypeName' -Value 'EMS-IPAM Client' -PropertyType String -Force | Out-Null
+    New-Item -Path ($root + '\DefaultIcon') -Force | Out-Null
+    Set-Item -Path ($root + '\DefaultIcon') -Value ('"' + $executable + '",0')
+    # Remove a stale DelegateExecute only for our own protocol/progID.
+    $commandKey = $root + '\shell\open\command'
     New-Item -Path $commandKey -Force | Out-Null
+    Remove-ItemProperty -Path $commandKey -Name 'DelegateExecute' -ErrorAction SilentlyContinue
     Set-Item -Path $commandKey -Value $command
-    $registered = (Get-Item -LiteralPath $commandKey).GetValue('')
-    if ($registered -notmatch 'EMS-IPAM-Protocol\.ps1' -or $registered -match 'winbox\.exe') {
-        throw ('EMS IPAM protocol registration verification failed for ' + $Scheme)
-    }
 }
-
-# The web application uses emsipam-client so an obsolete emsipam association
-# can never forward the complete internal URI to WinBox. emsipam is repaired
-# as well for links created by older EMS IPAM releases.
 Register-EmsProtocol 'emsipam-client'
 Register-EmsProtocol 'emsipam'
+Register-EmsProtocol 'EMSIPAM.Client.Url'
 
+$application = 'HKCU:\Software\Classes\Applications\EMS-IPAM-Client.exe'
+New-Item -Path ($application + '\shell\open\command') -Force | Out-Null
+Set-Item -Path ($application + '\shell\open\command') -Value $command
+New-ItemProperty -Path $application -Name 'FriendlyAppName' -Value 'EMS-IPAM Client' -Force | Out-Null
+New-Item -Path ($application + '\SupportedProtocols') -Force | Out-Null
+$capabilities = 'HKCU:\Software\EMS-IPAM-Client\Capabilities'
+New-Item -Path ($capabilities + '\UrlAssociations') -Force | Out-Null
+New-ItemProperty -Path $capabilities -Name 'ApplicationName' -Value 'EMS-IPAM Client' -Force | Out-Null
+New-ItemProperty -Path $capabilities -Name 'ApplicationDescription' -Value 'Open network tools from EMS-IPAM links' -Force | Out-Null
+foreach ($scheme in @('emsipam-client','emsipam')) {
+    New-ItemProperty -Path ($capabilities + '\UrlAssociations') -Name $scheme -Value 'EMSIPAM.Client.Url' -Force | Out-Null
+    New-ItemProperty -Path ($application + '\SupportedProtocols') -Name $scheme -Value '' -Force | Out-Null
+}
+New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null
+New-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'EMS-IPAM Client' -Value 'Software\EMS-IPAM-Client\Capabilities' -Force | Out-Null
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -73,11 +105,10 @@ public static class EmsShellRefresh {
 }
 '@
 [EmsShellRefresh]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
-
-Write-Host 'EMS Client Pack installed successfully.' -ForegroundColor Green
-Write-Host 'Protocol: emsipam-client -> EMS IPAM Client (not WinBox directly)' -ForegroundColor Cyan
-Write-Host 'WinBox receives only IP:PORT.' -ForegroundColor Cyan
-foreach ($item in @(@('WinBox',$winbox),@('RDP',$rdp),@('SSH',$ssh),@('Telnet',$telnet),@('VNC',$vnc))) {
-    if ($item[1]) { Write-Host ($item[0] + ': found') -ForegroundColor Green }
-    else { Write-Host ($item[0] + ': not found - file selection will open on first use') -ForegroundColor Yellow }
-}
+Write-Host 'EMS-IPAM Client 0.8.0 installed for the current Windows user.' -ForegroundColor Green
+Write-Host 'Browser handler: select EMS-IPAM-Client.exe at:' -ForegroundColor Cyan
+Write-Host $executable
+Write-Host 'Choose WinBox INSIDE the EMS-IPAM file picker, not in the browser.' -ForegroundColor Yellow
+Write-Host 'If Firefox previously saved WinBox: Settings > General > Applications > emsipam-client > Use other > select the path above.'
+Write-Host 'Configure-WinBox.cmd changes your WinBox path. Test.cmd runs offline argument tests.'
+& (Join-Path $target 'Check-EMS-Client.ps1')

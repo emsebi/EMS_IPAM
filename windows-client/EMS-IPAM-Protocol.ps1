@@ -1,18 +1,10 @@
-param([Parameter(Mandatory=$true)][string]$UriValue)
-
+param(
+    [string]$UriValue,
+    [string]$UriBase64,
+    [switch]$ConfigureWinBox,
+    [switch]$ValidateOnly
+)
 $ErrorActionPreference = 'Stop'
-
-function Parse-Query([string]$Value) {
-    $result = @{}
-    foreach ($pair in ($Value.TrimStart('?') -split '&')) {
-        if ([string]::IsNullOrWhiteSpace($pair)) { continue }
-        $parts = $pair -split '=', 2
-        $key = [System.Uri]::UnescapeDataString(($parts[0] -replace '\+', ' '))
-        $item = if ($parts.Count -gt 1) { [System.Uri]::UnescapeDataString(($parts[1] -replace '\+', ' ')) } else { '' }
-        $result[$key] = $item
-    }
-    return $result
-}
 
 function Find-AppPath([string[]]$ExecutableNames, [string[]]$Candidates) {
     foreach ($name in $ExecutableNames) {
@@ -47,67 +39,67 @@ function Resolve-Tool([string]$Name, $ConfiguredTool) {
     $configured = [Environment]::ExpandEnvironmentVariables([string]$ConfiguredTool.path)
     if ($configured -and (Test-Path -LiteralPath $configured)) { return @{ path = $configured; mode = [string]$ConfiguredTool.mode } }
     $resolved = switch ($Name) {
-        'MIK' { Find-AppPath @('winbox.exe','WinBox.exe') @('%LOCALAPPDATA%\Programs\WinBox\WinBox.exe','%ProgramFiles%\MikroTik\WinBox\WinBox.exe','%USERPROFILE%\Downloads\winbox64.exe','%USERPROFILE%\Downloads\winbox.exe') }
+        'MIK' { Find-AppPath @('winbox.exe','WinBox.exe','winbox64.exe') @('%LOCALAPPDATA%\Programs\WinBox\WinBox.exe','%ProgramFiles%\MikroTik\WinBox\WinBox.exe','%USERPROFILE%\Downloads\winbox64.exe','%USERPROFILE%\Downloads\winbox.exe') }
         'RDP' { Find-AppPath @('mstsc.exe') @('%SystemRoot%\System32\mstsc.exe') }
         'SSH' { Find-AppPath @('putty.exe','ssh.exe') @('%ProgramFiles%\PuTTY\putty.exe','%SystemRoot%\System32\OpenSSH\ssh.exe') }
         'TELNET' { Find-AppPath @('putty.exe','telnet.exe') @('%ProgramFiles%\PuTTY\putty.exe','%SystemRoot%\System32\telnet.exe') }
         'VNC' { Find-AppPath @('vncviewer.exe','tvnviewer.exe') @('%ProgramFiles%\RealVNC\VNC Viewer\vncviewer.exe','%ProgramFiles%\TigerVNC\vncviewer.exe','%ProgramFiles%\TightVNC\tvnviewer.exe') }
     }
-    if (-not $resolved) { $resolved = Select-ToolFile "مسیر برنامه $Name را انتخاب کنید" }
-    if (-not $resolved) { throw "برنامه $Name پیدا نشد. نصب برنامه یا انتخاب فایل اجرایی لازم است." }
+    if (-not $resolved) { $resolved = Select-ToolFile "EMS-IPAM: select the $Name executable (not the EMS-IPAM launcher)" }
+    if (-not $resolved) { throw "Tool selection cancelled or $Name was not found." }
+    if ([IO.Path]::GetFileName($resolved) -ieq 'EMS-IPAM-Client.exe') { throw 'Choose the tool executable, not EMS-IPAM-Client.exe.' }
     $mode = switch ($Name) { 'MIK' { 'winbox' } 'RDP' { 'rdp' } 'VNC' { 'vnc' } 'SSH' { if ([IO.Path]::GetFileName($resolved) -ieq 'ssh.exe') { 'openssh' } else { 'putty' } } 'TELNET' { if ([IO.Path]::GetFileName($resolved) -ieq 'telnet.exe') { 'telnet' } else { 'putty-telnet' } } }
     return @{ path = $resolved; mode = $mode }
 }
 
-$UriValue = $UriValue.Trim().Trim('\"')
-$uri = [System.Uri]$UriValue
-if (@('emsipam-client','emsipam') -notcontains $uri.Scheme -or $uri.Host -ne 'open') { throw 'لینک EMS IPAM معتبر نیست.' }
-$query = Parse-Query $uri.Query
-$toolName = ([string]$query['tool']).ToUpperInvariant()
-$hostValue = [string]$query['host']
-$usernameValue = [string]$query['username']
-$portValue = 0
-$parsedIp = $null
 
-if (@('VNC','MIK','RDP','SSH','TELNET') -notcontains $toolName) { throw 'ابزار مجاز نیست.' }
-if (-not [System.Net.IPAddress]::TryParse($hostValue, [ref]$parsedIp)) { throw 'IP معتبر نیست.' }
-if (-not [int]::TryParse([string]$query['port'], [ref]$portValue) -or $portValue -lt 0 -or $portValue -gt 65535) { throw 'پورت معتبر نیست.' }
-if ($usernameValue -and $usernameValue -notmatch '^[A-Za-z0-9_.@\\-]{1,120}$') { throw 'نام کاربری معتبر نیست.' }
-
-$configPath = Join-Path $PSScriptRoot 'ems-client.json'
-$config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$tool = $config.tools.$toolName
-if ($null -eq $tool) { throw 'تنظیم ابزار پیدا نشد.' }
-$resolvedTool = Resolve-Tool $toolName $tool
-$executable = [string]$resolvedTool.path
-$tool.path = $executable
-$tool.mode = [string]$resolvedTool.mode
-$config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $configPath -Encoding UTF8
-
-$target = if ($portValue -gt 0) { $hostValue + ':' + $portValue } else { $hostValue }
-$logPath = Join-Path $PSScriptRoot 'last-launch.txt'
-@("time=" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "tool=" + $toolName, "target=" + $target) | Set-Content -LiteralPath $logPath -Encoding UTF8
-$arguments = switch ([string]$tool.mode) {
-    'winbox' { @($target) }
-    'rdp' { @('/v:' + $target, '/prompt') }
-    'putty' {
-        $items = @('-ssh', $hostValue)
-        if ($portValue -gt 0) { $items += @('-P', [string]$portValue) }
-        if ($usernameValue) { $items += @('-l', $usernameValue) }
-        $items
+try {
+    . (Join-Path $PSScriptRoot 'EMS-IPAM-Common.ps1')
+    if ($UriBase64) {
+        if ($UriValue) { throw 'Pass only one link.' }
+        $UriValue = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($UriBase64))
     }
-    'openssh' {
-        $sshTarget = if ($usernameValue) { $usernameValue + '@' + $hostValue } else { $hostValue }
-        if ($portValue -gt 0) { @('-p', [string]$portValue, $sshTarget) } else { @($sshTarget) }
+    if ($ConfigureWinBox) {
+        $request = ConvertFrom-EmsUri 'emsipam-client://open?tool=MIK&host=192.0.2.1&port=8291'
+    } else { $request = ConvertFrom-EmsUri $UriValue }
+    if ($ValidateOnly) { $request | ConvertTo-Json -Compress; exit 0 }
+    $configPath = Join-Path $PSScriptRoot 'ems-client.json'
+    $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $toolName = $request.Tool
+    $tool = $config.tools.$toolName
+    if ($null -eq $tool) { throw 'Tool configuration is missing. Run Install.cmd again.' }
+    if ($ConfigureWinBox) {
+        $selected = Select-ToolFile 'EMS-IPAM: select winbox.exe or winbox64.exe'
+        if (-not $selected) { exit 0 }
+        if ([IO.Path]::GetFileName($selected) -ieq 'EMS-IPAM-Client.exe') { throw 'Select WinBox itself in this window.' }
+        $tool.path = $selected
+        $tool.mode = 'winbox'
     }
-    'putty-telnet' {
-        $items = @('-telnet', $hostValue)
-        if ($portValue -gt 0) { $items += @('-P', [string]$portValue) }
-        $items
+    $resolvedTool = Resolve-Tool $toolName $tool
+    $executable = [string]$resolvedTool.path
+    if ([IO.Path]::GetExtension($executable) -ine '.exe' -or [IO.Path]::GetFileName($executable) -ieq 'EMS-IPAM-Client.exe') {
+        throw 'The configured tool must be a tool executable (.exe), not the EMS-IPAM launcher.'
     }
-    'telnet' { if ($portValue -gt 0) { @($hostValue, [string]$portValue) } else { @($hostValue) } }
-    'vnc' { @($target) }
-    default { throw 'حالت اجرای ابزار مجاز نیست.' }
+    $arguments = @(Get-EmsArguments $request ([string]$resolvedTool.mode))
+    $tool.path = $executable
+    $tool.mode = [string]$resolvedTool.mode
+    $config | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $configPath -Encoding UTF8
+    if ($ConfigureWinBox) {
+        Add-Type -AssemblyName System.Windows.Forms
+        [Windows.Forms.MessageBox]::Show('WinBox path saved. Return to the panel and click MIK.', 'EMS-IPAM Client') | Out-Null
+        exit 0
+    }
+    Start-Process -FilePath $executable -ArgumentList $arguments -ErrorAction Stop | Out-Null
+    @('version=0.8.0'; ('time=' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'));
+      'status=launched'; ('tool=' + $toolName); ('target=' + $request.Target);
+      ('executable=' + $executable)) | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'last-launch.txt') -Encoding UTF8
+} catch {
+    $message = $_.Exception.Message
+    if ($ValidateOnly) { Write-Error $message; exit 1 }
+    @('version=0.8.0'; ('time=' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'));
+      'status=error'; ('error=' + $message)) | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'last-launch.txt') -Encoding UTF8
+    Add-Type -AssemblyName System.Windows.Forms
+    [Windows.Forms.MessageBox]::Show($message + "`nRun Check.cmd for diagnostics.", 'EMS-IPAM Client',
+        [Windows.Forms.MessageBoxButtons]::OK, [Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    exit 1
 }
-
-Start-Process -FilePath $executable -ArgumentList $arguments

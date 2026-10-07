@@ -1,3 +1,4 @@
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-EMS-Client.ps1"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Install-EMS-Client.ps1"
+if errorlevel 1 echo EMS-IPAM: operation failed. Read the error above.
 pause

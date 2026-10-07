@@ -1,39 +1,26 @@
 <!doctype html>
-<html lang="fa" dir="rtl" data-theme="dark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>کلاینت اتصال ویندوز — EMS IPAM</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.1">
-</head>
-<body>
-  <main class="client-download-page">
-    <div class="client-shell">
-      <section class="client-hero">
-        <h1>کلاینت اتصال ویندوز</h1>
-        <p>این بسته ابزارهای نصب‌شده را خودکار پیدا می‌کند و دکمه‌های اتصال سامانه را به برنامه‌های ویندوز متصل می‌کند. رمز عبور داخل لینک مرورگر قرار نمی‌گیرد.</p>
-        <a class="btn primary client-download" href="/downloads/EMS-IPAM-Windows-Client-v0.7.1.zip" download>دانلود نسخهٔ ۰.۷.۱ برای ویندوز</a>
-      </section>
-      <section class="client-panel">
-        <h2>مراحل نصب</h2>
-        <div class="client-steps">
-          <div class="client-step">فایل فشرده را دانلود و از حالت فشرده خارج کنید.</div>
-          <div class="client-step">روی فایل <span class="ltr mono">Install.cmd</span> دوبار کلیک کنید. نصب برای همان کاربر ویندوز انجام می‌شود و دسترسی مدیر سیستم لازم نیست.</div>
-          <div class="client-step">در مرورگر به سامانه برگردید و کنار تجهیز روی «اتصال» و سپس ابزار موردنظر کلیک کنید.</div>
-          <div class="client-step">اگر مرورگر برای بازکردن لینک سؤال کرد، <b>EMS IPAM Client</b> را انتخاب کنید؛ WinBox را مستقیم انتخاب نکنید.</div>
-          <div class="client-step">اگر ابزار خودکار پیدا نشد، فقط بار اول پنجرهٔ انتخاب فایل باز می‌شود؛ فایل اجرایی برنامه را معرفی کنید.</div>
-        </div>
-      </section>
-      <section class="client-panel">
-        <h2>ابزارهای پشتیبانی‌شده</h2>
-        <div class="client-tools"><span>WinBox</span><span>Remote Desktop</span><span>SSH / PuTTY</span><span>Telnet / PuTTY</span><span>VNC Viewer</span></div>
-      </section>
-      <section class="client-panel client-note">
-        <h2>اصلاح قطعی نمایش لینک داخل WinBox</h2>
-        <p>نسخهٔ ۰.۷.۱ از پروتکل جدید <span class="ltr mono">emsipam-client</span> استفاده می‌کند و انتخاب قدیمی WinBox برای <span class="ltr mono">emsipam</span> را دور می‌زند. فایل <span class="ltr mono">Repair.cmd</span> هر دو پروتکل را اصلاح می‌کند. فایل <span class="ltr mono">Check.cmd</span> نیز مسیر ثبت‌شده و آخرین مقصد را نشان می‌دهد؛ مقصد WinBox باید مانند <span class="ltr mono">192.0.2.10:9191</span> باشد.</p>
-      </section>
-      <div class="client-footer">EMS IPAM — طراحی و توسعه: ابراهیم مامانی</div>
-    </div>
-  </main>
-</body>
-</html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>راه‌اندازی اتصال ویندوز — EMS IPAM</title><link rel="stylesheet" href="/styles.css?v=1.7.0-rc.2"></head>
+<body><main class="client-download-page"><div class="client-shell">
+<section class="client-hero"><h1>اتصال پنل به WinBox و ابزارهای ویندوز</h1>
+<p>کلاینت لینک پنل را می‌خواند و آدرس دستگاه را به برنامهٔ انتخاب‌شده می‌دهد. برای پورت پیش‌فرض WinBox فقط IP ارسال می‌شود؛ رمز عبور در لینک قرار نمی‌گیرد.</p>
+<a class="btn primary client-download" href="/downloads/EMS-IPAM-Windows-Client-v0.8.0.zip" download>دانلود کلاینت ویندوز ۰.۸.۰</a> <a class="btn" href="/">بازگشت به پنل</a></section>
+<section class="client-panel"><h2>نصب یا ارتقا از نسخهٔ قبلی</h2><ol class="client-steps">
+<li class="client-step">ZIP را استخراج کنید و <b dir="ltr">Install.cmd</b> را با همان کاربر ویندوز اجرا کنید. دسترسی Administrator لازم نیست.</li>
+<li class="client-step">نصب‌کننده فایل آمادهٔ <b dir="ltr">EMS-IPAM-Client.exe</b> را در پروفایل شما کپی و ثبت می‌کند. مسیرهای انتخاب‌شدهٔ قبلی حفظ می‌شوند.</li>
+<li class="client-step">برای معرفی یا تغییر WinBox، <b dir="ltr">Configure-WinBox.cmd</b> را اجرا و فایل واقعی WinBox را انتخاب کنید.</li>
+<li class="client-step">در پنل دکمهٔ MIK را بزنید. اگر مرورگر انتخاب برنامه خواست، <b dir="ltr">EMS-IPAM Client</b> را انتخاب کنید. فایل WinBox فقط داخل پنجرهٔ انتخاب ابزار کلاینت انتخاب می‌شود.</li>
+</ol></section>
+<section class="client-panel client-note"><h2>اگر لینک کامل داخل WinBox دیده می‌شود</h2>
+<p>مرورگر یا ویندوز، WinBox را به‌عنوان بازکنندهٔ پروتکل ذخیره کرده است. نصب مجدد الزاماً انتخاب ذخیره‌شدهٔ مرورگر را عوض نمی‌کند.</p>
+<p>در Firefox، تنظیمات → General → Applications را باز کنید، <b dir="ltr">emsipam-client</b> را پیدا کنید و از «Use other / انتخاب برنامهٔ دیگر» مسیر زیر را انتخاب کنید:</p>
+<pre class="ltr mono" style="white-space:pre-wrap;overflow-wrap:anywhere">%LOCALAPPDATA%\EMS-IPAM-Client\EMS-IPAM-Client.exe</pre>
+<p>اگر این مورد در Firefox دیده نشد، دوباره MIK را بزنید و در انتخاب برنامه همین فایل را معرفی کنید. در Chrome/Edge، برنامهٔ انتخاب‌شدهٔ Windows را برای پروتکل بررسی کنید: Settings → Apps → Default apps، سپس EMS-IPAM Client یا پروتکل emsipam-client.</p>
+<p><b dir="ltr">Check.cmd</b> مسیر ثبت‌شده، انتخاب ویندوز و آخرین اجرای کلاینت را نشان می‌دهد. اگر بعد از کلیک، آخرین اجرا تغییر نکرد، مرورگر هنوز به کلاینت نمی‌رسد.</p></section>
+<section class="client-panel"><h2>تست اتصال</h2>
+<p>ابتدا <b dir="ltr">Test.cmd</b> را اجرا کنید؛ تست آفلاین با یک برنامهٔ آزمایشی، آرگومان واقعی لانچر را بررسی می‌کند و به شبکه وصل نمی‌شود. سپس از پنل روی MIK بزنید؛ برای <span dir="ltr">192.168.1.4</span> با پورت 8291 باید فقط <span dir="ltr">192.168.1.4</span> در Connect To دیده شود. برای پورت سفارشی، قالب <span dir="ltr">IP:PORT</span> است.</p>
+<p>در نصب یک‌بارهٔ ZIP، اجرا از داخل پنجرهٔ ZIP کافی نیست؛ ابتدا همهٔ فایل‌ها را استخراج کنید. این نسخه برای Windows 10/11 با Windows PowerShell 5.1 طراحی شده است. اگر سیاست سازمان اجرای برنامهٔ ساخته‌شده را مسدود کرد، متن خطا را به مسئول ویندوز بدهید.</p>
+<div class="client-tools"><span>WinBox</span><span>Remote Desktop</span><span>SSH / PuTTY</span><span>Telnet / PuTTY</span><span>VNC Viewer</span></div></section>
+<div class="client-footer">EMS IPAM — ابراهیم مامانی — پنل 1.7.0-rc.2 / کلاینت 0.8.0</div>
+</div></main></body></html>

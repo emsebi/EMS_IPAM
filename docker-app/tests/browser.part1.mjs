@@ -84,6 +84,40 @@ try {
   await page.locator('.inventory-name').getByText('Workstation Edited', { exact: true }).waitFor();
   check('IP/device creation, type selection, MAC/VLAN storage and edit');
 
+  // Browser feedback and URI contents are verified without invoking an OS protocol handler.
+  await api('/api/hosts', 'PUT', { ...savedHost, name: 'Workstation Edited', connectionMethods: [{ type: 'WINBOX', port: 8291 }] });
+  await page.locator('#inventoryButton').click();
+  await page.locator('#refreshInventory').click();
+  await page.locator(`.inventory-tools[data-id="${savedHost.id}"]`).click();
+  await page.locator('#toolMenu [data-tool=MIK]').waitFor();
+  // An external-scheme navigation has no handler in headless Linux; the dialog must remain usable.
+  await page.locator('#toolMenu [data-tool=MIK]').click();
+  await page.locator('#clientLaunchDialog').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#clientTarget').inputValue(), '192.0.2.50');
+  const launchUrl = new URL(await page.locator('#clientLaunchLink').getAttribute('href'));
+  assert.equal(launchUrl.protocol, 'emsipam-client:');
+  assert.equal(launchUrl.searchParams.get('host'), '192.0.2.50');
+  assert.equal(launchUrl.searchParams.get('port'), '8291');
+  assert.equal(launchUrl.searchParams.has('password'), false);
+  await page.locator('#clientTarget').click();
+  assert.equal(await page.locator('#clientTarget').evaluate(el=>el.selectionEnd-el.selectionStart), '192.0.2.50'.length);
+  await page.screenshot({ path: path.join(outputDir, 'client-connection.png'), fullPage: true });
+  await page.locator('#clientLaunchDialog [data-close]').click();
+  const clientGuide = await context.newPage();
+  await clientGuide.goto('/client.html');
+  const download = clientGuide.locator('a[download]');
+  const archive = await context.request.get(await download.getAttribute('href'));
+  assert.equal(archive.status(), 200);
+  assert.equal((await archive.body()).subarray(0,2).toString(), 'PK');
+  await clientGuide.screenshot({ path: path.join(outputDir, 'client-guide.png'), fullPage: true });
+  await clientGuide.close();
+  const ipamPreview = await context.newPage();
+  await ipamPreview.goto('/#/ipam/test-space/192.0.2.0%2F24');
+  await ipamPreview.locator('#sheetSelect').waitFor();
+  await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
+  await ipamPreview.close();
+  check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
+
   await page.locator('#deviceTypesButton').click();
   const row = page.locator('#deviceTypesList .user-row').filter({ has: page.getByText('Test Device', { exact: true }) });
   await row.locator('.edit-device-type').click();

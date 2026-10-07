@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.1">
+  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.2">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -402,9 +402,18 @@
     </form>
   </dialog>
 
+  <dialog id="clientLaunchDialog" class="modal">
+    <div class="modal-head"><h2>اتصال با <span id="clientToolName"></span></h2><button class="btn" type="button" data-close>بستن</button></div>
+    <div class="client-launch-help">
+      <p>مرورگر باید لینک را با <b dir="ltr">EMS-IPAM Client</b> باز کند. انتخاب فایل WinBox داخل پنجرهٔ خود کلاینت انجام می‌شود.</p>
+      <label class="field">آدرس مقصد — برای کپی انتخاب کنید<input id="clientTarget" class="ltr mono" readonly></label>
+      <p>اگر برنامه باز نشد یا لینک کامل داخل WinBox دیده شد، انتخاب برنامه را طبق راهنمای نصب اصلاح کنید.</p>
+      <div class="toolbar"><a id="clientLaunchLink" class="btn primary">بازکردن دوبارهٔ کلاینت</a><a class="btn" href="/client.html" target="_blank" rel="noopener">دانلود و راهنمای اصلاح اتصال</a></div>
+    </div>
+  </dialog>
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.0-rc.1"></script>
+  <script type="module" src="/app.js?v=1.7.0-rc.2"></script>
 </body>
 </html>

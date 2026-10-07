@@ -1,19 +1,28 @@
 $ErrorActionPreference = 'Stop'
+$target = Join-Path $env:LOCALAPPDATA 'EMS-IPAM-Client'
+$exe = Join-Path $target 'EMS-IPAM-Client.exe'
+if (-not (Test-Path -LiteralPath $exe)) { throw 'EMS-IPAM-Client.exe is missing. Run Install.cmd.' }
+Write-Host ('Client version: ' + (Get-Item -LiteralPath $exe).VersionInfo.FileVersion)
+$expected = '"' + $exe + '" "%1"'
 foreach ($scheme in @('emsipam-client','emsipam')) {
-    $root = 'Registry::HKEY_CURRENT_USER\Software\Classes\' + $scheme
-    $commandKey = Join-Path $root 'shell\open\command'
-    if (-not (Test-Path -LiteralPath $commandKey)) { throw ('Protocol is not registered: ' + $scheme) }
-    $command = (Get-Item -LiteralPath $commandKey).GetValue('')
-    Write-Host ($scheme + ' handler:') -ForegroundColor Cyan
-    Write-Host $command
-    if ($command -notmatch 'EMS-IPAM-Protocol\.ps1' -or $command -match 'winbox\.exe') {
-        throw ('Invalid EMS IPAM handler: ' + $scheme)
+    $key = 'HKCU:\Software\Classes\' + $scheme + '\shell\open\command'
+    if (-not (Test-Path -LiteralPath $key) -or (Get-Item -LiteralPath $key).GetValue('') -cne $expected) {
+        throw ('Unexpected protocol command for ' + $scheme + '. Run Repair.cmd.')
+    }
+    Write-Host ($scheme + ': launcher registered') -ForegroundColor Green
+    $choice = 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\' + $scheme + '\UserChoice'
+    if (Test-Path -LiteralPath $choice) {
+        $progId = (Get-ItemProperty -LiteralPath $choice).ProgId
+        Write-Host ('Windows user choice: ' + $progId)
+        $choiceCommand = 'Registry::HKEY_CLASSES_ROOT\' + $progId + '\shell\open\command'
+        if (-not (Test-Path -LiteralPath $choiceCommand) -or (Get-Item -LiteralPath $choiceCommand).GetValue('') -cne $expected) {
+            Write-Warning ('Windows overrides the launcher for ' + $scheme + '. Open Default Apps and select EMS-IPAM Client for this protocol.')
+            Write-Host 'Command: start ms-settings:defaultapps'
+        }
     }
 }
-$log = Join-Path $env:LOCALAPPDATA 'EMS-IPAM-Client\last-launch.txt'
-if (Test-Path -LiteralPath $log) {
-    Write-Host ''
-    Write-Host 'Last launch:' -ForegroundColor Cyan
-    Get-Content -LiteralPath $log
-}
-else { Write-Host 'No connection has been launched yet.' -ForegroundColor Yellow }
+Write-Host 'Browser-saved application choices cannot be verified here. If a full URL reaches WinBox, change the browser handler to:' -ForegroundColor Yellow
+Write-Host $exe
+$log = Join-Path $target 'last-launch.txt'
+if (Test-Path -LiteralPath $log) { Write-Host 'Last client launch:'; Get-Content -LiteralPath $log }
+else { Write-Host 'No connection has been launched through this client yet.' }

@@ -5,7 +5,10 @@ REPOSITORY="${EMS_REPOSITORY:-emsebi/EMS_IPAM}"
 REPOSITORY_REF="${EMS_REPOSITORY_REF:-main}"
 INSTALL_DIR="${EMS_INSTALL_DIR:-/opt/ems-ipam}"
 STATE_DIR="${EMS_STATE_DIR:-/var/lib/ems-ipam}"
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+fi
 ENV_FILE="$STATE_DIR/.env"
 PROJECT_NAME="ems-ipam"
 TTY_DEVICE="/dev/tty"
@@ -65,33 +68,33 @@ port_busy(){
   return 1
 }
 
+prepare_tmp(){
+  [[ -n "$TMP_ROOT" ]] || TMP_ROOT="$(mktemp -d /tmp/ems-ipam.XXXXXX)"
+}
+
 install_prerequisites(){
   [[ "$(id -u)" -eq 0 ]] || fail "Run installer with sudo/root."
   log "Checking prerequisites"
-  if ! have curl || ! have tar || ! have openssl; then
-    have apt-get || fail "Automatic prerequisite installation currently supports Debian/Ubuntu."
+  if ! have curl || ! have tar || ! have gzip || ! have openssl; then
+    have apt-get || fail "Automatic prerequisite installation supports Debian/Ubuntu."
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y
-    apt-get install -y ca-certificates curl tar gzip openssl
+    apt-get update
+    apt-get install -y ca-certificates curl tar gzip openssl coreutils
   fi
-  if ! have docker; then
-    have apt-get || fail "Docker is missing and automatic installation requires apt-get."
-    log "Docker Engine was not found; installing it"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y
-    apt-get install -y ca-certificates curl
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sh /tmp/get-docker.sh
-    rm -f /tmp/get-docker.sh
+  if ! have docker || ! docker compose version >/dev/null 2>&1; then
+    local prerequisite_script
+    if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/install-prerequisites.sh" ]]; then
+      prerequisite_script="$SCRIPT_DIR/install-prerequisites.sh"
+    else
+      prepare_tmp
+      prerequisite_script="$TMP_ROOT/install-prerequisites.sh"
+      curl -fsSL --retry 3 --connect-timeout 20 "https://raw.githubusercontent.com/${REPOSITORY}/${REPOSITORY_REF}/install-prerequisites.sh" --output "$prerequisite_script" || fail "Unable to download Docker prerequisite installer."
+    fi
+    bash "$prerequisite_script" --without-portainer
   fi
   have systemctl && systemctl enable --now docker >/dev/null 2>&1 || true
   docker info >/dev/null 2>&1 || fail "Docker daemon is not available."
-  if ! docker compose version >/dev/null 2>&1; then
-    log "Docker Compose plugin was not found; installing it"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y
-    apt-get install -y docker-compose-plugin || fail "Docker Compose plugin installation failed."
-  fi
+  docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is not available."
   if [[ "${EMS_INSTALL_PORTAINER:-false}" == "true" ]]; then ensure_portainer; fi
   log "Prerequisites are ready"
 }
@@ -114,13 +117,13 @@ ensure_portainer(){
 }
 
 download_source(){
-  TMP_ROOT="$(mktemp -d /tmp/ems-ipam.XXXXXX)"
+  prepare_tmp
   SOURCE_DIR="$TMP_ROOT/source"
   mkdir -p "$SOURCE_DIR"
   if [[ -n "${EMS_INSTALL_SOURCE_DIR:-}" ]]; then
     [[ -d "$EMS_INSTALL_SOURCE_DIR" ]] || fail "EMS_INSTALL_SOURCE_DIR does not exist."
     cp -a "$EMS_INSTALL_SOURCE_DIR/." "$SOURCE_DIR/"
-  elif [[ "$SCRIPT_DIR" != "$INSTALL_DIR" && -f "$SCRIPT_DIR/compose.yml" && -f "$SCRIPT_DIR/docker-app/package.json" ]]; then
+  elif [[ -n "$SCRIPT_DIR" && "$SCRIPT_DIR" != "$INSTALL_DIR" && -f "$SCRIPT_DIR/compose.yml" && -f "$SCRIPT_DIR/docker-app/package.json" ]]; then
     log "Using project files next to install.sh"
     cp -a "$SCRIPT_DIR/." "$SOURCE_DIR/"
   else
@@ -383,5 +386,13 @@ menu(){
   esac
 }
 
-validate_paths
-menu
+# Sourcing permits isolated tests of installer functions without host changes.
+if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then
+  case "${1:-}" in
+    --help|-h) printf 'EMS IPAM setup: sudo bash install.sh\nChoose Install (1) or Update (2). Ubuntu/Debian; Docker prerequisites are installed automatically.\n'; exit 0 ;;
+    '') ;;
+    *) fail "Unknown option. Use --help." ;;
+  esac
+  validate_paths
+  menu
+fi

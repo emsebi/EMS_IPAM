@@ -56,7 +56,7 @@ test("only Persian and English languages are registered", async () => {
 
 test("Portainer stack matches the BASE IPAM Radio release", async () => {
   const stack = await read("../../portainer-stack.yml");
-  assert.match(stack, /ems-ipam-base:1\.7\.0-rc\.1/);
+  assert.match(stack, /ems-ipam-base:1\.7\.0-rc\.2/);
   assert.match(stack, /\.\/modules:\/modules:ro/);
   assert.doesNotMatch(stack, /EMS_SECRET_KEY|modules\/network-map|modules\/radius/);
 });

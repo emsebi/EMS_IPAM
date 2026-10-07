@@ -41,13 +41,14 @@ test("installer exposes five safe lifecycle actions and asks fresh settings", as
 });
 
 test("Windows connection client auto-detects tools and passes usernames without passwords", async () => {
-  const [protocol, setup] = await Promise.all([
+  const [protocol, setup, common] = await Promise.all([
     fs.readFile(new URL("../../windows-client/EMS-IPAM-Protocol.ps1", import.meta.url), "utf8"),
     fs.readFile(new URL("../../windows-client/Install-EMS-Client.ps1", import.meta.url), "utf8"),
+    fs.readFile(new URL("../../windows-client/EMS-IPAM-Common.ps1", import.meta.url), "utf8"),
   ]);
   assert.match(protocol, /App Paths/);
   assert.match(protocol, /Select-ToolFile/);
-  assert.match(protocol, /usernameValue/);
+  assert.match(common, /usernameValue/);
   assert.doesNotMatch(protocol, /query\['password'\]/);
   assert.match(setup, /URL:EMS IPAM Client/);
 });

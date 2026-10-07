@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PORTAINER_ENABLED="true"
+PORTAINER_ENABLED="false"
 TTY_DEVICE="/dev/tty"
 
 log() { printf '\n[%s] %s\n' "EMS prerequisites" "$*"; }
@@ -13,8 +13,7 @@ Usage:
   sudo bash install-prerequisites.sh [--with-portainer|--without-portainer]
 
 Installs Docker Engine and the Docker Compose plugin from Docker's official
-repository on supported Ubuntu or Debian systems. Portainer CE is installed by
-default and can be skipped with --without-portainer.
+repository on supported Ubuntu or Debian systems. Portainer CE is optional; request it explicitly with --with-portainer.
 EOF
 }
 

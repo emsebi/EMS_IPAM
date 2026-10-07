@@ -49,7 +49,7 @@ test("larger viewport exposes more IP rows", () => {
 
 test("WinBox uses the repaired client protocol and receives only target", async () => {
   const [app, protocol, installer] = await Promise.all([
-    read("../public/app.js"), read("../../windows-client/EMS-IPAM-Protocol.ps1"), read("../../windows-client/Install-EMS-Client.ps1"),
+    read("../public/app.js"), read("../../windows-client/EMS-IPAM-Common.ps1"), read("../../windows-client/Install-EMS-Client.ps1"),
   ]);
   assert.match(app, /new URL\("emsipam-client:\/\/open"\)/);
   assert.match(protocol, /'winbox' \{ @\(\$target\) \}/);

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 const app=fs.readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
-const ps=fs.readFileSync(new URL("../../windows-client/EMS-IPAM-Protocol.ps1",import.meta.url),"utf8");
+const ps=fs.readFileSync(new URL("../../windows-client/EMS-IPAM-Common.ps1",import.meta.url),"utf8");
 test("translations are file based",()=>{
   assert.ok(app.includes('/i18n/${encodeURIComponent(lang)}.json'));
   assert.ok(fs.existsSync(new URL("../public/i18n/en.json",import.meta.url)));

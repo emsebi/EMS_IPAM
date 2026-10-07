@@ -43,7 +43,7 @@ compose build --pull app
 compose up -d --wait
 
 HEALTH="$(curl -fsS "http://127.0.0.1:${EMS_HTTP_PORT}/health")"
-[[ "$HEALTH" == *'"version":"1.7.0-rc.1"'* && "$HEALTH" == *'"radio"'* ]] || fail "Health response does not report v1.7.0-rc.1 and Radio."
+[[ "$HEALTH" == *'"version":"1.7.0-rc.2"'* && "$HEALTH" == *'"radio"'* ]] || fail "Health response does not report v1.7.0-rc.2 and Radio."
 pass "fresh install health"
 CLIENT_VERSION="$(compose exec -T app pg_dump --version)"
 [[ "$CLIENT_VERSION" == *' 16.'* ]] || fail "App backup client must use PostgreSQL 16: $CLIENT_VERSION"

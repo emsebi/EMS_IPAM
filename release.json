@@ -1,20 +1,27 @@
 {
-  "version": "1.7.0-rc.1",
+  "version": "1.7.0-rc.2",
   "part": 1,
   "status": "release-candidate",
   "sourceVersion": "1.6.1",
   "sourceArchiveSha256": "304b34a523c3cc87602764dcf30a5f63d5ebe219bb241bb97545b02cb767f3f7",
-  "builtAt": "2026-09-29T20:15:29.799597+00:00",
+  "builtAt": "2026-10-06T15:32:40.469356+00:00",
   "tests": {
-    "nodePassed": 56,
-    "browserApiScenariosPassed": 10,
+    "nodePassed": 60,
+    "browserApiScenariosPassed": 11,
     "databaseForLocalTests": "PGlite",
     "dockerVerified": false,
-    "hardwareVerified": false
+    "hardwareVerified": false,
+    "windowsClientLogicPassed": 22,
+    "windowsLauncherCompiled": true,
+    "windowsRuntimeVerified": false
   },
   "modules": {
     "radio": "2.0.0-rc.1",
     "network-access": "0.1.0-rc.1",
-    "ipam": "1.7.0-rc.1"
-  }
+    "ipam": "1.7.0-rc.2"
+  },
+  "packagingRevision": 3,
+  "packagedAt": "2026-10-06T15:32:40.469356+00:00",
+  "packagingChange": "Only Windows client 0.8.0; remove stale overlays listed in DELETED-PATHS-rc2.txt.",
+  "windowsClientVersion": "0.8.0"
 }
