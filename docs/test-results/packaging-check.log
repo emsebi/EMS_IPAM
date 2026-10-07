@@ -1,0 +1,4 @@
+PASS: only Windows client 0.8.0 is present.
+PASS: client archive CRC and every file match windows-client sources.
+PASS: compiled Windows launcher is included.
+PASS: stale paths from DELETED-PATHS-rc2.txt removed.

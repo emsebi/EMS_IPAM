@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "timestamp": "2026-09-29T20:13:45.888Z",
+  "timestamp": "2026-10-06T15:37:12.877Z",
   "database": "PGlite test adapter; production pg driver not exercised",
   "browser": "153.0.8010.0",
   "checks": [
@@ -8,6 +8,7 @@
     "real login and application bootstrap",
     "standalone Device Types creation",
     "IP/device creation, type selection, MAC/VLAN storage and edit",
+    "MIK link, IP-only default target, selectable fallback, client guide and ZIP download",
     "type rename propagates; used type deletion blocked; unused type deletion works",
     "AP selection shows only its stations; parent retained; responsive widths and mobile submenu",
     "MAC and Personnel tabs; name-only personnel create; refresh, search and export",

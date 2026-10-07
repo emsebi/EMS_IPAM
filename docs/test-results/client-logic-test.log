@@ -1,0 +1,23 @@
+PASS: WinBox target 192.168.1.4
+PASS: WinBox target 192.0.2.4:9191
+PASS: WinBox target 192.0.2.4
+PASS: WinBox target [2001:db8::4]
+PASS: WinBox target [2001:db8::4]:9191
+PASS: SSH port and decoded username
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Invalid link rejected
+PASS: Arguments for rdp
+PASS: Arguments for openssh
+PASS: Arguments for putty-telnet
+PASS: Arguments for telnet
+PASS: Arguments for vnc
+All 22 logic tests passed (no Windows launcher execution).

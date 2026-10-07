@@ -14,7 +14,7 @@ ctx سمت سرور دسترسی به pool، json، readBody، پاک‌سازی
 
 | پوشه | نسخه | آنچه واقعاً جدا شده |
 |---|---|---|
-| modules/ipam | 1.7.0-rc.1 | API و صفحه Device Types؛ سایر IPAM هنوز در Core |
+| modules/ipam | 1.7.0-rc.2 | API و صفحه Device Types؛ سایر IPAM هنوز در Core |
 | modules/radio | 2.0.0-rc.1 | UI AP/Station و Ping تکی؛ ذخیره رکورد در hosts مشترک |
 | modules/network-access | 0.1.0-rc.1 | نمایش MACهای IPAM و تب پرسنل؛ هنوز بدون RADIUS/Discovery |
 

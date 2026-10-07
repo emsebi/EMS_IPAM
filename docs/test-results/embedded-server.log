@@ -1,26 +1,26 @@
 TEST_FIXTURES_READY
-EMS IPAM 1.7.0-rc.1 listening on 18191
-2026-09-29T20:13:44.647Z DELETE /api/device-types/2f7dcb9a-f1a9-460b-b6a5-1e0be0ecde36 Error: این نوع تجهیز توسط 1 تجهیز استفاده می‌شود؛ ابتدا نوع آن تجهیزات را تغییر دهید.
-    at Object.handle (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/modules/ipam/backend/index.mjs:52:39)
+EMS IPAM 1.7.0-rc.2 listening on 18191
+2026-10-06T15:37:11.697Z DELETE /api/device-types/47a01a72-9750-4d18-ae5a-ce7411a60c3a Error: این نوع تجهیز توسط 1 تجهیز استفاده می‌شود؛ ابتدا نوع آن تجهیزات را تغییر دهید.
+    at Object.handle (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/modules/ipam/backend/index.mjs:52:39)
     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
-    at async api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:863:29)
-    at async Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:1907:14)
-2026-09-29T20:13:45.879Z POST /api/device-types Error: این عملیات فقط برای مدیر سیستم مجاز است.
-    at requireAdmin (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:297:59)
-    at Object.handle (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/modules/ipam/backend/index.mjs:14:5)
-    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:863:49)
-    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:1907:20) {
+    at async api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:863:29)
+    at async Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:1907:14)
+2026-10-06T15:37:12.867Z POST /api/device-types Error: این عملیات فقط برای مدیر سیستم مجاز است.
+    at requireAdmin (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:297:59)
+    at Object.handle (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/modules/ipam/backend/index.mjs:14:5)
+    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:863:49)
+    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:1907:20) {
   status: 403
 }
-2026-09-29T20:13:45.882Z PUT /api/hosts Error: ویرایش اطلاعات پایه و IPAM فقط برای مدیر سیستم مجاز است.
-    at requireWriter (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:293:59)
-    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:1512:5)
-    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:1907:20) {
+2026-10-06T15:37:12.870Z PUT /api/hosts Error: ویرایش اطلاعات پایه و IPAM فقط برای مدیر سیستم مجاز است.
+    at requireWriter (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:293:59)
+    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:1512:5)
+    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:1907:20) {
   status: 403
 }
-2026-09-29T20:13:45.884Z GET /api/personnel Error: مشاهده فهرست کامل پرسنل فقط برای مدیر سیستم مجاز است.
-    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:920:52)
-    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-stage1/docker-app/server/main.mjs:1907:20)
+2026-10-06T15:37:12.873Z GET /api/personnel Error: مشاهده فهرست کامل پرسنل فقط برای مدیر سیستم مجاز است.
+    at api (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:920:52)
+    at Server.<anonymous> (file:///workspace/scratch/2b367b3836fa/EMS_IPAM-publish/docker-app/server/main.mjs:1907:20)
     at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
   status: 403
 }

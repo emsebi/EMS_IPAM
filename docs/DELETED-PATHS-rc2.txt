@@ -1,0 +1,11 @@
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.0.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.2.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.1.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.7.0.zip
+docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.7.1.zip
+SHA256SUMS.txt
+UPDATE-FILES.txt
+docker-app/server/secrets.mjs
+scripts/install-prerequisites.sh
