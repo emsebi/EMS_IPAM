@@ -56,3 +56,26 @@ test("radio module has no hard-coded Persian UI strings and uses stable keys", a
   assert.match(source, /t\("radio\.action\.addStation"\)/);
   assert.match(source, /t\("radio\.error\.moduleUnavailable"\)/);
 });
+
+
+test("personnel semantic keys preserve English base and Persian translations", async () => {
+  const [english, translations, legacy] = await Promise.all(["en", "fa", "legacy-fa"].map(read));
+  const en = createTranslator({ english, translations, legacy, language: "en" });
+  const fa = createTranslator({ english, translations, legacy, language: "fa" });
+  assert.equal(en("personnel.field.employeeCodeOptional"), "Employee Code (optional)");
+  assert.equal(en("personnel.field.fullNameRequired"), "Full Name (required)");
+  assert.equal(fa("personnel.field.employeeCodeOptional"), "کد پرسنلی (اختیاری)");
+  assert.equal(fa("personnel.field.fullNameRequired"), "نام و نام خانوادگی (الزامی)");
+});
+
+test("personnel dialog is authored in English and bound to stable i18n keys", async () => {
+  const html = await fs.readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const start = html.indexOf('<dialog id="personnelDialog"');
+  const end = html.indexOf("</dialog>", start);
+  const block = html.slice(start, end);
+  assert.match(block, /data-i18n="personnel\.field\.employeeCodeOptional"/);
+  assert.match(block, /data-i18n="personnel\.field\.fullNameRequired"/);
+  assert.match(block, />Employee Code \(optional\)</);
+  assert.match(block, />Full Name \(required\)</);
+  assert.doesNotMatch(block, /[\u0600-\u06FF]/);
+});

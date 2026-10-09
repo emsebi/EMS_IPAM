@@ -280,24 +280,24 @@
   </dialog>
 
   <dialog id="personnelDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button">← بازگشت</button><button class="close" type="button" data-close>×</button></div></div>
+    <div class="modal-head"><div><h3 data-i18n="personnel.title">Personnel</h3><p data-i18n="personnel.subtitle">Search by employee code, name, phone, or department</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button"><span aria-hidden="true">←</span> <span data-i18n="common.back">Back</span></button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body personnel-layout">
       <form id="personnelForm" class="card-form">
         <input id="personnelId" type="hidden">
-        <h4 id="personnelFormTitle">پرسنل جدید</h4>
-        <label class="field">کد پرسنلی (اختیاری)<input id="personnelCode" autocomplete="off"></label>
-        <label class="field">نام و نام خانوادگی (الزامی)<input id="personnelName" required></label>
-        <label class="field">موبایل<input id="personnelMobile" class="ltr"></label>
-        <label class="field">تلفن<input id="personnelPhone" class="ltr"></label>
-        <label class="field">ایمیل<input id="personnelEmail" class="ltr"></label>
-        <label class="field">واحد<input id="personnelDepartment"></label>
-        <label class="field">سمت<input id="personnelJobTitle"></label>
-        <label class="field">شرکت<select id="personnelCompany"></select></label>
-        <label class="field">توضیحات<textarea id="personnelNotes"></textarea></label>
-        <label class="check-field"><input id="personnelActive" type="checkbox" checked> فعال</label>
-        <div class="row-actions"><button class="btn primary" type="submit">ذخیره</button><button id="cancelPersonnelEdit" class="btn hidden" type="button">انصراف</button></div>
+        <h4 id="personnelFormTitle" data-i18n="personnel.form.new">New Personnel</h4>
+        <label class="field"><span data-i18n="personnel.field.employeeCodeOptional">Employee Code (optional)</span><input id="personnelCode" autocomplete="off"></label>
+        <label class="field"><span data-i18n="personnel.field.fullNameRequired">Full Name (required)</span><input id="personnelName" required></label>
+        <label class="field"><span data-i18n="personnel.field.mobile">Mobile</span><input id="personnelMobile" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.phone">Phone</span><input id="personnelPhone" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.email">Email</span><input id="personnelEmail" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.department">Department</span><input id="personnelDepartment"></label>
+        <label class="field"><span data-i18n="personnel.field.jobTitle">Job Title</span><input id="personnelJobTitle"></label>
+        <label class="field"><span data-i18n="personnel.field.company">Company</span><select id="personnelCompany"></select></label>
+        <label class="field"><span data-i18n="personnel.field.notes">Notes</span><textarea id="personnelNotes"></textarea></label>
+        <label class="check-field"><input id="personnelActive" type="checkbox" checked> <span data-i18n="personnel.field.active">Active</span></label>
+        <div class="row-actions"><button class="btn primary" type="submit" data-i18n="common.save">Save</button><button id="cancelPersonnelEdit" class="btn hidden" type="button" data-i18n="common.cancel">Cancel</button></div>
       </form>
-      <div><div class="quick-filter personnel-toolbar"><input id="personnelSearch" placeholder="جست‌وجو..." autocomplete="off"><button id="exportPersonnel" class="btn sm" type="button">Export CSV</button><button id="importPersonnel" class="btn sm" type="button">Import CSV</button><input id="personnelImportFile" class="hidden" type="file" accept=".csv,text/csv"></div><div id="personnelList" class="table-list"></div></div>
+      <div><div class="quick-filter personnel-toolbar"><input id="personnelSearch" placeholder="Search..." data-i18n-placeholder="common.search" autocomplete="off"><button id="exportPersonnel" class="btn sm" type="button" data-i18n="personnel.action.exportCsv">Export CSV</button><button id="importPersonnel" class="btn sm" type="button" data-i18n="personnel.action.importCsv">Import CSV</button><input id="personnelImportFile" class="hidden" type="file" accept=".csv,text/csv"></div><div id="personnelList" class="table-list"></div></div>
     </div>
   </dialog>
 

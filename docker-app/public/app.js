@@ -106,6 +106,16 @@ function t(key, params = {}) {
   return translateKey(key, params);
 }
 function translateTree(root = document) {
+  const marked = [];
+  if (root?.nodeType === 1 && root.matches?.("[data-i18n]")) marked.push(root);
+  root.querySelectorAll?.("[data-i18n]").forEach((node) => marked.push(node));
+  for (const node of marked) node.textContent = t(node.dataset.i18n);
+
+  const placeholderNodes = [];
+  if (root?.nodeType === 1 && root.matches?.("[data-i18n-placeholder]")) placeholderNodes.push(root);
+  root.querySelectorAll?.("[data-i18n-placeholder]").forEach((node) => placeholderNodes.push(node));
+  for (const node of placeholderNodes) node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
@@ -1425,25 +1435,25 @@ function parseCsv(text) {
 async function refreshPersonnel(query = "") {
   const result = await request(`/api/personnel${query ? `?q=${encodeURIComponent(query)}` : ""}`);
   const items = result.items || [];
-  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">کد:</span> ${escapeHtml(item.employeeCode || "—")} · <span class="meta-label">واحد:</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">شرکت:</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("") || `<div class="empty-state">پرسنلی ثبت نشده است.</div>`;
+  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">${escapeHtml(t("personnel.meta.code"))}</span> ${escapeHtml(item.employeeCode || "—")} · <span class="meta-label">${escapeHtml(t("personnel.meta.department"))}</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">${escapeHtml(t("personnel.meta.company"))}</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div></div>`).join("") || `<div class="empty-state">${escapeHtml(t("personnel.empty"))}</div>`;
   $("personnelList").querySelectorAll(".edit-personnel").forEach((node) => node.addEventListener("click", () => editPersonnel(items.find((item) => item.id === node.dataset.id))));
   $("personnelList").querySelectorAll(".delete-personnel").forEach((node) => node.addEventListener("click", async () => {
-    const item = items.find((entry) => entry.id === node.dataset.id); if (!item || !confirm(`پرسنل «${item.fullName}» حذف شود؟`)) return;
-    try { await request(`/api/personnel/${encodeURIComponent(item.id)}`, { method: "DELETE" }); resetPersonnelForm(); await refreshPersonnel($("personnelSearch").value); toast("پرسنل حذف شد."); } catch (error) { toast(error.message); }
+    const item = items.find((entry) => entry.id === node.dataset.id); if (!item || !confirm(t("personnel.confirmDelete", { name: item.fullName }))) return;
+    try { await request(`/api/personnel/${encodeURIComponent(item.id)}`, { method: "DELETE" }); resetPersonnelForm(); await refreshPersonnel($("personnelSearch").value); toast(t("personnel.toast.deleted")); } catch (error) { toast(error.message); }
   }));
 }
 
 function resetPersonnelForm() {
-  $("personnelForm").reset(); $("personnelId").value = ""; $("personnelActive").checked = true; $("personnelFormTitle").textContent = "پرسنل جدید"; $("cancelPersonnelEdit").classList.add("hidden");
+  $("personnelForm").reset(); $("personnelId").value = ""; $("personnelActive").checked = true; $("personnelFormTitle").textContent = t("personnel.form.new"); $("cancelPersonnelEdit").classList.add("hidden");
 }
 
 function editPersonnel(item) {
-  if (!item) return; $("personnelId").value = item.id; $("personnelCode").value = item.employeeCode || ""; $("personnelName").value = item.fullName || ""; $("personnelMobile").value = item.mobile || ""; $("personnelPhone").value = item.phone || ""; $("personnelEmail").value = item.email || ""; $("personnelDepartment").value = item.department || ""; $("personnelJobTitle").value = item.jobTitle || ""; $("personnelCompany").value = item.companyId || ""; $("personnelNotes").value = item.notes || ""; $("personnelActive").checked = item.active !== false; $("personnelFormTitle").textContent = "ویرایش پرسنل"; $("cancelPersonnelEdit").classList.remove("hidden");
+  if (!item) return; $("personnelId").value = item.id; $("personnelCode").value = item.employeeCode || ""; $("personnelName").value = item.fullName || ""; $("personnelMobile").value = item.mobile || ""; $("personnelPhone").value = item.phone || ""; $("personnelEmail").value = item.email || ""; $("personnelDepartment").value = item.department || ""; $("personnelJobTitle").value = item.jobTitle || ""; $("personnelCompany").value = item.companyId || ""; $("personnelNotes").value = item.notes || ""; $("personnelActive").checked = item.active !== false; $("personnelFormTitle").textContent = t("personnel.form.edit"); $("cancelPersonnelEdit").classList.remove("hidden");
 }
 
 async function openPersonnelDialog(companyId = "", { returnToSettings = false } = {}) {
   state.personnelReturnToSettings = returnToSettings;
-  $("personnelCompany").innerHTML = `<option value="">بدون شرکت</option>${(state.bootstrap?.companies || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+  $("personnelCompany").innerHTML = `<option value="">${escapeHtml(t("personnel.company.none"))}</option>${(state.bootstrap?.companies || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
   resetPersonnelForm();
   if (companyId) $("personnelCompany").value = companyId;
   $("personnelSearch").value = ""; await refreshPersonnel(); $("personnelDialog").showModal();
@@ -1973,7 +1983,7 @@ $("personnelForm").addEventListener("submit", async (event) => {
   const submittedForm = event.currentTarget;
   const id = $("personnelId").value;
   const fullName = $("personnelName").value.trim();
-  if (!fullName) return toast("نام و نام خانوادگی الزامی است.");
+  if (!fullName) return toast(t("personnel.validation.fullName"));
   const body = {
     employeeCode: $("personnelCode").value.trim(),
     fullName,
@@ -1991,13 +2001,13 @@ $("personnelForm").addEventListener("submit", async (event) => {
     markFormClean(submittedForm);
     resetPersonnelForm();
     await refreshPersonnel($("personnelSearch").value);
-    toast(id ? "اطلاعات پرسنل ویرایش شد." : "پرسنل اضافه شد.");
+    toast(id ? t("personnel.toast.updated") : t("personnel.toast.added"));
   } catch (error) { toast(error.message); }
 });
 $("cancelPersonnelEdit").addEventListener("click", resetPersonnelForm);
 $("exportPersonnel").addEventListener("click",()=>window.location.assign(`/api/personnel/export?q=${encodeURIComponent($("personnelSearch").value||"")}`));
 $("importPersonnel").addEventListener("click",()=>$("personnelImportFile").click());
-$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error("CSV خالی است.");const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.name<0)throw new Error("ستون Full Name الزامی است.");const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:ix.code>=0?r[ix.code]||"":"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(`Import: ${result.created} جدید، ${result.updated} ویرایش، ${result.skipped} رد شد.`);}catch(error){toast(error.message);}finally{event.target.value="";}});
+$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error(t("personnel.csv.empty"));const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.name<0)throw new Error(t("personnel.csv.fullNameRequired"));const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:ix.code>=0?r[ix.code]||"":"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(t("personnel.csv.importSummary",{created:result.created,updated:result.updated,skipped:result.skipped}));}catch(error){toast(error.message);}finally{event.target.value="";}});
 
 $("createBackupButton").addEventListener("click", async () => {
   const button = $("createBackupButton"); button.disabled = true; button.textContent = "در حال ساخت…";
