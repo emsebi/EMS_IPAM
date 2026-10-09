@@ -1711,7 +1711,7 @@ function openSettingsDialog(tab = "general") {
   if ($("appearanceTheme")) $("appearanceTheme").value = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   if ($("settingsModulesList")) {
     const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
-    $("settingsModulesList").innerHTML = modules.length ? modules.map((item) => `<div class="user-row"><div><b>${escapeHtml(item.name || item.id)}</b><small>${escapeHtml(item.description || item.id)}</small></div><span class="status-pill">v${escapeHtml(item.version || "0.0.0")}</span></div>`).join("") : `<div class="empty-state compact-empty">فعلاً افزونه‌ای نصب نشده است. Core + IPAM مستقل فعال است.</div>`;
+    $("settingsModulesList").innerHTML = modules.length ? modules.map((item) => `<div class="user-row"><div><b>${escapeHtml(item.name || item.id)}</b><small>${escapeHtml(item.description || item.id)}</small></div><span class="status-pill">v${escapeHtml(item.version || "0.0.0")}</span></div>`).join("") : `<div class="empty-state compact-empty">${escapeHtml(t("settings.modules.empty"))}</div>`;
   }
   $("toolsSettings").innerHTML = state.bootstrap.tools.map((tool) => `<div class="tool-setting" data-tool="${escapeHtml(tool.tool)}"><b style="color:${escapeHtml(tool.color)}">${escapeHtml(tool.tool)}</b><input class="tool-label" value="${escapeHtml(tool.label)}"><input class="tool-port" type="number" min="0" max="65535" value="${escapeHtml(tool.defaultPort)}"><input class="tool-color" type="color" value="${escapeHtml(tool.color)}"></div>`).join("");
   if ($("settingsVersion")) $("settingsVersion").textContent = state.bootstrap?.version || "";
@@ -1851,7 +1851,7 @@ $("personnelDialog").addEventListener("close", () => {
   if (state.view === "network-access") openNetworkAccessPage("personnel");
 });
 $("openBackupsFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openBackupsDialog(); });
-$("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast("تنظیم ظاهر اعمال شد."); });
+$("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast(t("settings.appearance.applied")); });
 document.querySelectorAll(".settings-tab").forEach((node) => node.addEventListener("click", () => { document.querySelectorAll(".settings-tab").forEach((n) => n.classList.toggle("active", n === node)); document.querySelectorAll(".settings-pane").forEach((pane) => pane.classList.toggle("active", pane.dataset.settingsPane === node.dataset.settingsTab)); }));
 $("exportButton").addEventListener("click", () => state.currentSpaceId ? window.location.assign(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/export`) : toast("ابتدا یک رنج اصلی را باز کنید."));
 
@@ -1975,7 +1975,7 @@ $("userForm").addEventListener("submit", async (event) => {
 $("settingsForm").addEventListener("submit", (event) => event.preventDefault());
 $("saveToolsSettings").addEventListener("click", async () => {
   const tools = [...$("toolsSettings").querySelectorAll(".tool-setting")].map((node) => ({ tool: node.dataset.tool, label: node.querySelector(".tool-label").value, defaultPort: Number(node.querySelector(".tool-port").value), color: node.querySelector(".tool-color").value }));
-  try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارهای IP ذخیره شد."); } catch (error) { toast(error.message); }
+  try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast(t("settings.tools.saved")); } catch (error) { toast(error.message); }
 });
 
 $("personnelForm").addEventListener("submit", async (event) => {

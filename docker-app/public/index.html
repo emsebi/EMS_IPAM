@@ -254,28 +254,28 @@
 
   <dialog id="settingsDialog" class="wide-dialog settings-dialog">
     <form id="settingsForm">
-      <div class="modal-head"><div><h3>تنظیمات EMS_IPAM</h3><p>تنظیمات اصلی برنامه از یک محل مدیریت می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3 data-i18n="settings.title">EMS IPAM Settings</h3><p data-i18n="settings.subtitle">Manage the main application settings in one place.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="settings-layout">
         <nav class="settings-nav">
-          <button type="button" class="settings-tab active" data-settings-tab="general">عمومی</button>
-          <button type="button" class="settings-tab" data-settings-tab="users">کاربران و دسترسی‌ها</button>
-          <button type="button" class="settings-tab" data-settings-tab="backup">پشتیبان‌گیری</button>
-          <button type="button" class="settings-tab" data-settings-tab="appearance">ظاهر</button>
-          <button type="button" class="settings-tab" data-settings-tab="tools">ابزارهای IP</button>
-          <button type="button" class="settings-tab" data-settings-tab="modules">ماژول‌ها</button>
-          <button type="button" class="settings-tab" data-settings-tab="system">سیستم</button>
+          <button type="button" class="settings-tab active" data-settings-tab="general" data-i18n="settings.tab.general">General</button>
+          <button type="button" class="settings-tab" data-settings-tab="users" data-i18n="settings.tab.users">Users & Access</button>
+          <button type="button" class="settings-tab" data-settings-tab="backup" data-i18n="settings.tab.backup">Backup</button>
+          <button type="button" class="settings-tab" data-settings-tab="appearance" data-i18n="settings.tab.appearance">Appearance</button>
+          <button type="button" class="settings-tab" data-settings-tab="tools" data-i18n="settings.tab.tools">IP Tools</button>
+          <button type="button" class="settings-tab" data-settings-tab="modules" data-i18n="settings.tab.modules">Modules</button>
+          <button type="button" class="settings-tab" data-settings-tab="system" data-i18n="settings.tab.system">System</button>
         </nav>
         <div class="settings-content modal-body">
-          <section class="settings-pane active" data-settings-pane="general"><h4>تنظیمات عمومی</h4><p>Company، Site، Address Space و اطلاعات پایه از بخش‌های اصلی پنل مدیریت می‌شوند.</p><div class="settings-card"><b>نسخه برنامه</b><span id="settingsVersion" class="ltr mono"></span></div><div class="settings-card"><b>منطقه زمانی</b><span>Asia/Tehran</span></div></section>
-          <section class="settings-pane" data-settings-pane="users"><h4>کاربران و دسترسی‌ها</h4><p>ایجاد، ویرایش، غیرفعال‌سازی و حذف Admin / Support / Helpdesk / Viewer.</p><button id="openUsersFromSettings" class="btn primary" type="button">مدیریت کاربران</button></section>
-          <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
-          <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
-          <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
-          <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
-          <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
+          <section class="settings-pane active" data-settings-pane="general"><h4 data-i18n="settings.general.title">General Settings</h4><p data-i18n="settings.general.description">Company, Site, Address Space, and core information are managed from the main panel sections.</p><div class="settings-card"><b data-i18n="settings.general.version">Application Version</b><span id="settingsVersion" class="ltr mono"></span></div><div class="settings-card"><b data-i18n="settings.general.timezone">Time Zone</b><span>Asia/Tehran</span></div></section>
+          <section class="settings-pane" data-settings-pane="users"><h4 data-i18n="settings.users.title">Users & Access</h4><p data-i18n="settings.users.description">Create, edit, disable, and remove Admin / Support / Helpdesk / Viewer accounts.</p><button id="openUsersFromSettings" class="btn primary" type="button" data-i18n="settings.users.manage">Manage Users</button></section>
+          <section class="settings-pane" data-settings-pane="backup"><h4 data-i18n="settings.backup.title">Backup</h4><p data-i18n="settings.backup.description">Manual backup and automatic scheduling.</p><button id="openBackupsFromSettings" class="btn primary" type="button" data-i18n="settings.backup.manage">Backup Settings</button></section>
+          <section class="settings-pane" data-settings-pane="appearance"><h4 data-i18n="settings.appearance.title">Appearance</h4><p data-i18n="settings.appearance.description">The selected theme is stored for this browser and applied immediately.</p><div class="form-grid"><label class="field"><span data-i18n="settings.appearance.theme">Theme</span><select id="appearanceTheme"><option value="light" data-i18n="settings.appearance.light">Light</option><option value="dark" data-i18n="settings.appearance.dark">Dark</option></select></label></div><button id="applyAppearance" class="btn primary" type="button" data-i18n="settings.appearance.apply">Apply Appearance</button></section>
+          <section class="settings-pane" data-settings-pane="tools"><h4 data-i18n="settings.tools.title">IP Tools</h4><p data-i18n="settings.tools.description">Default ports and labels.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button" data-i18n="settings.tools.save">Save IP Tools</button></section>
+          <section class="settings-pane" data-settings-pane="modules"><h4 data-i18n="settings.modules.title">Modules</h4><p data-i18n="settings.modules.description">Valid extensions in the modules/ directory are loaded independently.</p><div id="settingsModulesList" class="table-list"></div></section>
+          <section class="settings-pane" data-settings-pane="system"><h4 data-i18n="settings.system.title">System</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span data-i18n="settings.system.moduleSupport">Independent extensions are supported from modules/.</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
         </div>
       </div>
-      <div class="modal-foot"><button class="btn primary" type="button" data-close>بستن تنظیمات</button></div>
+      <div class="modal-foot"><button class="btn primary" type="button" data-close data-i18n="settings.close">Close Settings</button></div>
     </form>
   </dialog>
 

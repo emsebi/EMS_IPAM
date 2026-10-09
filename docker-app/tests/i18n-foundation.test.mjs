@@ -79,3 +79,15 @@ test("personnel dialog is authored in English and bound to stable i18n keys", as
   assert.match(block, />Full Name \(required\)</);
   assert.doesNotMatch(block, /[\u0600-\u06FF]/);
 });
+
+
+test("settings dialog is English-first and uses stable keys", async () => {
+  const html = await fs.readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const start = html.indexOf('<dialog id="settingsDialog"');
+  const end = html.indexOf('<dialog id="personnelDialog"', start);
+  const block = html.slice(start, end);
+  assert.match(block, /data-i18n="settings\.title"/);
+  assert.match(block, /data-i18n="settings\.tab\.general"/);
+  assert.match(block, />EMS IPAM Settings</);
+  assert.doesNotMatch(block, /[\u0600-\u06FF]/);
+});
