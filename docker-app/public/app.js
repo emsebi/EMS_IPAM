@@ -1,4 +1,5 @@
 import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.2";
+import { createTranslator } from "./i18n-core.mjs?v=1.7.0-rc.2";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -62,8 +63,9 @@ ipamMenu.querySelectorAll(".navbtn").forEach((button) => button.addEventListener
 const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
 
-let LANGUAGE_PACK = {};
-let LANGUAGE_ENTRIES = [];
+let translateValue = (value) => String(value ?? "");
+const sourceTextNodes = new WeakMap();
+const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
   const supported = new Set(["en", "fa"]);
   try {
@@ -79,24 +81,43 @@ async function loadLanguageCatalog() {
     localStorage.setItem("ems-language", state.language);
   }
 }
-async function loadLanguagePack(lang) {
+async function readLanguageFile(path) {
   try {
-    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.2`, { cache: "no-store" });
-    LANGUAGE_PACK = response.ok ? await response.json() : {};
-  } catch { LANGUAGE_PACK = {}; }
-  LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
+    const response = await fetch(path, { cache: "no-store" });
+    return response.ok ? await response.json() : {};
+  } catch { return {}; }
 }
-function translateValue(value) {
-  let output = String(value ?? "");
-  for (const [source,target] of LANGUAGE_ENTRIES) if (source && output.includes(source)) output = output.split(source).join(target);
-  return output;
+async function loadLanguagePack(lang) {
+  const [english, localized, legacy] = await Promise.all([
+    readLanguageFile("/i18n/en.json?v=1.7.0-rc.2"),
+    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.2`),
+    readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.2"),
+  ]);
+  translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
 }
 function translateTree(root = document) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) { const raw=node.nodeValue; if (!raw?.trim()) continue; node.nodeValue=translateValue(raw); }
-  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el)=>{
-    for (const attr of ["placeholder","title","aria-label"]) if (el.hasAttribute(attr)) el.setAttribute(attr,translateValue(el.getAttribute(attr)));
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!node.nodeValue?.trim() || node.parentElement?.closest("script,style,textarea,[contenteditable]")) continue;
+    const previous = sourceTextNodes.get(node);
+    const original = previous && previous.output === node.nodeValue ? previous.original : node.nodeValue;
+    const output = translateValue(original);
+    sourceTextNodes.set(node, { original, output });
+    if (node.nodeValue !== output) node.nodeValue = output;
+  }
+  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el) => {
+    const saved = sourceAttributes.get(el) || {};
+    for (const attr of ["placeholder", "title", "aria-label"]) {
+      if (!el.hasAttribute(attr)) continue;
+      const current = el.getAttribute(attr);
+      const previous = saved[attr];
+      const original = previous && previous.output === current ? previous.original : current;
+      const output = translateValue(original);
+      saved[attr] = { original, output };
+      if (current !== output) el.setAttribute(attr, output);
+    }
+    sourceAttributes.set(el, saved);
   });
 }
 async function applyLanguage() {
