@@ -1,5 +1,5 @@
 import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.2";
-import { createTranslator } from "./i18n-core.mjs?v=1.7.0-rc.2";
+import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.0-rc.2";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -96,11 +96,7 @@ async function loadLanguagePack(lang) {
     readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.2"),
   ]);
   translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
-  translateKey = (key, params = {}) => {
-    let output = translateValue(String(key ?? ""));
-    for (const [name, value] of Object.entries(params || {})) output = output.replaceAll(`{${name}}`, String(value ?? ""));
-    return output;
-  };
+  translateKey = createKeyTranslator({ english, translations: localized, language: lang });
 }
 function t(key, params = {}) {
   return translateKey(key, params);

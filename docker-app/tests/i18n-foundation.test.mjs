@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import { createTranslator } from "../public/i18n-core.mjs";
+import { createTranslator, createKeyTranslator } from "../public/i18n-core.mjs";
 const read = async (name) => JSON.parse(await fs.readFile(new URL(`../public/i18n/${name}.json`, import.meta.url), "utf8"));
 
 test("English catalog provides stable canonical keys and Persian covers them", async () => {
@@ -90,4 +90,32 @@ test("settings dialog is English-first and uses stable keys", async () => {
   assert.match(block, /data-i18n="settings\.tab\.general"/);
   assert.match(block, />EMS IPAM Settings</);
   assert.doesNotMatch(block, /[\u0600-\u06FF]/);
+});
+
+test("semantic-key translator uses exact lookups and preserves interpolated user values", () => {
+  const english = { "radio.title": "Radios", "radio.message": "Station {name} at {ip}" };
+  const translations = { "radio.title": "  ", "radio.message": "ایستگاه {name} در {ip}" };
+  const t = createKeyTranslator({ english, translations, language: "fa" });
+  assert.equal(t("radio.title"), "Radios", "Blank translations must fall back to English");
+  assert.equal(t("radio.message", { name: "Settings", ip: "192.0.2.5" }), "ایستگاه Settings در 192.0.2.5");
+  assert.equal(t("radio.message", { name: "A$B" }), "ایستگاه A$B در {ip}");
+  assert.equal(t("radio.unknown"), "radio.unknown", "Unknown keys remain visible");
+  assert.equal(createKeyTranslator({ english, translations, language: "en" })("radio.title"), "Radios");
+});
+
+test("legacy phrase translator falls back to English for blank localized values", () => {
+  const t = createTranslator({
+    english: { "common.save": "Save" },
+    translations: { "common.save": " " },
+    legacy: { "ذخیره": "common.save" },
+    language: "fa",
+  });
+  assert.equal(t("common.save"), "Save");
+  assert.equal(t("ذخیره"), "Save");
+});
+
+test("application uses exact semantic-key translator for marked UI", async () => {
+  const app = await fs.readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  assert.match(app, /createKeyTranslator\(\{ english, translations: localized, language: lang \}\)/);
+  assert.match(app, /node\.dataset\.i18n/);
 });
