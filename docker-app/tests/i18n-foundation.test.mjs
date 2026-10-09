@@ -8,7 +8,7 @@ test("English catalog provides stable canonical keys and Persian covers them", a
   const [en, fa, legacy] = await Promise.all(["en", "fa", "legacy-fa"].map(read));
   assert.ok(Object.keys(en).length >= 200);
   assert.deepEqual(Object.keys(en).sort(), Object.keys(fa).sort());
-  for (const [key, value] of Object.entries(en)) assert.equal(key, value);
+  for (const [key, value] of Object.entries(en)) assert.ok(typeof value === "string" && value.trim(), `Empty English value: ${key}`);
   for (const key of Object.values(legacy)) assert.ok(key in en, `Missing canonical key: ${key}`);
 });
 
@@ -23,6 +23,8 @@ test("English and Persian translate both legacy and canonical UI strings", async
   assert.equal(en("داشبورد و شرکت‌ها"), "Dashboard & Companies");
   assert.equal(fa("Dashboard & Companies"), "داشبورد و شرکت‌ها");
   assert.equal(fa("Export CSV"), "خروجی CSV");
+  assert.equal(en("radio.title"), "Radio AP / Station Map");
+  assert.equal(fa("radio.title"), "رادیوها و ارتباط AP / Station");
   assert.equal(en("کد: 100"), "Code: 100");
   assert.equal(fa("کد: 100"), "کد: 100");
   assert.equal(en("شرکت Company"), "Company Company");
@@ -36,4 +38,21 @@ test("missing translations fall back to English, not Persian or empty text", () 
   assert.equal(translator("English only"), "English only");
   assert.equal(translator("Unknown"), "Unknown");
   assert.equal(createTranslator()("Unknown"), "Unknown");
+});
+
+
+test("additional language packs work without translator code changes", () => {
+  const english = { "common.cancel": "Cancel", "radio.title": "Radios" };
+  const german = { "common.cancel": "Abbrechen", "radio.title": "Funkgeräte" };
+  const de = createTranslator({ english, translations: german, language: "de" });
+  assert.equal(de("common.cancel"), "Abbrechen");
+  assert.equal(de("radio.title"), "Funkgeräte");
+});
+
+test("radio module has no hard-coded Persian UI strings and uses stable keys", async () => {
+  const source = await fs.readFile(new URL("../../modules/radio/public/index.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /[\u0600-\u06FF]/);
+  assert.match(source, /t\("radio\.title"\)/);
+  assert.match(source, /t\("radio\.action\.addStation"\)/);
+  assert.match(source, /t\("radio\.error\.moduleUnavailable"\)/);
 });

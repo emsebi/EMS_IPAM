@@ -64,20 +64,22 @@ const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
 
 let translateValue = (value) => String(value ?? "");
+let translateKey = (key, params = {}) => String(key ?? "");
 const sourceTextNodes = new WeakMap();
 const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
-  const supported = new Set(["en", "fa"]);
   try {
     const response = await fetch("/i18n/languages.json?v=1.7.0-rc.2", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
-    state.languages = Array.isArray(items) ? items.filter((item) => supported.has(item?.id) && item?.label) : [];
-    if (state.languages.length !== supported.size) throw new Error("Language catalog must contain English and Persian only.");
+    state.languages = Array.isArray(items)
+      ? items.filter((item) => /^[a-z0-9_-]+$/i.test(String(item?.id || "")) && item?.label)
+      : [];
+    if (!state.languages.some((item) => item.id === "en")) throw new Error("Language catalog must contain English.");
   } catch {
     state.languages = [{ id: "en", label: "English", dir: "ltr" }, { id: "fa", label: "فارسی", dir: "rtl" }];
   }
   if (!state.languages.some((item) => item.id === state.language)) {
-    state.language = state.languages[0].id;
+    state.language = state.languages.find((item) => item.id === "en")?.id || state.languages[0].id;
     localStorage.setItem("ems-language", state.language);
   }
 }
@@ -94,6 +96,14 @@ async function loadLanguagePack(lang) {
     readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.2"),
   ]);
   translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
+  translateKey = (key, params = {}) => {
+    let output = translateValue(String(key ?? ""));
+    for (const [name, value] of Object.entries(params || {})) output = output.replaceAll(`{${name}}`, String(value ?? ""));
+    return output;
+  };
+}
+function t(key, params = {}) {
+  return translateKey(key, params);
 }
 function translateTree(root = document) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -342,7 +352,7 @@ async function loadModuleUi(id) {
   document.head.appendChild(link);
   const ui = createUi({ state,$,page,isModuleInstalled,hasClientModule,ensureInventory,ensureDeviceTypes,
     updateSelectors,navActive,setRoute,toast,canWrite,isAdmin,ipv4ToInt,intToIpv4,request,prepareHostEditor,
-    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,populateHostTypes,openPersonnelDialog,editPersonnel });
+    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,t,populateHostTypes,openPersonnelDialog,editPersonnel });
   moduleUiCache.set(id,ui);
   return ui;
 }
