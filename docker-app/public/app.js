@@ -1314,7 +1314,7 @@ function openHostDialog(ip, overrides = {}) {
   $("hostDialog").showModal();
 }
 
-async function prepareHostEditor(spaceId, ip, returnView, overrides = {}) {
+async function prepareHostEditor(spaceId, ip, returnView, overrides = {}, { requireEmpty = false } = {}) {
   const space = (state.bootstrap?.spaces || []).find((item) => item.id === spaceId);
   const address = ipv4ToInt(ip);
   if (!space || address === null || !contains(space.cidr, address)) throw new Error("IP یا رنج انتخاب‌شده معتبر نیست.");
@@ -1323,6 +1323,9 @@ async function prepareHostEditor(spaceId, ip, returnView, overrides = {}) {
   state.currentCompanyId = space.companyId;
   state.sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`;
   state.data = await request(`/api/spaces/${encodeURIComponent(spaceId)}/data`);
+  if (requireEmpty && (state.data.hosts || []).some((host) => host.ip === ip)) {
+    throw new Error(t("inventory.error.ipAlreadyRegistered"));
+  }
   updateSelectors();
   openHostDialog(ip, overrides);
 }
@@ -1524,7 +1527,8 @@ function openInventoryCreateDialog() {
   const select = $("inventoryCreateSpace");
   select.innerHTML = spaces.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.companyName || state.bootstrap.companies.find((c)=>c.id===item.companyId)?.name || "")} — ${escapeHtml(item.name)} — ${escapeHtml(item.cidr)}</option>`).join("");
   $("inventoryCreateIp").value = "";
-  $("inventoryCreateError").textContent = "";
+  $("inventoryCreateError").textContent = spaces.length ? "" : t("inventory.error.noSpaces");
+  $("inventoryCreateForm").querySelector('[type="submit"]').disabled = !spaces.length;
   markFormClean($("inventoryCreateForm"));
   $("inventoryCreateDialog").showModal();
 }
@@ -1539,7 +1543,7 @@ async function continueInventoryCreate() {
     $("inventoryCreateError").textContent = "IP باید داخل رنج انتخاب‌شده باشد.";
     return;
   }
-  await prepareHostEditor(spaceId, ip, "inventory");
+  await prepareHostEditor(spaceId, ip, "inventory", {}, { requireEmpty: true });
   $("inventoryCreateDialog").close();
 }
 
@@ -1703,7 +1707,27 @@ async function openBackupsDialog() {
   try { await refreshBackups(); } catch (error) { toast(error.message); }
 }
 
+function ensureSettingsDeviceActions() {
+  const pane = document.querySelector('[data-settings-pane="general"]');
+  if (!pane || $("settingsManageDevices")) return;
+  const actions = document.createElement("div");
+  actions.className = "row-actions settings-device-actions";
+  actions.innerHTML = `<button id="settingsManageDevices" class="btn" type="button">${escapeHtml(t("settings.general.manageDevices"))}</button><button id="settingsManageDeviceTypes" class="btn" type="button">${escapeHtml(t("settings.general.manageDeviceTypes"))}</button>`;
+  pane.querySelector("p")?.insertAdjacentElement("afterend", actions);
+  $("settingsManageDevices").addEventListener("click", async () => {
+    $("settingsDialog").close();
+    try { await openInventoryPage(true); } catch (error) { toast(error.message); }
+  });
+  $("settingsManageDeviceTypes").addEventListener("click", async () => {
+    $("settingsDialog").close();
+    try { await openDeviceTypesPage(); } catch (error) { toast(error.message); }
+  });
+}
+
 function openSettingsDialog(tab = "general") {
+  ensureSettingsDeviceActions();
+  $("settingsManageDevices")?.classList.toggle("hidden", !hasClientModule("inventory"));
+  $("settingsManageDeviceTypes")?.classList.toggle("hidden", !isAdmin());
   if ($("appearanceTheme")) $("appearanceTheme").value = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   if ($("settingsModulesList")) {
     const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];

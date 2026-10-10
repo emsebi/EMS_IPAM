@@ -331,5 +331,9 @@
   "settings.modules.empty": "No extensions are currently installed. Core + IPAM standalone is active.",
   "settings.system.title": "System",
   "settings.system.moduleSupport": "Independent extensions are supported from modules/.",
-  "settings.close": "Close Settings"
+  "settings.close": "Close Settings",
+  "settings.general.manageDevices": "Manage Devices",
+  "settings.general.manageDeviceTypes": "Manage Device Types",
+  "inventory.error.noSpaces": "Create an address space before adding a device.",
+  "inventory.error.ipAlreadyRegistered": "This IP is already registered. Edit the existing device in Inventory."
 }

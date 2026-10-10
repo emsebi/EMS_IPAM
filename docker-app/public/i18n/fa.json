@@ -331,5 +331,9 @@
   "settings.modules.empty": "فعلاً افزونه‌ای نصب نشده است. Core + IPAM مستقل فعال است.",
   "settings.system.title": "سیستم",
   "settings.system.moduleSupport": "پشتیبانی از افزونه‌های مستقل در modules/",
-  "settings.close": "بستن تنظیمات"
+  "settings.close": "بستن تنظیمات",
+  "settings.general.manageDevices": "مدیریت تجهیزات",
+  "settings.general.manageDeviceTypes": "مدیریت انواع تجهیزات",
+  "inventory.error.noSpaces": "برای افزودن تجهیز ابتدا یک رنج IP تعریف کنید.",
+  "inventory.error.ipAlreadyRegistered": "این IP قبلاً ثبت شده است. تجهیز موجود را از فهرست تجهیزات ویرایش کنید."
 }
