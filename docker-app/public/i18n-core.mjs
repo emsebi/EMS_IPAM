@@ -17,7 +17,21 @@ export function createTranslator({ english = {}, translations = {}, legacy = {},
   if (!keys.length) return (value) => String(value ?? "");
   const escaped = keys.map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const matcher = new RegExp(escaped.join("|"), "g");
-  return (value) => String(value ?? "").replace(matcher, (source) => dictionary.get(source));
+  return (value) => {
+    const source = String(value ?? "");
+    // User-supplied English names such as "Test Device" must never be
+    // translated word-by-word. Static UI strings still translate exactly.
+    if (dictionary.has(source)) return dictionary.get(source);
+    const trimmed = source.trim();
+    if (trimmed && dictionary.has(trimmed)) {
+      const start = source.indexOf(trimmed);
+      return source.slice(0, start) + dictionary.get(trimmed) + source.slice(start + trimmed.length);
+    }
+    // Legacy Persian templates may contain interpolated numbers/labels.
+    // Only these old Persian phrases use substring replacement.
+    if (!/[\u0600-\u06FF]/.test(source)) return source;
+    return source.replace(matcher, (part) => dictionary.get(part));
+  };
 }
 
 // Explicit semantic keys never run through the legacy substring-replacement engine.

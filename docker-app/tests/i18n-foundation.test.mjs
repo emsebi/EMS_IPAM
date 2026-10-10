@@ -119,3 +119,16 @@ test("application uses exact semantic-key translator for marked UI", async () =>
   assert.match(app, /createKeyTranslator\(\{ english, translations: localized, language: lang \}\)/);
   assert.match(app, /node\.dataset\.i18n/);
 });
+
+test("legacy translator does not rewrite user-entered English device names", () => {
+  const english = { "device.label": "Device", "device.export": "Export CSV" };
+  const translations = { "device.label": "تجهیز", "device.export": "خروجی CSV" };
+  const legacy = { "دستگاه": "device.label" };
+  const fa = createTranslator({ english, translations, legacy, language: "fa" });
+  assert.equal(fa("Device"), "تجهیز");
+  assert.equal(fa("Export CSV"), "خروجی CSV");
+  assert.equal(fa("Test Device"), "Test Device");
+  assert.equal(fa("Customer Device 7"), "Customer Device 7");
+  assert.equal(fa("  Device  "), "  تجهیز  ");
+  assert.equal(fa("دستگاه 7"), "تجهیز 7", "legacy Persian templates still interpolate");
+});
