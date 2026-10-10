@@ -95,7 +95,7 @@ try {
   const duplicateInventory = await api('/api/inventory');
   assert.equal(duplicateInventory.items.length, hostCountBeforeDuplicate);
   assert.equal(duplicateInventory.items.find((h) => h.ip === '192.0.2.50')?.name, 'Workstation Edited');
-  await page.locator('#inventoryCreateDialog [data-close]').click();
+  await page.locator('#inventoryCreateDialog [data-close]').first().click();
   check('duplicate IP create is rejected without overwriting the existing device');
 
   // Browser feedback and URI contents are verified without invoking an OS protocol handler.
