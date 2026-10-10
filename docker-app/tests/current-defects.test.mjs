@@ -20,7 +20,7 @@ test("inventory create and edit use a loaded host editor and report save errors"
   const [html, app, server] = await Promise.all([read("../public/index.html"), read("../public/app.js"), read("../server/main.mjs")]);
   assert.match(app, /async function prepareHostEditor/);
   assert.match(app, /prepareHostEditor\(item\.spaceId, item\.ip, "inventory"\)/);
-  assert.match(app, /prepareHostEditor\(spaceId, ip, "inventory"\)/);
+  assert.match(app, /prepareHostEditor\(spaceId, ip, "inventory", \{\}, \{ requireEmpty: true \}\)/);
   assert.match(app, /request\("\/api\/hosts", \{ method: "PUT", body \}\)/);
   assert.match(server, /req\.method === "PUT" && pathname === "\/api\/hosts"/);
   assert.match(html, /id="hostFormError"/);
