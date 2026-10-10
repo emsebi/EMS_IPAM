@@ -1540,7 +1540,7 @@ async function continueInventoryCreate() {
   const info = parseCidr(space?.cidr || "");
   const ipValue = ipv4ToInt(ip);
   if (!space || ipValue === null || !info || ipValue < info.start || ipValue > info.end) {
-    $("inventoryCreateError").textContent = "IP باید داخل رنج انتخاب‌شده باشد.";
+    $("inventoryCreateError").textContent = t("inventory.error.ipOutsideNetwork");
     return;
   }
   await prepareHostEditor(spaceId, ip, "inventory", {}, { requireEmpty: true });

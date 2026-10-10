@@ -335,5 +335,6 @@
   "settings.general.manageDevices": "Manage Devices",
   "settings.general.manageDeviceTypes": "Manage Device Types",
   "inventory.error.noSpaces": "Create an address space before adding a device.",
-  "inventory.error.ipAlreadyRegistered": "This IP is already registered. Edit the existing device in Inventory."
+  "inventory.error.ipAlreadyRegistered": "This IP is already registered. Edit the existing device in Inventory.",
+  "inventory.error.ipOutsideNetwork": "The IP must be inside the selected network."
 }

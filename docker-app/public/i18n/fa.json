@@ -335,5 +335,6 @@
   "settings.general.manageDevices": "مدیریت تجهیزات",
   "settings.general.manageDeviceTypes": "مدیریت انواع تجهیزات",
   "inventory.error.noSpaces": "برای افزودن تجهیز ابتدا یک رنج IP تعریف کنید.",
-  "inventory.error.ipAlreadyRegistered": "این IP قبلاً ثبت شده است. تجهیز موجود را از فهرست تجهیزات ویرایش کنید."
+  "inventory.error.ipAlreadyRegistered": "این IP قبلاً ثبت شده است. تجهیز موجود را از فهرست تجهیزات ویرایش کنید.",
+  "inventory.error.ipOutsideNetwork": "IP باید داخل رنج انتخاب‌شده باشد."
 }

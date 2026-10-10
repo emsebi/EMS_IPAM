@@ -20,6 +20,7 @@ test("Inventory create refuses to overwrite an already registered IP", async () 
   assert.match(app, /prepareHostEditor\(spaceId, ip, "inventory", \{\}, \{ requireEmpty: true \}\)/);
   assert.match(app, /inventory\.error\.ipAlreadyRegistered/);
   assert.match(app, /inventory\.error\.noSpaces/);
+  assert.match(app, /inventory\.error\.ipOutsideNetwork/);
 });
 
 test("Settings and Inventory additions have English and Persian labels", async () => {
@@ -30,6 +31,7 @@ test("Settings and Inventory additions have English and Persian labels", async (
     "settings.general.manageDeviceTypes",
     "inventory.error.noSpaces",
     "inventory.error.ipAlreadyRegistered",
+    "inventory.error.ipOutsideNetwork",
   ]) {
     assert.ok(english[key]?.trim(), `Missing English key: ${key}`);
     assert.ok(persian[key]?.trim(), `Missing Persian key: ${key}`);
