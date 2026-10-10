@@ -84,6 +84,20 @@ try {
   await page.locator('.inventory-name').getByText('Workstation Edited', { exact: true }).waitFor();
   check('IP/device creation, type selection, MAC/VLAN storage and edit');
 
+  const hostCountBeforeDuplicate = (await api('/api/inventory')).items.length;
+  await page.locator('#newInventoryDevice').click();
+  await page.locator('#inventoryCreateSpace').selectOption('test-space');
+  await page.locator('#inventoryCreateIp').fill('192.0.2.50');
+  await page.locator('#inventoryCreateForm [type=submit]').click();
+  await page.waitForFunction(() => document.getElementById('inventoryCreateError')?.textContent.trim().length > 0);
+  assert.equal(await page.locator('#inventoryCreateDialog').evaluate((dialog) => dialog.open), true);
+  assert.equal(await page.locator('#hostDialog').evaluate((dialog) => dialog.open), false);
+  const duplicateInventory = await api('/api/inventory');
+  assert.equal(duplicateInventory.items.length, hostCountBeforeDuplicate);
+  assert.equal(duplicateInventory.items.find((h) => h.ip === '192.0.2.50')?.name, 'Workstation Edited');
+  await page.locator('#inventoryCreateDialog [data-close]').click();
+  check('duplicate IP create is rejected without overwriting the existing device');
+
   // Browser feedback and URI contents are verified without invoking an OS protocol handler.
   await api('/api/hosts', 'PUT', { ...savedHost, name: 'Workstation Edited', connectionMethods: [{ type: 'WINBOX', port: 8291 }] });
   await page.locator('#inventoryButton').click();
@@ -177,9 +191,19 @@ try {
   await page.locator('#settingsDialog').waitFor();
   assert.equal(await page.locator('#settingsDialog [data-settings-tab=personnel], #settingsDialog [data-settings-tab=device-types]').count(), 0);
   assert.equal(await page.locator('#settingsDialog form').count(), 1);
+  await page.locator('#settingsManageDevices').waitFor({ state: 'visible' });
+  await page.locator('#settingsManageDeviceTypes').waitFor({ state: 'visible' });
+  await page.locator('#settingsManageDevices').click();
+  await page.locator('#newInventoryDevice').waitFor({ state: 'visible' });
+  await page.locator('#settingsButton').click();
+  await page.locator('#settingsDialog').waitFor();
+  await page.locator('#settingsManageDeviceTypes').click();
+  await page.locator('#deviceTypesList').waitFor({ state: 'visible' });
+  await page.locator('#settingsButton').click();
+  await page.locator('#settingsDialog').waitFor();
   await page.locator('#settingsDialog [data-close]').first().click();
   assert.equal(await page.locator('#personnelButton').count(), 0);
-  check('Settings opens; Device Types/Personnel removed from Settings and standalone personnel navigation');
+  check('Settings opens; device shortcuts navigate to Inventory and Device Types; Personnel remains standalone');
 
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
