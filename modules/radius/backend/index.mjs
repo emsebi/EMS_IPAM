@@ -3,6 +3,7 @@ import { previewDeviceAdminProfile } from "../admin-profile-preview.mjs";
 import { reviewMabPolicyMatrix } from "../review-matrix.mjs";
 import { normalizeNasIp, prepareNasProfile } from "../nas-inventory.mjs";
 import { previewNasClientConfig } from "../nas-config-preview.mjs";
+import { prepareMabPolicy } from "../mab-policy-profile.mjs";
 
 const PREVIEW_PATHS = new Set([
   "/api/radius/preview/mab",
@@ -12,6 +13,7 @@ const PREVIEW_PATHS = new Set([
 ]);
 const NAS_ROOT = "/api/radius/nas-profiles";
 const ADMIN_ROOT = "/api/radius/admin-profiles";
+const POLICY_ROOT = "/api/radius/mab-policies";
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 
 const badRequest = (message) => Object.assign(new Error(message), { status: 400 });
@@ -84,8 +86,8 @@ export function createModule(ctx) {
     match(req, url) {
       const pathname = url.pathname;
       if (PREVIEW_PATHS.has(pathname)) return req.method === "POST";
-      if (pathname === NAS_ROOT || pathname === ADMIN_ROOT) return ["GET", "POST"].includes(req.method);
-      if (isCrudPath(pathname, NAS_ROOT) || isCrudPath(pathname, ADMIN_ROOT)) return ["PUT", "DELETE"].includes(req.method);
+      if (pathname === NAS_ROOT || pathname === ADMIN_ROOT || pathname === POLICY_ROOT) return ["GET", "POST"].includes(req.method);
+      if (isCrudPath(pathname, NAS_ROOT) || isCrudPath(pathname, ADMIN_ROOT) || isCrudPath(pathname, POLICY_ROOT)) return ["PUT", "DELETE"].includes(req.method);
       return false;
     },
 
@@ -104,6 +106,14 @@ export function createModule(ctx) {
       if (pathname === ADMIN_ROOT && req.method === "GET") {
         const rows = await pool.query(`SELECT id,name,description,cisco_privilege AS "ciscoPrivilege",
           mikrotik_group AS "mikrotikGroup",enabled FROM radius_admin_profiles ORDER BY name,id`);
+        return json(res, 200, { ok: true, items: rows.rows });
+      }
+
+      if (pathname === POLICY_ROOT && req.method === "GET") {
+        const rows = await pool.query(`SELECT p.id,p.nas_profile_id AS "nasProfileId",p.enabled,p.known_mode AS "knownMode",
+          p.known_vlan AS "knownVlan",p.unknown_mode AS "unknownMode",p.guest_vlan AS "guestVlan",
+          n.name AS "nasName",n.company_id AS "companyId"
+          FROM radius_mab_policies p JOIN radius_nas_profiles n ON n.id=p.nas_profile_id ORDER BY n.name,p.id`);
         return json(res, 200, { ok: true, items: rows.rows });
       }
 
@@ -141,6 +151,51 @@ export function createModule(ctx) {
         if (!removed.rowCount) throw notFound("NAS profile was not found.");
         await audit?.(user, "radius.nas.delete", "radius_nas_profile", nasId, { companyId: removed.rows[0].companyId });
         broadcast?.({ type: "radius", companyId: removed.rows[0].companyId, entityId: nasId });
+        return json(res, 200, { ok: true });
+      }
+
+      if (pathname === POLICY_ROOT && req.method === "POST") {
+        const prepared = prepareMabPolicy(await readBody(req));
+        if (!prepared.ok) throw badRequest(`Invalid MAB policy: ${prepared.issues.join(", ")}`);
+        const value = prepared.value;
+        const nas = await pool.query('SELECT id,company_id AS "companyId" FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
+        if (nas.rowCount !== 1) throw badRequest("MAB policy NAS profile was not found.");
+        const saved = await pool.query(`INSERT INTO radius_mab_policies
+          (id,nas_profile_id,enabled,known_mode,known_vlan,unknown_mode,guest_vlan)
+          VALUES($1,$2,$3,$4,$5,$6,$7)
+          RETURNING id,nas_profile_id AS "nasProfileId",enabled,known_mode AS "knownMode",
+            known_vlan AS "knownVlan",unknown_mode AS "unknownMode",guest_vlan AS "guestVlan"`,
+          [value.id,value.nasProfileId,value.enabled,value.knownMode,value.knownVlan,value.unknownMode,value.guestVlan]);
+        await audit?.(user, "radius.mab-policy.create", "radius_mab_policy", value.id, { companyId: nas.rows[0].companyId, detail: { nasProfileId: value.nasProfileId } });
+        broadcast?.({ type: "radius", companyId: nas.rows[0].companyId, entityId: value.id });
+        return json(res, 201, { ok: true, item: saved.rows[0] });
+      }
+
+      const policyId = pathId(pathname, POLICY_ROOT);
+      if (policyId && req.method === "PUT") {
+        if (!safeId(policyId)) throw badRequest("Invalid MAB policy ID.");
+        const prepared = prepareMabPolicy(await readBody(req), { forcedId: policyId });
+        if (!prepared.ok) throw badRequest(`Invalid MAB policy: ${prepared.issues.join(", ")}`);
+        const value = prepared.value;
+        const nas = await pool.query('SELECT id,company_id AS "companyId" FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
+        if (nas.rowCount !== 1) throw badRequest("MAB policy NAS profile was not found.");
+        const saved = await pool.query(`UPDATE radius_mab_policies SET nas_profile_id=$2,enabled=$3,known_mode=$4,known_vlan=$5,
+          unknown_mode=$6,guest_vlan=$7,updated_at=now() WHERE id=$1
+          RETURNING id,nas_profile_id AS "nasProfileId",enabled,known_mode AS "knownMode",
+            known_vlan AS "knownVlan",unknown_mode AS "unknownMode",guest_vlan AS "guestVlan"`,
+          [value.id,value.nasProfileId,value.enabled,value.knownMode,value.knownVlan,value.unknownMode,value.guestVlan]);
+        if (!saved.rowCount) throw notFound("MAB policy was not found.");
+        await audit?.(user, "radius.mab-policy.update", "radius_mab_policy", value.id, { companyId: nas.rows[0].companyId, detail: { nasProfileId: value.nasProfileId } });
+        broadcast?.({ type: "radius", companyId: nas.rows[0].companyId, entityId: value.id });
+        return json(res, 200, { ok: true, item: saved.rows[0] });
+      }
+      if (policyId && req.method === "DELETE") {
+        if (!safeId(policyId)) throw badRequest("Invalid MAB policy ID.");
+        const removed = await pool.query(`DELETE FROM radius_mab_policies p USING radius_nas_profiles n
+          WHERE p.id=$1 AND n.id=p.nas_profile_id RETURNING p.id,n.company_id AS "companyId"`, [policyId]);
+        if (!removed.rowCount) throw notFound("MAB policy was not found.");
+        await audit?.(user, "radius.mab-policy.delete", "radius_mab_policy", policyId, { companyId: removed.rows[0].companyId });
+        broadcast?.({ type: "radius", companyId: removed.rows[0].companyId, entityId: policyId });
         return json(res, 200, { ok: true });
       }
 

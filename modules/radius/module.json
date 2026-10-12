@@ -1,8 +1,8 @@
 {
   "id": "radius",
   "name": "RADIUS / AAA",
-  "version": "0.3.0-rc.3",
-  "description": "Modular RADIUS/AAA foundation with isolated schema, safe previews, NAS drafts and no stored shared secrets.",
+  "version": "0.4.0-rc.1",
+  "description": "Modular RADIUS/AAA foundation with persistent per-NAS MAB policies, NAS/admin profiles and safe offline previews.",
   "enabled": true,
   "permissions": [
     "radius.read",
