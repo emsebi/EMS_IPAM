@@ -1,7 +1,7 @@
 {
   "id": "radius",
   "name": "RADIUS / AAA",
-  "version": "0.3.0-rc.2",
+  "version": "0.3.0-rc.3",
   "description": "Modular RADIUS/AAA foundation with isolated schema, safe previews, NAS drafts and no stored shared secrets.",
   "enabled": true,
   "permissions": [

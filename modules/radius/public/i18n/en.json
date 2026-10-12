@@ -36,5 +36,18 @@
   "radius.nas.ip": "NAS Source IP",
   "radius.nas.otherVendor": "Other",
   "radius.nas.enabled": "Mark profile enabled in the review draft",
-  "radius.nas.generateDraft": "Generate Commented Draft"
+  "radius.nas.generateDraft": "Generate Commented Draft",
+  "radius.nas.save": "Save NAS Profile",
+  "radius.nas.savedTitle": "Saved NAS Profiles",
+  "radius.nas.empty": "No NAS profiles saved.",
+  "radius.nas.confirmDelete": "Delete NAS profile “{name}”?",
+  "radius.admin.savedTitle": "Device Administrator Profiles",
+  "radius.admin.savedSubtitle": "Central role mappings for Cisco privilege and MikroTik groups. Credentials are not stored here.",
+  "radius.admin.profileId": "Profile ID",
+  "radius.admin.profileName": "Profile Name",
+  "radius.admin.description": "Description",
+  "radius.admin.enabled": "Enabled",
+  "radius.admin.save": "Save Admin Profile",
+  "radius.admin.empty": "No administrator profiles saved.",
+  "radius.admin.confirmDelete": "Delete administrator profile “{name}”?"
 }

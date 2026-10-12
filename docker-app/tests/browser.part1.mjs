@@ -206,7 +206,21 @@ try {
   const nasDraft = await page.locator('#radiusNasResult').textContent();
   assert.ok(nasDraft.split('\n').filter(Boolean).every((line) => line.startsWith('#')));
   assert.equal(/(^|\n)client\s/m.test(nasDraft), false);
-  check('generic RADIUS module previews MAB/admin AAA, redacted matrix, and inert NAS client draft');
+  await page.locator('#radiusNasSave').click();
+  await page.locator('#radiusNasProfilesList').getByText('Lab NAS', { exact: true }).waitFor();
+  await page.locator('#radiusNasProfilesList .radius-nas-edit').click();
+  await page.locator('#radiusNasName').fill('Lab NAS Updated');
+  await page.locator('#radiusNasSave').click();
+  await page.locator('#radiusNasProfilesList').getByText('Lab NAS Updated', { exact: true }).waitFor();
+  await page.locator('#radiusSavedAdminId').fill('noc-support');
+  await page.locator('#radiusSavedAdminName').fill('NOC Support');
+  await page.locator('#radiusSavedCiscoPrivilege').fill('7');
+  await page.locator('#radiusSavedMikrotikGroup').fill('read');
+  await page.locator('#radiusSavedAdminEnabled').check();
+  await page.locator('#radiusSavedAdminForm [type=submit]').click();
+  await page.locator('#radiusAdminProfilesList').getByText('NOC Support', { exact: true }).waitFor();
+  assert.match(await page.locator('#radiusAdminProfilesList').textContent(), /Cisco privilege: 7/);
+  check('RADIUS panel persists and edits NAS plus device-admin profiles without credentials');
 
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();

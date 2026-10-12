@@ -36,5 +36,18 @@
   "radius.nas.ip": "IP مبدأ NAS",
   "radius.nas.otherVendor": "سایر",
   "radius.nas.enabled": "پروفایل در پیش‌نویس به‌عنوان فعال علامت بخورد",
-  "radius.nas.generateDraft": "ساخت پیش‌نویس کامنت‌شده"
+  "radius.nas.generateDraft": "ساخت پیش‌نویس کامنت‌شده",
+  "radius.nas.save": "ذخیره پروفایل NAS",
+  "radius.nas.savedTitle": "پروفایل‌های NAS ذخیره‌شده",
+  "radius.nas.empty": "پروفایل NAS ثبت نشده است.",
+  "radius.nas.confirmDelete": "پروفایل NAS «{name}» حذف شود؟",
+  "radius.admin.savedTitle": "پروفایل‌های مدیر تجهیزات",
+  "radius.admin.savedSubtitle": "نگاشت مرکزی نقش به Cisco privilege و گروه MikroTik. اطلاعات ورود در این بخش ذخیره نمی‌شود.",
+  "radius.admin.profileId": "شناسه پروفایل",
+  "radius.admin.profileName": "نام پروفایل",
+  "radius.admin.description": "توضیحات",
+  "radius.admin.enabled": "فعال",
+  "radius.admin.save": "ذخیره پروفایل مدیر",
+  "radius.admin.empty": "پروفایل مدیر تجهیزات ثبت نشده است.",
+  "radius.admin.confirmDelete": "پروفایل مدیر «{name}» حذف شود؟"
 }

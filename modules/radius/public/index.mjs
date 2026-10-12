@@ -7,6 +7,10 @@ export function createUi(ctx) {
     if (!node) return;
     node.textContent = jsonText(value);
   };
+  let nasProfiles = [];
+  let adminProfiles = [];
+  let nasEditId = null;
+  let adminEditId = null;
 
   function syncAdminFields() {
     const cisco = $("radiusAdminVendor")?.value === "cisco";
@@ -71,30 +75,151 @@ export function createUi(ctx) {
     if ($("radiusNasId") && !$("radiusNasId").value && device) $("radiusNasId").value = `nas-${device.id}`.slice(0, 80);
   }
 
+  function currentNasProfile() {
+    const device = selectedNasDevice();
+    if (!device) return null;
+    return {
+      id: $("radiusNasId").value.trim(),
+      companyId: device.companyId,
+      deviceId: device.id,
+      name: $("radiusNasName").value.trim(),
+      vendor: $("radiusNasVendor").value,
+      nasIp: $("radiusNasIp").value.trim(),
+      enabled: $("radiusNasEnabled").checked,
+      services: [...document.querySelectorAll('[name="radiusNasService"]:checked')].map((node) => node.value),
+    };
+  }
+
   async function runNasPreview(event) {
     event.preventDefault();
-    const device = selectedNasDevice();
-    if (!device) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
-    const services = [...document.querySelectorAll('[name="radiusNasService"]:checked')].map((node) => node.value);
+    const profile = currentNasProfile();
+    if (!profile) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
     try {
       const response = await request("/api/radius/preview/nas-client", {
         method: "POST",
-        body: { profile: {
-          id: $("radiusNasId").value.trim(),
-          companyId: device.companyId,
-          deviceId: device.id,
-          name: $("radiusNasName").value.trim(),
-          vendor: $("radiusNasVendor").value,
-          nasIp: $("radiusNasIp").value.trim(),
-          enabled: $("radiusNasEnabled").checked,
-          services,
-        } },
+        body: { profile },
       });
       const result = response.result;
       $("radiusNasResult").textContent = result?.text || jsonText(result);
     } catch (error) {
       setResult("radiusNasResult", { status: "error", reason: error.message });
     }
+  }
+
+  function resetNasEditor() {
+    nasEditId = null;
+    $("radiusNasForm").reset();
+    $("radiusNasId").disabled = false;
+    $("radiusNasName").value = "Lab NAS";
+    $("radiusNasVendor").value = "cisco";
+    document.querySelectorAll('[name="radiusNasService"]').forEach((node) => { node.checked = node.value === "mab"; });
+    $("radiusNasEnabled").checked = false;
+    $("radiusNasCancelEdit").classList.add("hidden");
+    syncNasDevice();
+  }
+
+  function renderNasProfiles() {
+    $("radiusNasProfilesList").innerHTML = nasProfiles.map((item) => `
+      <div class="radius-profile-row">
+        <div><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.vendor)} · <span class="ltr mono">${escapeHtml(item.nasIp)}</span> · ${escapeHtml((item.services || []).join(", "))}</small></div>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <div class="row-actions"><button class="btn sm radius-nas-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-nas-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
+      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.nas.empty"))}</div>`;
+    page.querySelectorAll(".radius-nas-edit").forEach((node) => node.addEventListener("click", () => {
+      const item = nasProfiles.find((entry) => entry.id === node.dataset.id);
+      if (!item) return;
+      nasEditId = item.id;
+      $("radiusNasId").value = item.id; $("radiusNasId").disabled = true;
+      $("radiusNasDevice").value = item.deviceId; $("radiusNasName").value = item.name;
+      $("radiusNasVendor").value = item.vendor; $("radiusNasEnabled").checked = item.enabled;
+      document.querySelectorAll('[name="radiusNasService"]').forEach((input) => { input.checked = (item.services || []).includes(input.value); });
+      $("radiusNasCancelEdit").classList.remove("hidden"); syncNasDevice();
+      $("radiusNasForm").scrollIntoView({ block: "nearest" });
+    }));
+    page.querySelectorAll(".radius-nas-delete").forEach((node) => node.addEventListener("click", async () => {
+      const item = nasProfiles.find((entry) => entry.id === node.dataset.id);
+      if (!item || !confirm(t("radius.nas.confirmDelete", { name: item.name }))) return;
+      try { await request(`/api/radius/nas-profiles/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
+      catch (error) { setResult("radiusNasResult", { status: "error", reason: error.message }); }
+    }));
+  }
+
+  function resetAdminEditor() {
+    adminEditId = null;
+    $("radiusSavedAdminForm").reset();
+    $("radiusSavedAdminId").disabled = false;
+    $("radiusSavedCiscoPrivilege").value = "1";
+    $("radiusSavedMikrotikGroup").value = "read";
+    $("radiusSavedAdminEnabled").checked = false;
+    $("radiusAdminCancelEdit").classList.add("hidden");
+  }
+
+  function renderAdminProfiles() {
+    $("radiusAdminProfilesList").innerHTML = adminProfiles.map((item) => `
+      <div class="radius-profile-row">
+        <div><b>${escapeHtml(item.name)}</b><small>Cisco privilege: ${escapeHtml(item.ciscoPrivilege)} · MikroTik: ${escapeHtml(item.mikrotikGroup)}</small></div>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <div class="row-actions"><button class="btn sm radius-admin-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-admin-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
+      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.admin.empty"))}</div>`;
+    page.querySelectorAll(".radius-admin-edit").forEach((node) => node.addEventListener("click", () => {
+      const item = adminProfiles.find((entry) => entry.id === node.dataset.id);
+      if (!item) return;
+      adminEditId = item.id;
+      $("radiusSavedAdminId").value = item.id; $("radiusSavedAdminId").disabled = true;
+      $("radiusSavedAdminName").value = item.name; $("radiusSavedAdminDescription").value = item.description || "";
+      $("radiusSavedCiscoPrivilege").value = String(item.ciscoPrivilege);
+      $("radiusSavedMikrotikGroup").value = item.mikrotikGroup;
+      $("radiusSavedAdminEnabled").checked = item.enabled;
+      $("radiusAdminCancelEdit").classList.remove("hidden");
+      $("radiusSavedAdminForm").scrollIntoView({ block: "nearest" });
+    }));
+    page.querySelectorAll(".radius-admin-delete").forEach((node) => node.addEventListener("click", async () => {
+      const item = adminProfiles.find((entry) => entry.id === node.dataset.id);
+      if (!item || !confirm(t("radius.admin.confirmDelete", { name: item.name }))) return;
+      try { await request(`/api/radius/admin-profiles/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
+      catch (error) { setResult("radiusSavedAdminResult", { status: "error", reason: error.message }); }
+    }));
+  }
+
+  async function refreshProfiles() {
+    const [nas, admins] = await Promise.all([request("/api/radius/nas-profiles"), request("/api/radius/admin-profiles")]);
+    nasProfiles = nas.items || [];
+    adminProfiles = admins.items || [];
+    renderNasProfiles();
+    renderAdminProfiles();
+  }
+
+  async function saveNasProfile() {
+    const profile = currentNasProfile();
+    if (!profile) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
+    try {
+      const result = await request(nasEditId ? `/api/radius/nas-profiles/${encodeURIComponent(nasEditId)}` : "/api/radius/nas-profiles", {
+        method: nasEditId ? "PUT" : "POST", body: profile,
+      });
+      setResult("radiusNasResult", { status: "saved", id: result.item.id });
+      resetNasEditor();
+      await refreshProfiles();
+    } catch (error) { setResult("radiusNasResult", { status: "error", reason: error.message }); }
+  }
+
+  async function saveAdminProfile(event) {
+    event.preventDefault();
+    const profile = {
+      id: $("radiusSavedAdminId").value.trim(),
+      name: $("radiusSavedAdminName").value.trim(),
+      description: $("radiusSavedAdminDescription").value.trim(),
+      ciscoPrivilege: Number($("radiusSavedCiscoPrivilege").value),
+      mikrotikGroup: $("radiusSavedMikrotikGroup").value.trim(),
+      enabled: $("radiusSavedAdminEnabled").checked,
+    };
+    try {
+      const result = await request(adminEditId ? `/api/radius/admin-profiles/${encodeURIComponent(adminEditId)}` : "/api/radius/admin-profiles", {
+        method: adminEditId ? "PUT" : "POST", body: profile,
+      });
+      setResult("radiusSavedAdminResult", { status: "saved", id: result.item.id });
+      resetAdminEditor();
+      await refreshProfiles();
+    } catch (error) { setResult("radiusSavedAdminResult", { status: "error", reason: error.message }); }
   }
 
   async function runMatrixDemo() {
@@ -204,9 +329,34 @@ export function createUi(ctx) {
               <label class="check-row"><input type="checkbox" name="radiusNasService" value="device-admin"> AAA</label>
             </div>
             <label class="check-row"><input id="radiusNasEnabled" type="checkbox"> ${escapeHtml(t("radius.nas.enabled"))}</label>
-            <button class="btn primary" type="submit">${escapeHtml(t("radius.nas.generateDraft"))}</button>
+            <div class="row-actions">
+              <button class="btn primary" type="submit">${escapeHtml(t("radius.nas.generateDraft"))}</button>
+              <button id="radiusNasSave" class="btn" type="button">${escapeHtml(t("radius.nas.save"))}</button>
+              <button id="radiusNasCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
+            </div>
           </form>
           <pre id="radiusNasResult" class="radius-result" aria-live="polite"></pre>
+          <h4>${escapeHtml(t("radius.nas.savedTitle"))}</h4>
+          <div id="radiusNasProfilesList" class="radius-profile-list"></div>
+        </section>
+
+        <section class="panel radius-card">
+          <h3>${escapeHtml(t("radius.admin.savedTitle"))}</h3>
+          <p class="subtitle">${escapeHtml(t("radius.admin.savedSubtitle"))}</p>
+          <form id="radiusSavedAdminForm" class="radius-form">
+            <label>${escapeHtml(t("radius.admin.profileId"))}<input id="radiusSavedAdminId" class="ltr" required value=""></label>
+            <label>${escapeHtml(t("radius.admin.profileName"))}<input id="radiusSavedAdminName" required value=""></label>
+            <label>${escapeHtml(t("radius.admin.description"))}<input id="radiusSavedAdminDescription" value=""></label>
+            <label>${escapeHtml(t("radius.admin.ciscoPrivilege"))}<input id="radiusSavedCiscoPrivilege" type="number" min="0" max="15" value="1"></label>
+            <label>${escapeHtml(t("radius.admin.mikrotikGroup"))}<input id="radiusSavedMikrotikGroup" class="ltr" value="read"></label>
+            <label class="check-row"><input id="radiusSavedAdminEnabled" type="checkbox"> ${escapeHtml(t("radius.admin.enabled"))}</label>
+            <div class="row-actions">
+              <button class="btn primary" type="submit">${escapeHtml(t("radius.admin.save"))}</button>
+              <button id="radiusAdminCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
+            </div>
+          </form>
+          <pre id="radiusSavedAdminResult" class="radius-result" aria-live="polite"></pre>
+          <div id="radiusAdminProfilesList" class="radius-profile-list"></div>
         </section>
 
         <section class="panel radius-card radius-wide">
@@ -233,8 +383,13 @@ export function createUi(ctx) {
     $("radiusMatrixDemo").addEventListener("click", runMatrixDemo);
     $("radiusNasForm").addEventListener("submit", runNasPreview);
     $("radiusNasDevice").addEventListener("change", syncNasDevice);
+    $("radiusNasSave").addEventListener("click", saveNasProfile);
+    $("radiusNasCancelEdit").addEventListener("click", resetNasEditor);
+    $("radiusSavedAdminForm").addEventListener("submit", saveAdminProfile);
+    $("radiusAdminCancelEdit").addEventListener("click", resetAdminEditor);
     syncAdminFields();
     syncNasDevice();
+    await refreshProfiles();
   }
 
   return { openPage };
