@@ -1,0 +1,22 @@
+{
+  "id": "radius",
+  "name": "RADIUS / AAA",
+  "version": "0.2.0-rc.1",
+  "description": "Panel-integrated offline RADIUS/MAB and device-admin AAA previews. No live authentication or device configuration.",
+  "enabled": true,
+  "permissions": [
+    "radius.read",
+    "radius.preview"
+  ],
+  "roles": [
+    "admin"
+  ],
+  "navigation": {
+    "label": "RADIUS / AAA",
+    "icon": "◎",
+    "order": 50,
+    "panel": true
+  },
+  "apiVersion": 1,
+  "backend": "backend/index.mjs"
+}

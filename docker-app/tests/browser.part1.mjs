@@ -187,6 +187,20 @@ try {
   assert.equal(exported.status(), 200); assert.match(await exported.text(), /Test Person/);
   check('MAC and Personnel tabs; name-only personnel create; refresh, search and export');
 
+  await page.locator('button.module-nav-link[data-module-id="radius"]').click();
+  await page.locator('#radiusMabForm').waitFor({ state: 'visible' });
+  assert.match(page.url(), /#\/module\/radius$/);
+  await page.locator('#radiusMabForm [type=submit]').click();
+  await page.locator('#radiusMabResult').getByText(/known-dynamic-vlan/).waitFor();
+  await page.locator('#radiusAdminForm [type=submit]').click();
+  await page.locator('#radiusAdminResult').getByText(/shell:priv-lvl=15/).waitFor();
+  await page.locator('#radiusMatrixDemo').click();
+  await page.locator('#radiusMatrixResult').getByText(/"mismatches": 0/).waitFor();
+  const matrixText = await page.locator('#radiusMatrixResult').textContent();
+  assert.equal(matrixText.includes('02:00:00:00:00:50'), false);
+  assert.equal(matrixText.includes('lab-switch'), false);
+  check('generic RADIUS panel module loads, previews MAB/admin AAA, and keeps matrix output redacted');
+
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();
   assert.equal(await page.locator('#settingsDialog [data-settings-tab=personnel], #settingsDialog [data-settings-tab=device-types]').count(), 0);

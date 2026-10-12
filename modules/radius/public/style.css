@@ -1,0 +1,13 @@
+.radius-head{align-items:flex-start}
+.radius-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.radius-card{min-width:0}
+.radius-wide{grid-column:1/-1}
+.radius-form{display:grid;gap:12px;margin-top:14px}
+.radius-form label{display:grid;gap:6px;font-weight:600}
+.radius-form input,.radius-form select{width:100%}
+.radius-form .check-row{display:flex;align-items:center;gap:8px}
+.radius-form .check-row input{width:auto}
+.radius-result{min-height:108px;max-height:320px;overflow:auto;margin-top:14px;padding:12px;border-radius:10px;background:var(--surface-2,#f6f7f9);direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word}
+.radius-warning{margin-top:16px}
+.radius-warning p{margin-bottom:0}
+@media(max-width:820px){.radius-grid{grid-template-columns:1fr}.radius-wide{grid-column:auto}}
