@@ -28,6 +28,6 @@ IPAM و Inventory دسترسی پایه داده‌های رادیو هستند�
 
 ## دیتابیس و سرویس‌های آینده
 
-schema_migrations فعلاً baseline Core را با transaction، قفل و checksum ثبت می‌کند. schema.sql منتشرشده را تغییر ندهید؛ مهاجرت بعدی باید فایل/نسخه تازه داشته باشد. runner خودکار migrations هر ماژول هنوز ساخته نشده و در پارت دوم اضافه می‌شود. مدل مشترک IP/شرکت/تجهیز باید با ID استفاده شود؛ Type و Owner قدیمی هنوز رشته‌اند و نیازمند مهاجرت تدریجی‌اند.
+schema_migrations baseline Core و migrationهای ماژول‌ها را با transaction، advisory lock و checksum ثبت می‌کند. schema.sql منتشرشده را تغییر ندهید؛ تغییر Core باید migration نسخه‌دار باشد. هر ماژول می‌تواند فایل‌های SQL خود را در `migrations/` با نامی مانند `001-radius-foundation.sql` نگه دارد. migrationهای هر ماژول در transaction جدا اجرا می‌شوند؛ اگر migration یک ماژول خراب باشد همان ماژول غیرفعال می‌شود و Core و ماژول‌های سالم می‌توانند بالا بیایند. فایل migration اعمال‌شده قابل ویرایش نیست و تغییر checksum باعث غیرفعال‌شدن ماژول می‌شود. مدل مشترک IP/شرکت/تجهیز باید با ID استفاده شود؛ Type و Owner قدیمی هنوز رشته‌اند و نیازمند مهاجرت تدریجی‌اند.
 
 compose.module.yml برای سرویس جداگانه اختیاری است و نصب‌کننده آن را با Compose اصلی ترکیب می‌کند. مدل enable/disable این سرویس‌ها هنوز چرخه مدیریت مستقل کامل ندارد؛ صرف enabled:false در manifest توقف کانتینر نیست. RADIUS و worker کشف در پارت مربوط با health، نسخه و تست سازگاری خود تحویل می‌شوند.

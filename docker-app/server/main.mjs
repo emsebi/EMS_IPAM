@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createDatabase } from "./db.mjs";
+import { migrateModuleSchemas } from "./migrations.mjs";
 import {
   clearSessionCookie,
   hashPassword,
@@ -101,8 +102,16 @@ if (ADMIN_PASSWORD.length < 1) throw new Error("EMS_ADMIN_PASSWORD نمی‌تو
 
 const database = createDatabase(DATABASE_URL);
 await database.initialize({ adminUsername: ADMIN_USERNAME, adminPassword: ADMIN_PASSWORD });
-await fs.mkdir(BACKUP_DIR, { recursive: true });
 const { pool } = database;
+const moduleMigrationResult = await migrateModuleSchemas(pool, installedModules);
+if (moduleMigrationResult.failed.length) {
+  for (const failure of moduleMigrationResult.failed) {
+    console.warn(`[module] disabled ${failure.moduleId}: migration failed: ${failure.error}`);
+  }
+  const failedIds = new Set(moduleMigrationResult.failed.map((item) => item.moduleId));
+  installedModules = installedModules.filter((item) => !failedIds.has(item.id));
+}
+await fs.mkdir(BACKUP_DIR, { recursive: true });
 const eventClients = new Set();
 const loginAttempts = new Map();
 
