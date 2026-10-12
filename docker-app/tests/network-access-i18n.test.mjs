@@ -9,7 +9,7 @@ test("Network Access UI uses explicit translation keys and no Persian UI literal
     read("../../modules/network-access/public/index.mjs"),
     read("../public/app.js"),
   ]);
-  assert.match(appSource, /formatDateTime,translateTree,t,populateHostTypes/);
+  assert.match(appSource, /formatDateTime,translateTree,t:moduleT,coreT:t,module:info/);
   assert.match(moduleSource, /networkAccess\.title/);
   assert.match(moduleSource, /networkAccess\.mac\.subtitle/);
   assert.match(moduleSource, /networkAccess\.personnel\.subtitle/);
