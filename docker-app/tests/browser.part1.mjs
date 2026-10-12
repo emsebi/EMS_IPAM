@@ -237,7 +237,18 @@ try {
   await page.locator('#radiusPolicyResult').getByText(/"status": "saved"/).waitFor();
   await page.waitForFunction(() => document.getElementById('radiusMabPoliciesList')?.textContent.includes('reject'));
   assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /reject/);
-  check('RADIUS panel persists NAS/admin profiles and editable per-NAS MAB policy');
+  await page.locator('#radiusConfigForm [type=submit]').click();
+  await page.locator('#radiusConfigResult').getByText(/aaa new-model/).waitFor();
+  let configText = await page.locator('#radiusConfigResult').textContent();
+  assert.match(configText, /<RADIUS_SHARED_SECRET>/);
+  await page.locator('#radiusConfigPurpose').selectOption('mab');
+  await page.locator('#radiusConfigForm [type=submit]').click();
+  await page.locator('#radiusConfigResult').getByText(/interface GigabitEthernet1\/0\/12/).waitFor();
+  await page.locator('#radiusConfigVendor').selectOption('mikrotik');
+  await page.locator('#radiusConfigPurpose').selectOption('device-admin');
+  await page.locator('#radiusConfigForm [type=submit]').click();
+  await page.locator('#radiusConfigResult').getByText(/\/radius add service=login/).waitFor();
+  check('RADIUS panel persists policy and generates manual-only Cisco/MikroTik templates');
 
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();

@@ -64,5 +64,13 @@
   "radius.policy.empty": "Policy اختصاصی MAB ثبت نشده است.",
   "radius.policy.confirmDelete": "Policy MAB «{name}» حذف شود؟",
   "radius.status.enabled": "فعال",
-  "radius.status.disabled": "غیرفعال"
+  "radius.status.disabled": "غیرفعال",
+  "radius.config.title": "پیش‌نمایش کانفیگ دستی تجهیزات",
+  "radius.config.subtitle": "فقط Template قابل کپی تولید می‌شود. EMS هیچ‌وقت این دستورات را روی تجهیزات شبکه اجرا نمی‌کند.",
+  "radius.config.purpose": "کاربرد",
+  "radius.config.deviceAdmin": "AAA مدیر تجهیزات",
+  "radius.config.serverIp": "IP سرور RADIUS",
+  "radius.config.serverName": "نام RADIUS Server در Cisco",
+  "radius.config.interface": "Interface سوئیچ",
+  "radius.config.generate": "ساخت Template دستی"
 }

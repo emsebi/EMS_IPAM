@@ -64,5 +64,13 @@
   "radius.policy.empty": "No per-NAS MAB policies saved.",
   "radius.policy.confirmDelete": "Delete MAB policy “{name}”?",
   "radius.status.enabled": "Enabled",
-  "radius.status.disabled": "Disabled"
+  "radius.status.disabled": "Disabled",
+  "radius.config.title": "Manual Device Configuration Preview",
+  "radius.config.subtitle": "Generate copyable review templates only. EMS never sends these commands to network devices.",
+  "radius.config.purpose": "Purpose",
+  "radius.config.deviceAdmin": "Device administrator AAA",
+  "radius.config.serverIp": "RADIUS Server IP",
+  "radius.config.serverName": "Cisco RADIUS Server Name",
+  "radius.config.interface": "Switch Interface",
+  "radius.config.generate": "Generate Manual Template"
 }

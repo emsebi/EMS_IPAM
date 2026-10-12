@@ -314,6 +314,29 @@ export function createUi(ctx) {
     } catch (error) { setResult("radiusSavedAdminResult", { status: "error", reason: error.message }); }
   }
 
+  function syncDeviceConfigFields() {
+    const mab = $("radiusConfigPurpose")?.value === "mab";
+    $("radiusConfigInterfaceWrap")?.classList.toggle("hidden", !mab);
+  }
+
+  async function runDeviceConfigPreview(event) {
+    event.preventDefault();
+    try {
+      const response = await request("/api/radius/preview/device-config", {
+        method: "POST",
+        body: {
+          vendor: $("radiusConfigVendor").value,
+          purpose: $("radiusConfigPurpose").value,
+          radiusServerIp: $("radiusConfigServerIp").value.trim(),
+          interfaceName: $("radiusConfigInterface").value.trim(),
+          serverName: $("radiusConfigServerName").value.trim(),
+        },
+      });
+      const result = response.result;
+      $("radiusConfigResult").textContent = result?.text || jsonText(result);
+    } catch (error) { setResult("radiusConfigResult", { status: "error", reason: error.message }); }
+  }
+
   async function runMatrixDemo() {
     const inventory = [{ mac: "02:00:00:00:00:50", enabled: true, vlan: 20 }];
     const policy = { enabled: true, known: { mode: "accept-dynamic" }, unknown: { mode: "reject" } };
@@ -483,6 +506,24 @@ export function createUi(ctx) {
         </section>
 
         <section class="panel radius-card radius-wide">
+          <h3>${escapeHtml(t("radius.config.title"))}</h3>
+          <p class="subtitle">${escapeHtml(t("radius.config.subtitle"))}</p>
+          <form id="radiusConfigForm" class="radius-form radius-config-form">
+            <label>${escapeHtml(t("radius.admin.vendor"))}
+              <select id="radiusConfigVendor"><option value="cisco">Cisco</option><option value="mikrotik">MikroTik</option></select>
+            </label>
+            <label>${escapeHtml(t("radius.config.purpose"))}
+              <select id="radiusConfigPurpose"><option value="device-admin">${escapeHtml(t("radius.config.deviceAdmin"))}</option><option value="mab">MAB</option></select>
+            </label>
+            <label>${escapeHtml(t("radius.config.serverIp"))}<input id="radiusConfigServerIp" class="ltr mono" required value="192.0.2.5"></label>
+            <label>${escapeHtml(t("radius.config.serverName"))}<input id="radiusConfigServerName" class="ltr" required value="EMS_RADIUS"></label>
+            <label id="radiusConfigInterfaceWrap" class="hidden">${escapeHtml(t("radius.config.interface"))}<input id="radiusConfigInterface" class="ltr" value="GigabitEthernet1/0/12"></label>
+            <button class="btn primary" type="submit">${escapeHtml(t("radius.config.generate"))}</button>
+          </form>
+          <pre id="radiusConfigResult" class="radius-result" aria-live="polite"></pre>
+        </section>
+
+        <section class="panel radius-card radius-wide">
           <div class="row-actions">
             <div>
               <h3>${escapeHtml(t("radius.matrix.title"))}</h3>
@@ -514,9 +555,12 @@ export function createUi(ctx) {
     $("radiusPolicyKnownMode").addEventListener("change", syncPolicyFields);
     $("radiusPolicyUnknownMode").addEventListener("change", syncPolicyFields);
     $("radiusPolicyCancelEdit").addEventListener("click", resetPolicyEditor);
+    $("radiusConfigForm").addEventListener("submit", runDeviceConfigPreview);
+    $("radiusConfigPurpose").addEventListener("change", syncDeviceConfigFields);
     syncAdminFields();
     syncNasDevice();
     syncPolicyFields();
+    syncDeviceConfigFields();
     await refreshProfiles();
   }
 

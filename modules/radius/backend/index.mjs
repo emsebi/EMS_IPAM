@@ -4,12 +4,14 @@ import { reviewMabPolicyMatrix } from "../review-matrix.mjs";
 import { normalizeNasIp, prepareNasProfile } from "../nas-inventory.mjs";
 import { previewNasClientConfig } from "../nas-config-preview.mjs";
 import { prepareMabPolicy } from "../mab-policy-profile.mjs";
+import { previewDeviceRadiusConfig } from "../device-config-preview.mjs";
 
 const PREVIEW_PATHS = new Set([
   "/api/radius/preview/mab",
   "/api/radius/preview/admin-profile",
   "/api/radius/preview/mab-matrix",
   "/api/radius/preview/nas-client",
+  "/api/radius/preview/device-config",
 ]);
 const NAS_ROOT = "/api/radius/nas-profiles";
 const ADMIN_ROOT = "/api/radius/admin-profiles";
@@ -240,6 +242,13 @@ export function createModule(ctx) {
       }
       if (pathname === "/api/radius/preview/admin-profile") {
         return json(res, 200, { ok: true, status: "preview-only", result: previewDeviceAdminProfile(body) });
+      }
+      if (pathname === "/api/radius/preview/device-config") {
+        const input = { ...body };
+        delete input.secret;
+        delete input.password;
+        delete input.token;
+        return json(res, 200, { ok: true, status: "preview-only", result: previewDeviceRadiusConfig(input) });
       }
       if (pathname === "/api/radius/preview/nas-client") {
         if (!plainObject(body.profile) || !safeId(body.profile.deviceId)) throw badRequest("Invalid NAS device reference.");
