@@ -250,6 +250,37 @@ try {
   await page.locator('#radiusConfigResult').getByText(/\/radius add service=login/).waitFor();
   check('RADIUS panel persists policy and generates manual-only Cisco/MikroTik templates');
 
+  await page.locator('button.module-nav-link[data-module-id="branches"]').click();
+  await page.locator('#branchForm').waitFor({ state: 'visible' });
+  assert.match(page.url(), /#\/module\/branches$/);
+  await page.locator('#branchParentCompany').selectOption('test-co');
+  await page.locator('#branchName').fill('Test Branch');
+  await page.locator('#branchCode').fill('TB01');
+  await page.locator('#branchAddress').fill('Lab address');
+  await page.locator('#branchForm [type=submit]').click();
+  await page.locator('.branch-card').getByText('Test Branch', { exact: true }).waitFor();
+  const branchesBootstrap = await api('/api/bootstrap');
+  const testBranch = branchesBootstrap.companies.find((item) => item.kind === 'branch' && item.name === 'Test Branch');
+  assert.ok(testBranch);
+  await page.locator('#branchesRouterCompany').selectOption('test-co');
+  await page.locator('#branchesRouterBranch').selectOption(testBranch.id);
+  await page.locator('#branchesRouterHost').selectOption(savedHost.id);
+  await page.locator('#branchesRouterName').fill('Branch Edge');
+  await page.locator('#branchesRouterManagement').fill('192.0.2.50');
+  await page.locator('#branchesRouterPublic').fill('203.0.113.50');
+  await page.locator('#branchesRouterVendor').selectOption('cisco');
+  await page.locator('#branchesRouterModel').fill('ISR-Test');
+  await page.locator('#branchesRouterSsh').check();
+  await page.locator('#branchesRouterWinbox').check();
+  await page.locator('#branchesRouterForm [type=submit]').click();
+  await page.locator('.branch-card[data-branch-id="' + testBranch.id + '"]').getByText('Branch Edge', { exact: true }).waitFor();
+  assert.match(await page.locator('.branch-card[data-branch-id="' + testBranch.id + '"]').textContent(), /203\.0\.113\.50/);
+  await page.locator('.branch-card[data-branch-id="' + testBranch.id + '"] .router-edit').click();
+  await page.locator('#branchesRouterName').fill('Branch Edge Updated');
+  await page.locator('#branchesRouterForm [type=submit]').click();
+  await page.locator('.branch-card[data-branch-id="' + testBranch.id + '"]').getByText('Branch Edge Updated', { exact: true }).waitFor();
+  check('Branches module creates branch, links inventory router, stores public IP, and edits independently');
+
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();
   assert.equal(await page.locator('#settingsDialog [data-settings-tab=personnel], #settingsDialog [data-settings-tab=device-types]').count(), 0);
