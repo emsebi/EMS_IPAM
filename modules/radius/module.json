@@ -1,8 +1,8 @@
 {
   "id": "radius",
   "name": "RADIUS / AAA",
-  "version": "0.2.0-rc.1",
-  "description": "Panel-integrated offline RADIUS/MAB and device-admin AAA previews. No live authentication or device configuration.",
+  "version": "0.2.0-rc.2",
+  "description": "Panel-integrated offline RADIUS/MAB, NAS client draft and device-admin AAA previews. No live authentication or automatic device configuration.",
   "enabled": true,
   "permissions": [
     "radius.read",

@@ -26,5 +26,15 @@
   "radius.matrix.subtitle": "Run a fixed safe demo and review only redacted outcomes.",
   "radius.matrix.runDemo": "Run Safe Demo",
   "radius.warning.title": "No automatic configuration",
-  "radius.warning.body": "This module does not listen on RADIUS ports, authenticate real users/endpoints, store shared secrets, or push configuration to network devices. Operational FreeRADIUS integration is a later module stage."
+  "radius.warning.body": "This module does not listen on RADIUS ports, authenticate real users/endpoints, store shared secrets, or push configuration to network devices. Operational FreeRADIUS integration is a later module stage.",
+  "radius.nas.title": "NAS / RADIUS Client Draft",
+  "radius.nas.subtitle": "Select an existing EMS device and generate a fully commented FreeRADIUS client draft for manual review.",
+  "radius.nas.device": "Inventory Device",
+  "radius.nas.selectDevice": "Select a device",
+  "radius.nas.id": "NAS Profile ID",
+  "radius.nas.name": "NAS Name",
+  "radius.nas.ip": "NAS Source IP",
+  "radius.nas.otherVendor": "Other",
+  "radius.nas.enabled": "Mark profile enabled in the review draft",
+  "radius.nas.generateDraft": "Generate Commented Draft"
 }

@@ -26,5 +26,15 @@
   "radius.matrix.subtitle": "یک سناریوی ثابت و امن اجرا می‌شود و فقط نتیجه‌های بدون شناسه حساس نمایش داده می‌شوند.",
   "radius.matrix.runDemo": "اجرای دموی امن",
   "radius.warning.title": "بدون اعمال خودکار کانفیگ",
-  "radius.warning.body": "این ماژول روی پورت‌های RADIUS گوش نمی‌دهد، کاربر یا Endpoint واقعی را احراز هویت نمی‌کند، Shared Secret ذخیره نمی‌کند و هیچ کانفیگی روی تجهیزات شبکه Push نمی‌کند. اتصال عملیاتی FreeRADIUS در مرحله بعدی ماژول انجام می‌شود."
+  "radius.warning.body": "این ماژول روی پورت‌های RADIUS گوش نمی‌دهد، کاربر یا Endpoint واقعی را احراز هویت نمی‌کند، Shared Secret ذخیره نمی‌کند و هیچ کانفیگی روی تجهیزات شبکه Push نمی‌کند. اتصال عملیاتی FreeRADIUS در مرحله بعدی ماژول انجام می‌شود.",
+  "radius.nas.title": "پیش‌نویس NAS / RADIUS Client",
+  "radius.nas.subtitle": "یک تجهیز موجود در EMS را انتخاب کنید و یک پیش‌نویس کاملاً کامنت‌شده FreeRADIUS برای بررسی دستی بسازید.",
+  "radius.nas.device": "تجهیز Inventory",
+  "radius.nas.selectDevice": "انتخاب تجهیز",
+  "radius.nas.id": "شناسه پروفایل NAS",
+  "radius.nas.name": "نام NAS",
+  "radius.nas.ip": "IP مبدأ NAS",
+  "radius.nas.otherVendor": "سایر",
+  "radius.nas.enabled": "پروفایل در پیش‌نویس به‌عنوان فعال علامت بخورد",
+  "radius.nas.generateDraft": "ساخت پیش‌نویس کامنت‌شده"
 }

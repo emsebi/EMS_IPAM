@@ -69,3 +69,41 @@ test("RADIUS UI owns its translations and contains no Persian literals", async (
   assert.doesNotMatch(ui, /[\u0600-\u06FF]/);
   for (const key of Object.keys(english)) assert.ok(persian[key]?.trim(), `Missing Persian module key: ${key}`);
 });
+
+
+test("NAS draft endpoint resolves the device from EMS inventory and emits only comments", async () => {
+  let response;
+  const module = createModule({
+    pool: { query: async (_sql, values) => ({ rowCount: 1, rows: [{ id: values[0], companyId: "co-a", ip: "192.0.2.10" }] }) },
+    json: (_res, status, value) => { response = { status, value }; return response; },
+    readBody: async (req) => req.body,
+    requireAdmin: () => {},
+    requireModuleAccess: async () => {},
+  });
+  const req = { method: "POST", body: { profile: {
+    id: "nas-1", companyId: "co-a", deviceId: "sw-1", name: "Lab NAS",
+    vendor: "cisco", nasIp: "192.0.2.10", enabled: false, services: ["mab"],
+  } } };
+  const url = new URL("http://test/api/radius/preview/nas-client");
+  await module.handle(req, {}, url, { role: "admin" });
+  assert.equal(response.status, 200);
+  assert.equal(response.value.result.status, "draft-only");
+  for (const line of response.value.result.text.split("\n").filter(Boolean)) assert.ok(line.startsWith("#"));
+});
+
+test("NAS draft endpoint rejects a client-supplied IP that differs from EMS inventory", async () => {
+  let response;
+  const module = createModule({
+    pool: { query: async () => ({ rowCount: 1, rows: [{ id: "sw-1", companyId: "co-a", ip: "192.0.2.10" }] }) },
+    json: (_res, status, value) => { response = { status, value }; return response; },
+    readBody: async (req) => req.body,
+    requireAdmin: () => {},
+    requireModuleAccess: async () => {},
+  });
+  const req = { method: "POST", body: { profile: {
+    id: "nas-1", companyId: "co-a", deviceId: "sw-1", name: "Lab NAS",
+    vendor: "cisco", nasIp: "192.0.2.11", enabled: false, services: ["mab"],
+  } } };
+  await module.handle(req, {}, new URL("http://test/api/radius/preview/nas-client"), { role: "admin" });
+  assert.deepEqual(response.value.result.issues, ["nas-ip-device-mismatch"]);
+});

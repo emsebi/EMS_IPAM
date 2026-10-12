@@ -199,7 +199,14 @@ try {
   const matrixText = await page.locator('#radiusMatrixResult').textContent();
   assert.equal(matrixText.includes('02:00:00:00:00:50'), false);
   assert.equal(matrixText.includes('lab-switch'), false);
-  check('generic RADIUS panel module loads, previews MAB/admin AAA, and keeps matrix output redacted');
+  await page.locator('#radiusNasDevice').selectOption(savedHost.id);
+  assert.equal(await page.locator('#radiusNasIp').inputValue(), '192.0.2.50');
+  await page.locator('#radiusNasForm [type=submit]').click();
+  await page.locator('#radiusNasResult').getByText(/REVIEW-ONLY FreeRADIUS clients\.conf DRAFT/).waitFor();
+  const nasDraft = await page.locator('#radiusNasResult').textContent();
+  assert.ok(nasDraft.split('\n').filter(Boolean).every((line) => line.startsWith('#')));
+  assert.equal(/(^|\n)client\s/m.test(nasDraft), false);
+  check('generic RADIUS module previews MAB/admin AAA, redacted matrix, and inert NAS client draft');
 
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();

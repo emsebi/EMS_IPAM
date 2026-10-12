@@ -1,5 +1,5 @@
 export function createUi(ctx) {
-  const { state, $, page, request, escapeHtml, navActive, t } = ctx;
+  const { state, $, page, request, escapeHtml, navActive, t, ensureInventory } = ctx;
 
   const jsonText = (value) => JSON.stringify(value, null, 2);
   const setResult = (id, value) => {
@@ -60,6 +60,43 @@ export function createUi(ctx) {
     }
   }
 
+  function selectedNasDevice() {
+    const id = $("radiusNasDevice")?.value || "";
+    return (state.inventory || []).find((item) => item.id === id) || null;
+  }
+
+  function syncNasDevice() {
+    const device = selectedNasDevice();
+    if ($("radiusNasIp")) $("radiusNasIp").value = device?.ip || "";
+    if ($("radiusNasId") && !$("radiusNasId").value && device) $("radiusNasId").value = `nas-${device.id}`.slice(0, 80);
+  }
+
+  async function runNasPreview(event) {
+    event.preventDefault();
+    const device = selectedNasDevice();
+    if (!device) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
+    const services = [...document.querySelectorAll('[name="radiusNasService"]:checked')].map((node) => node.value);
+    try {
+      const response = await request("/api/radius/preview/nas-client", {
+        method: "POST",
+        body: { profile: {
+          id: $("radiusNasId").value.trim(),
+          companyId: device.companyId,
+          deviceId: device.id,
+          name: $("radiusNasName").value.trim(),
+          vendor: $("radiusNasVendor").value,
+          nasIp: $("radiusNasIp").value.trim(),
+          enabled: $("radiusNasEnabled").checked,
+          services,
+        } },
+      });
+      const result = response.result;
+      $("radiusNasResult").textContent = result?.text || jsonText(result);
+    } catch (error) {
+      setResult("radiusNasResult", { status: "error", reason: error.message });
+    }
+  }
+
   async function runMatrixDemo() {
     const inventory = [{ mac: "02:00:00:00:00:50", enabled: true, vlan: 20 }];
     const policy = { enabled: true, known: { mode: "accept-dynamic" }, unknown: { mode: "reject" } };
@@ -80,6 +117,8 @@ export function createUi(ctx) {
   async function openPage() {
     state.view = "module";
     navActive("radius");
+    await ensureInventory(true);
+    const nasDevices = (state.inventory || []).filter((item) => item.id && item.ip && item.companyId);
     page.innerHTML = `
       <div class="headline radius-head">
         <div>
@@ -139,6 +178,37 @@ export function createUi(ctx) {
           <pre id="radiusAdminResult" class="radius-result" aria-live="polite"></pre>
         </section>
 
+        <section class="panel radius-card">
+          <h3>${escapeHtml(t("radius.nas.title"))}</h3>
+          <p class="subtitle">${escapeHtml(t("radius.nas.subtitle"))}</p>
+          <form id="radiusNasForm" class="radius-form">
+            <label>${escapeHtml(t("radius.nas.device"))}
+              <select id="radiusNasDevice" required>
+                <option value="">${escapeHtml(t("radius.nas.selectDevice"))}</option>
+                ${nasDevices.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ip)}</option>`).join("")}
+              </select>
+            </label>
+            <label>${escapeHtml(t("radius.nas.id"))}<input id="radiusNasId" class="ltr" required value=""></label>
+            <label>${escapeHtml(t("radius.nas.name"))}<input id="radiusNasName" required value="Lab NAS"></label>
+            <label>${escapeHtml(t("radius.nas.ip"))}<input id="radiusNasIp" class="ltr mono" readonly></label>
+            <label>${escapeHtml(t("radius.admin.vendor"))}
+              <select id="radiusNasVendor">
+                <option value="cisco">Cisco</option>
+                <option value="mikrotik">MikroTik</option>
+                <option value="other">${escapeHtml(t("radius.nas.otherVendor"))}</option>
+              </select>
+            </label>
+            <div class="radius-service-grid">
+              <label class="check-row"><input type="checkbox" name="radiusNasService" value="mab" checked> MAB</label>
+              <label class="check-row"><input type="checkbox" name="radiusNasService" value="dot1x"> 802.1X</label>
+              <label class="check-row"><input type="checkbox" name="radiusNasService" value="device-admin"> AAA</label>
+            </div>
+            <label class="check-row"><input id="radiusNasEnabled" type="checkbox"> ${escapeHtml(t("radius.nas.enabled"))}</label>
+            <button class="btn primary" type="submit">${escapeHtml(t("radius.nas.generateDraft"))}</button>
+          </form>
+          <pre id="radiusNasResult" class="radius-result" aria-live="polite"></pre>
+        </section>
+
         <section class="panel radius-card radius-wide">
           <div class="row-actions">
             <div>
@@ -161,7 +231,10 @@ export function createUi(ctx) {
     $("radiusAdminForm").addEventListener("submit", runAdminPreview);
     $("radiusAdminVendor").addEventListener("change", syncAdminFields);
     $("radiusMatrixDemo").addEventListener("click", runMatrixDemo);
+    $("radiusNasForm").addEventListener("submit", runNasPreview);
+    $("radiusNasDevice").addEventListener("change", syncNasDevice);
     syncAdminFields();
+    syncNasDevice();
   }
 
   return { openPage };
