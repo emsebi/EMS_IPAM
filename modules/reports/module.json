@@ -1,0 +1,18 @@
+{
+  "id": "reports",
+  "name": "Reports",
+  "version": "0.1.0-rc.1",
+  "description": "Read-only operational summaries and redacted audit activity for EMS-IPAM.",
+  "enabled": true,
+  "permissions": ["reports.read"],
+  "roles": ["admin"],
+  "navigation": {
+    "label": "Reports",
+    "labels": {"en": "Reports", "fa": "گزارش‌ها"},
+    "icon": "▤",
+    "order": 80,
+    "panel": true
+  },
+  "apiVersion": 1,
+  "backend": "backend/index.mjs"
+}
