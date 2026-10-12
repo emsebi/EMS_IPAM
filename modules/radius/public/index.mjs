@@ -124,7 +124,7 @@ export function createUi(ctx) {
     $("radiusNasProfilesList").innerHTML = nasProfiles.map((item) => `
       <div class="radius-profile-row">
         <div><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.vendor)} · <span class="ltr mono">${escapeHtml(item.nasIp)}</span> · ${escapeHtml((item.services || []).join(", "))}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
         <div class="row-actions"><button class="btn sm radius-nas-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-nas-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
       </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.nas.empty"))}</div>`;
     page.querySelectorAll(".radius-nas-edit").forEach((node) => node.addEventListener("click", () => {
@@ -160,7 +160,7 @@ export function createUi(ctx) {
     $("radiusAdminProfilesList").innerHTML = adminProfiles.map((item) => `
       <div class="radius-profile-row">
         <div><b>${escapeHtml(item.name)}</b><small>Cisco privilege: ${escapeHtml(item.ciscoPrivilege)} · MikroTik: ${escapeHtml(item.mikrotikGroup)}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
         <div class="row-actions"><button class="btn sm radius-admin-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-admin-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
       </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.admin.empty"))}</div>`;
     page.querySelectorAll(".radius-admin-edit").forEach((node) => node.addEventListener("click", () => {
@@ -217,7 +217,7 @@ export function createUi(ctx) {
     $("radiusMabPoliciesList").innerHTML = mabPolicies.map((item) => `
       <div class="radius-profile-row">
         <div><b>${escapeHtml(item.id)}</b><small>${escapeHtml(item.nasName || item.nasProfileId)} · ${escapeHtml(item.knownMode)}${item.knownVlan ? ` VLAN ${escapeHtml(item.knownVlan)}` : ""} · ${escapeHtml(item.unknownMode)}${item.guestVlan ? ` VLAN ${escapeHtml(item.guestVlan)}` : ""}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
         <div class="row-actions"><button class="btn sm radius-policy-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-policy-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
       </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.policy.empty"))}</div>`;
     page.querySelectorAll(".radius-policy-edit").forEach((node) => node.addEventListener("click", () => {

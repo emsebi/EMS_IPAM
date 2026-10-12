@@ -234,7 +234,8 @@ try {
   await page.locator('#radiusMabPoliciesList .radius-policy-edit').click();
   await page.locator('#radiusPolicyUnknownMode').selectOption('reject');
   await page.locator('#radiusPolicyForm [type=submit]').click();
-  await page.locator('#radiusMabPoliciesList').getByText('lab-mab-policy', { exact: true }).waitFor();
+  await page.locator('#radiusPolicyResult').getByText(/"status": "saved"/).waitFor();
+  await page.waitForFunction(() => document.getElementById('radiusMabPoliciesList')?.textContent.includes('reject'));
   assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /reject/);
   check('RADIUS panel persists NAS/admin profiles and editable per-NAS MAB policy');
 

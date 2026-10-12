@@ -62,5 +62,7 @@
   "radius.policy.guestVlan": "Guest VLAN for unknown MACs",
   "radius.policy.save": "Save MAB Policy",
   "radius.policy.empty": "No per-NAS MAB policies saved.",
-  "radius.policy.confirmDelete": "Delete MAB policy “{name}”?"
+  "radius.policy.confirmDelete": "Delete MAB policy “{name}”?",
+  "radius.status.enabled": "Enabled",
+  "radius.status.disabled": "Disabled"
 }

@@ -62,5 +62,7 @@
   "radius.policy.guestVlan": "Guest VLAN برای MAC ناشناس",
   "radius.policy.save": "ذخیره Policy MAB",
   "radius.policy.empty": "Policy اختصاصی MAB ثبت نشده است.",
-  "radius.policy.confirmDelete": "Policy MAB «{name}» حذف شود؟"
+  "radius.policy.confirmDelete": "Policy MAB «{name}» حذف شود؟",
+  "radius.status.enabled": "فعال",
+  "radius.status.disabled": "غیرفعال"
 }
