@@ -35,7 +35,7 @@ export function previewMabDecision({ mac, knownMacs = [], policy = {}, switchId 
   if (!normalized) return deny('invalid-mac');
   if (!policy || typeof policy !== 'object' || Array.isArray(policy) || policy.enabled !== true) return deny('policy-disabled');
   if (!Array.isArray(knownMacs)) return deny('invalid-inventory');
-  if (typeof switchId !== 'string') return deny('invalid-switch');
+  if (typeof switchId !== 'string' || (switchId !== '' && !/^[A-Za-z0-9_.:-]{1,64}$/.test(switchId))) return deny('invalid-switch-id');
   const overrides = policy.switchOverrides;
   if (overrides !== undefined && (overrides === null || typeof overrides !== 'object' || Array.isArray(overrides))) return deny('invalid-policy');
   const override = switchId && Object.hasOwn(overrides || {}, switchId) ? overrides[switchId] : null;

@@ -17,7 +17,7 @@ test('deny by default and invalid input', () => {
   assert.equal(preview({ policy: { enabled: true } }).reason, 'invalid-policy');
   assert.equal(preview({ mac: 'invalid' }).reason, 'invalid-mac');
   assert.equal(preview({ knownMacs: {} }).reason, 'invalid-inventory');
-  assert.equal(preview({ switchId: {} }).reason, 'invalid-switch');
+  assert.equal(preview({ switchId: {} }).reason, 'invalid-switch-id');
 });
 test('known MAC static and dynamic VLAN', () => {
   assert.deepEqual(preview().replyAttributes, {});
@@ -37,4 +37,16 @@ test('switch override and disabled switch', () => {
   const p = { ...policy, switchOverrides: { a: { known: { mode: 'accept-dynamic', vlan: 30 } }, b: { enabled: false } } };
   assert.equal(preview({ policy: p, switchId: 'a', knownMacs: [{ ...knownMacs[0], vlan: null }] }).replyAttributes['Tunnel-Private-Group-Id'], '30');
   assert.equal(preview({ policy: p, switchId: 'b' }).reason, 'switch-policy-disabled');
+});
+
+test('malformed NAS IDs and null overrides never inherit permissive guest policy', () => {
+  const permissive = { ...policy, unknown: { mode: 'guest-vlan', vlan: 999 } };
+  const mac = '02:00:00:00:00:51';
+  for (const switchId of [null, 2, {}, [], '../bad', 'a'.repeat(65), ' sw-1', 'sw/1']) {
+    assert.equal(preview({ mac, switchId, policy: permissive }).reason, 'invalid-switch-id');
+  }
+  for (const invalid of [null, [], false, { enabled: 'false' }]) {
+    assert.equal(preview({ mac, switchId: 'sw-1', policy: { ...permissive, switchOverrides: { 'sw-1': invalid } } }).reason, 'invalid-policy');
+  }
+  assert.equal(preview({ mac, switchId: 'sw-1', policy: { ...permissive, switchOverrides: { 'sw-1': { enabled: false } } } }).reason, 'switch-policy-disabled');
 });
