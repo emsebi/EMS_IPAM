@@ -1,16 +1,25 @@
 {
   "id": "branches",
   "name": "Branches / Routers",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Branch-oriented router inventory using existing EMS company/branch records and module-owned router storage.",
   "enabled": true,
-  "permissions": ["branches.read", "branches.write"],
-  "roles": ["admin"],
+  "permissions": [
+    "branches.read",
+    "branches.write"
+  ],
+  "roles": [
+    "admin"
+  ],
   "navigation": {
     "label": "Branches / Routers",
     "icon": "⌂",
     "order": 45,
-    "panel": true
+    "panel": true,
+    "labels": {
+      "en": "Branches / Routers",
+      "fa": "شعبه‌ها / روترها"
+    }
   },
   "apiVersion": 1,
   "backend": "backend/index.mjs"

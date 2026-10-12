@@ -423,7 +423,8 @@ function renderModuleNavigation() {
     .filter((item) => !Array.isArray(item.roles) || !item.roles.length || item.roles.includes(role))
     .sort((a, b) => Number(a.navigation?.order || 100) - Number(b.navigation?.order || 100))
     .map((item) => {
-      const label = item.navigation?.label || item.name || item.id;
+      const labels = item.navigation?.labels && typeof item.navigation.labels === "object" ? item.navigation.labels : {};
+      const label = labels[state.language] || labels.en || item.navigation?.label || item.name || item.id;
       const icon = item.navigation?.icon || "◫";
       if (item.navigation?.panel === true) {
         return `<button type="button" class="navbtn module-nav-link" data-module-id="${escapeHtml(item.id)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></button>`;

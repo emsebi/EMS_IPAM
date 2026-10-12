@@ -15,7 +15,11 @@
     "label": "RADIUS / AAA",
     "icon": "◎",
     "order": 50,
-    "panel": true
+    "panel": true,
+    "labels": {
+      "en": "RADIUS / AAA",
+      "fa": "RADIUS / AAA"
+    }
   },
   "apiVersion": 1,
   "backend": "backend/index.mjs"
