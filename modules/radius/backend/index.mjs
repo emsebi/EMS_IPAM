@@ -4,6 +4,7 @@ import { reviewMabPolicyMatrix } from "../review-matrix.mjs";
 import { normalizeNasIp, prepareNasProfile } from "../nas-inventory.mjs";
 import { previewNasClientConfig } from "../nas-config-preview.mjs";
 import { prepareMabPolicy } from "../mab-policy-profile.mjs";
+import { checkMabNasBinding } from "../mab-policy-guard.mjs";
 import { previewDeviceRadiusConfig } from "../device-config-preview.mjs";
 
 const PREVIEW_PATHS = new Set([
@@ -160,8 +161,10 @@ export function createModule(ctx) {
         const prepared = prepareMabPolicy(await readBody(req));
         if (!prepared.ok) throw badRequest(`Invalid MAB policy: ${prepared.issues.join(", ")}`);
         const value = prepared.value;
-        const nas = await pool.query('SELECT id,company_id AS "companyId" FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
+        const nas = await pool.query('SELECT id,company_id AS "companyId",enabled,services FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
         if (nas.rowCount !== 1) throw badRequest("MAB policy NAS profile was not found.");
+        const binding = checkMabNasBinding(value, nas.rows[0]);
+        if (!binding.ok) throw badRequest('Invalid MAB policy: ' + binding.reason);
         const saved = await pool.query(`INSERT INTO radius_mab_policies
           (id,nas_profile_id,enabled,known_mode,known_vlan,unknown_mode,guest_vlan)
           VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -179,8 +182,12 @@ export function createModule(ctx) {
         const prepared = prepareMabPolicy(await readBody(req), { forcedId: policyId });
         if (!prepared.ok) throw badRequest(`Invalid MAB policy: ${prepared.issues.join(", ")}`);
         const value = prepared.value;
-        const nas = await pool.query('SELECT id,company_id AS "companyId" FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
+        const previous = await pool.query('SELECT nas_profile_id AS "nasProfileId" FROM radius_mab_policies WHERE id=$1', [value.id]);
+        if (!previous.rowCount) throw notFound("MAB policy was not found.");
+        const nas = await pool.query('SELECT id,company_id AS "companyId",enabled,services FROM radius_nas_profiles WHERE id=$1', [value.nasProfileId]);
         if (nas.rowCount !== 1) throw badRequest("MAB policy NAS profile was not found.");
+        const binding = checkMabNasBinding(value, nas.rows[0], { existingNasProfileId: previous.rows[0].nasProfileId });
+        if (!binding.ok) throw badRequest('Invalid MAB policy: ' + binding.reason);
         const saved = await pool.query(`UPDATE radius_mab_policies SET nas_profile_id=$2,enabled=$3,known_mode=$4,known_vlan=$5,
           unknown_mode=$6,guest_vlan=$7,updated_at=now() WHERE id=$1
           RETURNING id,nas_profile_id AS "nasProfileId",enabled,known_mode AS "knownMode",
