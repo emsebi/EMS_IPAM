@@ -11,3 +11,6 @@ The module now has its own manifest, backend preview endpoints, panel UI, styles
 
 ## 802.1X authorization preview
 `dot1x-policy-preview.mjs` is deliberately offline-only. It models authorization after an external trusted EAP verification and is not exposed as a caller-controlled authentication API. Failed EAP never falls back to MAB or guest access.
+
+## Module-owned database foundation
+Version 0.3 introduces `migrations/001-radius-foundation.sql`. NAS profiles, device-admin profiles and MAB policy records now have module-owned tables recorded in the shared migration ledger. The migration deliberately contains no shared-secret, password, token or credential columns. A failure in this module migration disables RADIUS without replaying or rebuilding the Core schema.
