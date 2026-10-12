@@ -44,6 +44,8 @@ const state = {
   language: localStorage.getItem("ems-language") || "en",
   languages: [],
   routeBusy: false,
+  currentModuleId: null,
+  currentModuleRouteParts: [],
   hostReturnView: null,
   personnelReturnToSettings: false,
   usersReturnToSettings: false,
@@ -164,7 +166,8 @@ function markFormClean(form) {
 }
 
 function navActive(name) {
-  document.querySelectorAll(".navbtn").forEach((node) => node.classList.toggle("active", node.id === `${name}Button`));
+  document.querySelectorAll(".navbtn").forEach((node) => node.classList.toggle("active",
+    node.id === `${name}Button` || node.dataset.moduleId === name));
 }
 
 function rememberIpamContext(view = state.view) {
@@ -348,20 +351,63 @@ function roleLabel(role) {
 }
 
 const moduleUiCache = new Map();
+
+async function createModuleTranslator(info) {
+  const id = String(info?.id || "");
+  const version = encodeURIComponent(info?.version || "0");
+  if (!id) return t;
+  const english = await readLanguageFile(`/m/${encodeURIComponent(id)}/i18n/en.json?v=${version}`);
+  const localized = state.language === "en"
+    ? english
+    : await readLanguageFile(`/m/${encodeURIComponent(id)}/i18n/${encodeURIComponent(state.language)}.json?v=${version}`);
+  const localT = createKeyTranslator({ english, translations: localized, language: state.language });
+  return (key, params = {}) => Object.prototype.hasOwnProperty.call(english, key)
+    ? localT(key, params)
+    : t(key, params);
+}
+
 async function loadModuleUi(id) {
   if (moduleUiCache.has(id)) return moduleUiCache.get(id);
   const info = state.bootstrap?.modules?.find((item) => item.id === id);
   if (!info) throw new Error("ماژول مورد نیاز نصب یا فعال نیست.");
   const { createUi } = await import(`/m/${id}/index.mjs?v=${encodeURIComponent(info.version)}`);
-  const link = document.createElement("link");
-  link.rel = "stylesheet"; link.href = `/m/${id}/style.css?v=${encodeURIComponent(info.version)}`;
-  document.head.appendChild(link);
+  if (typeof createUi !== "function") throw new Error("رابط ماژول معتبر نیست.");
+  if (![...document.querySelectorAll("link[data-module-style]")].some((node) => node.dataset.moduleStyle === id)) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.dataset.moduleStyle = id;
+    link.href = `/m/${id}/style.css?v=${encodeURIComponent(info.version)}`;
+    document.head.appendChild(link);
+  }
+  const moduleT = await createModuleTranslator(info);
   const ui = createUi({ state,$,page,isModuleInstalled,hasClientModule,ensureInventory,ensureDeviceTypes,
     updateSelectors,navActive,setRoute,toast,canWrite,isAdmin,ipv4ToInt,intToIpv4,request,prepareHostEditor,
-    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,t,populateHostTypes,openPersonnelDialog,editPersonnel });
+    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,t:moduleT,coreT:t,module:info,
+    populateHostTypes,openPersonnelDialog,editPersonnel });
   moduleUiCache.set(id,ui);
   return ui;
 }
+
+async function openGenericModulePage(id, routeParts = [], { fromRoute = false } = {}) {
+  const info = state.bootstrap?.modules?.find((item) => item.id === id);
+  if (!info || info.navigation?.panel !== true) throw new Error("این ماژول صفحه پنلی ثبت‌شده ندارد.");
+  const ui = await loadModuleUi(id);
+  if (typeof ui.openPage !== "function") throw new Error("ماژول تابع openPage ارائه نکرده است.");
+  state.view = "module";
+  state.currentModuleId = id;
+  state.currentModuleRouteParts = Array.isArray(routeParts) ? routeParts.slice(0, 10) : [];
+  state.currentSpaceId = null;
+  state.data = null;
+  navActive(id);
+  if (!fromRoute) {
+    const suffix = state.currentModuleRouteParts.length
+      ? `/${state.currentModuleRouteParts.map((item) => encodeURIComponent(item)).join("/")}`
+      : "";
+    setRoute(`/module/${encodeURIComponent(id)}${suffix}`);
+  }
+  await ui.openPage({ routeParts: [...state.currentModuleRouteParts], fromRoute });
+}
+
 async function openNetworkAccessPage(tab = "mac") {
   try { return (await loadModuleUi("network-access")).openNetworkAccessPage(tab); } catch (error) { toast(error.message); }
 }
@@ -373,9 +419,22 @@ function renderModuleNavigation() {
   const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
   host.innerHTML = modules
     .filter((item) => !["radio","ipam","network-access"].includes(item.id))
+    .filter((item) => item.navigation && typeof item.navigation === "object")
     .filter((item) => !Array.isArray(item.roles) || !item.roles.length || item.roles.includes(role))
     .sort((a, b) => Number(a.navigation?.order || 100) - Number(b.navigation?.order || 100))
-    .map((item) => { const path = item.navigation?.path || `/m/${item.id}/`; const label = item.navigation?.label || item.name || item.id; const icon = item.navigation?.icon || "◫"; return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`; }).join("");
+    .map((item) => {
+      const label = item.navigation?.label || item.name || item.id;
+      const icon = item.navigation?.icon || "◫";
+      if (item.navigation?.panel === true) {
+        return `<button type="button" class="navbtn module-nav-link" data-module-id="${escapeHtml(item.id)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></button>`;
+      }
+      const path = item.navigation?.path || `/m/${item.id}/`;
+      return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`;
+    }).join("");
+  host.querySelectorAll("button.module-nav-link[data-module-id]").forEach((node) => node.addEventListener("click", () => {
+    openGenericModulePage(node.dataset.moduleId).catch((error) => toast(error.message));
+  }));
+  if (state.view === "module" && state.currentModuleId) navActive(state.currentModuleId);
 }
 
 function applyTheme(theme) {
@@ -470,6 +529,7 @@ async function renderRoute(replace = false) {
     else if (parts[0] === "inventory") await openInventoryPage(true, { fromRoute: true });
     else if (parts[0] === "radios") await openRadiosPage(true, { fromRoute: true });
     else if (parts[0] === "topology") await openTopologyPage(true, { fromRoute: true });
+    else if (parts[0] === "module" && parts[1]) await openGenericModulePage(parts[1], parts.slice(2), { fromRoute: true });
     else {
       setRoute("/companies", replace);
       renderCompanies({ keepRoute: true });
@@ -497,6 +557,7 @@ function connectEvents() {
         } else if (state.view === "topology" && change.type === "topology") await openTopologyPage(true);
         else if (state.view === "radios" && change.type === "host") await openRadiosPage(true);
         else if (state.view === "inventory" && change.type === "host") await openInventoryPage(true, { fromRoute: true });
+        else if (state.view === "module" && state.currentModuleId) await openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true });
         else if (state.view === "company" && state.currentCompanyId) await openCompanyPage(state.currentCompanyId, { fromRoute: true });
         else if (state.view === "companies") renderCompanies();
       } catch (error) { console.warn(error); }
@@ -532,6 +593,7 @@ function renderCurrent() {
   else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
   else if (state.view === "inventory") renderInventory();
   else if (state.view === "topology") renderTopology();
+  else if (state.view === "module" && state.currentModuleId) openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true }).catch((error) => toast(error.message));
   else if (state.view === "company" && state.currentCompanyId) openCompanyPage(state.currentCompanyId, { fromRoute: true }).catch((error) => toast(error.message));
   else renderCompanies();
 }
@@ -1856,6 +1918,7 @@ $("companySelect").addEventListener("change", (event) => {
   else if (state.view === "radios") renderRadios();
   else if (state.view === "device-types") openDeviceTypesPage();
   else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
+  else if (state.view === "module" && state.currentModuleId) openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true }).catch((error) => toast(error.message));
   else if (state.currentCompanyId) openCompanyPage(state.currentCompanyId);
   else renderCompanies();
 });
