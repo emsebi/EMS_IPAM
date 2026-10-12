@@ -49,5 +49,18 @@
   "radius.admin.enabled": "Enabled",
   "radius.admin.save": "Save Admin Profile",
   "radius.admin.empty": "No administrator profiles saved.",
-  "radius.admin.confirmDelete": "Delete administrator profile “{name}”?"
+  "radius.admin.confirmDelete": "Delete administrator profile “{name}”?",
+  "radius.policy.title": "Per-NAS MAB Policies",
+  "radius.policy.subtitle": "Store explicit access behavior per NAS/switch. Policies are data only; nothing is pushed to the device.",
+  "radius.policy.id": "Policy ID",
+  "radius.policy.nas": "NAS Profile",
+  "radius.policy.selectNas": "Select a NAS profile",
+  "radius.policy.enabled": "Enabled",
+  "radius.policy.knownMode": "Known MAC behavior",
+  "radius.policy.knownVlan": "Default dynamic VLAN for known MACs",
+  "radius.policy.unknownMode": "Unknown MAC behavior",
+  "radius.policy.guestVlan": "Guest VLAN for unknown MACs",
+  "radius.policy.save": "Save MAB Policy",
+  "radius.policy.empty": "No per-NAS MAB policies saved.",
+  "radius.policy.confirmDelete": "Delete MAB policy “{name}”?"
 }

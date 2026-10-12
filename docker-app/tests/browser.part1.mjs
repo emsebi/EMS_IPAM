@@ -220,7 +220,23 @@ try {
   await page.locator('#radiusSavedAdminForm [type=submit]').click();
   await page.locator('#radiusAdminProfilesList').getByText('NOC Support', { exact: true }).waitFor();
   assert.match(await page.locator('#radiusAdminProfilesList').textContent(), /Cisco privilege: 7/);
-  check('RADIUS panel persists and edits NAS plus device-admin profiles without credentials');
+  await page.locator('#radiusPolicyNas').selectOption({ label: 'Lab NAS Updated — 192.0.2.50' });
+  await page.locator('#radiusPolicyId').fill('lab-mab-policy');
+  await page.locator('#radiusPolicyEnabled').check();
+  await page.locator('#radiusPolicyKnownMode').selectOption('accept-dynamic');
+  await page.locator('#radiusPolicyKnownVlan').fill('20');
+  await page.locator('#radiusPolicyUnknownMode').selectOption('guest-vlan');
+  await page.locator('#radiusPolicyGuestVlan').fill('30');
+  await page.locator('#radiusPolicyForm [type=submit]').click();
+  await page.locator('#radiusMabPoliciesList').getByText('lab-mab-policy', { exact: true }).waitFor();
+  assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /accept-dynamic/);
+  assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /guest-vlan/);
+  await page.locator('#radiusMabPoliciesList .radius-policy-edit').click();
+  await page.locator('#radiusPolicyUnknownMode').selectOption('reject');
+  await page.locator('#radiusPolicyForm [type=submit]').click();
+  await page.locator('#radiusMabPoliciesList').getByText('lab-mab-policy', { exact: true }).waitFor();
+  assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /reject/);
+  check('RADIUS panel persists NAS/admin profiles and editable per-NAS MAB policy');
 
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();

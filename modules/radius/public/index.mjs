@@ -9,8 +9,10 @@ export function createUi(ctx) {
   };
   let nasProfiles = [];
   let adminProfiles = [];
+  let mabPolicies = [];
   let nasEditId = null;
   let adminEditId = null;
+  let policyEditId = null;
 
   function syncAdminFields() {
     const cisco = $("radiusAdminVendor")?.value === "cisco";
@@ -181,12 +183,102 @@ export function createUi(ctx) {
     }));
   }
 
+  function syncPolicyFields() {
+    const knownDynamic = $("radiusPolicyKnownMode")?.value === "accept-dynamic";
+    const unknownGuest = $("radiusPolicyUnknownMode")?.value === "guest-vlan";
+    if ($("radiusPolicyKnownVlan")) $("radiusPolicyKnownVlan").disabled = !knownDynamic;
+    if ($("radiusPolicyGuestVlan")) $("radiusPolicyGuestVlan").disabled = !unknownGuest;
+  }
+
+  function renderPolicyNasOptions() {
+    const select = $("radiusPolicyNas");
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = `<option value="">${escapeHtml(t("radius.policy.selectNas"))}</option>` +
+      nasProfiles.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} — ${escapeHtml(item.nasIp)}</option>`).join("");
+    if (nasProfiles.some((item) => item.id === current)) select.value = current;
+  }
+
+  function resetPolicyEditor() {
+    policyEditId = null;
+    $("radiusPolicyForm").reset();
+    $("radiusPolicyId").disabled = false;
+    $("radiusPolicyKnownMode").value = "reject";
+    $("radiusPolicyUnknownMode").value = "reject";
+    $("radiusPolicyKnownVlan").value = "";
+    $("radiusPolicyGuestVlan").value = "";
+    $("radiusPolicyEnabled").checked = false;
+    $("radiusPolicyCancelEdit").classList.add("hidden");
+    renderPolicyNasOptions();
+    syncPolicyFields();
+  }
+
+  function renderMabPolicies() {
+    $("radiusMabPoliciesList").innerHTML = mabPolicies.map((item) => `
+      <div class="radius-profile-row">
+        <div><b>${escapeHtml(item.id)}</b><small>${escapeHtml(item.nasName || item.nasProfileId)} · ${escapeHtml(item.knownMode)}${item.knownVlan ? ` VLAN ${escapeHtml(item.knownVlan)}` : ""} · ${escapeHtml(item.unknownMode)}${item.guestVlan ? ` VLAN ${escapeHtml(item.guestVlan)}` : ""}</small></div>
+        <span class="status-pill">${escapeHtml(t(item.enabled ? "common.enabled" : "common.disabled"))}</span>
+        <div class="row-actions"><button class="btn sm radius-policy-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-policy-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
+      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.policy.empty"))}</div>`;
+    page.querySelectorAll(".radius-policy-edit").forEach((node) => node.addEventListener("click", () => {
+      const item = mabPolicies.find((entry) => entry.id === node.dataset.id);
+      if (!item) return;
+      policyEditId = item.id;
+      $("radiusPolicyId").value = item.id; $("radiusPolicyId").disabled = true;
+      $("radiusPolicyNas").value = item.nasProfileId;
+      $("radiusPolicyEnabled").checked = item.enabled;
+      $("radiusPolicyKnownMode").value = item.knownMode;
+      $("radiusPolicyKnownVlan").value = item.knownVlan ?? "";
+      $("radiusPolicyUnknownMode").value = item.unknownMode;
+      $("radiusPolicyGuestVlan").value = item.guestVlan ?? "";
+      $("radiusPolicyCancelEdit").classList.remove("hidden");
+      syncPolicyFields();
+      $("radiusPolicyForm").scrollIntoView({ block: "nearest" });
+    }));
+    page.querySelectorAll(".radius-policy-delete").forEach((node) => node.addEventListener("click", async () => {
+      const item = mabPolicies.find((entry) => entry.id === node.dataset.id);
+      if (!item || !confirm(t("radius.policy.confirmDelete", { name: item.id }))) return;
+      try { await request(`/api/radius/mab-policies/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
+      catch (error) { setResult("radiusPolicyResult", { status: "error", reason: error.message }); }
+    }));
+  }
+
+  async function saveMabPolicy(event) {
+    event.preventDefault();
+    const knownMode = $("radiusPolicyKnownMode").value;
+    const unknownMode = $("radiusPolicyUnknownMode").value;
+    const policy = {
+      id: $("radiusPolicyId").value.trim(),
+      nasProfileId: $("radiusPolicyNas").value,
+      enabled: $("radiusPolicyEnabled").checked,
+      knownMode,
+      knownVlan: knownMode === "accept-dynamic" ? Number($("radiusPolicyKnownVlan").value) : null,
+      unknownMode,
+      guestVlan: unknownMode === "guest-vlan" ? Number($("radiusPolicyGuestVlan").value) : null,
+    };
+    try {
+      const result = await request(policyEditId ? `/api/radius/mab-policies/${encodeURIComponent(policyEditId)}` : "/api/radius/mab-policies", {
+        method: policyEditId ? "PUT" : "POST", body: policy,
+      });
+      setResult("radiusPolicyResult", { status: "saved", id: result.item.id });
+      resetPolicyEditor();
+      await refreshProfiles();
+    } catch (error) { setResult("radiusPolicyResult", { status: "error", reason: error.message }); }
+  }
+
   async function refreshProfiles() {
-    const [nas, admins] = await Promise.all([request("/api/radius/nas-profiles"), request("/api/radius/admin-profiles")]);
+    const [nas, admins, policies] = await Promise.all([
+      request("/api/radius/nas-profiles"),
+      request("/api/radius/admin-profiles"),
+      request("/api/radius/mab-policies"),
+    ]);
     nasProfiles = nas.items || [];
     adminProfiles = admins.items || [];
+    mabPolicies = policies.items || [];
     renderNasProfiles();
     renderAdminProfiles();
+    renderPolicyNasOptions();
+    renderMabPolicies();
   }
 
   async function saveNasProfile() {
@@ -360,6 +452,37 @@ export function createUi(ctx) {
         </section>
 
         <section class="panel radius-card radius-wide">
+          <h3>${escapeHtml(t("radius.policy.title"))}</h3>
+          <p class="subtitle">${escapeHtml(t("radius.policy.subtitle"))}</p>
+          <form id="radiusPolicyForm" class="radius-form radius-policy-form">
+            <label>${escapeHtml(t("radius.policy.id"))}<input id="radiusPolicyId" class="ltr" required value=""></label>
+            <label>${escapeHtml(t("radius.policy.nas"))}<select id="radiusPolicyNas" required></select></label>
+            <label class="check-row"><input id="radiusPolicyEnabled" type="checkbox"> ${escapeHtml(t("radius.policy.enabled"))}</label>
+            <label>${escapeHtml(t("radius.policy.knownMode"))}
+              <select id="radiusPolicyKnownMode">
+                <option value="reject">${escapeHtml(t("radius.mode.reject"))}</option>
+                <option value="accept-static">${escapeHtml(t("radius.mode.acceptStatic"))}</option>
+                <option value="accept-dynamic">${escapeHtml(t("radius.mode.acceptDynamic"))}</option>
+              </select>
+            </label>
+            <label>${escapeHtml(t("radius.policy.knownVlan"))}<input id="radiusPolicyKnownVlan" type="number" min="1" max="4094"></label>
+            <label>${escapeHtml(t("radius.policy.unknownMode"))}
+              <select id="radiusPolicyUnknownMode">
+                <option value="reject">${escapeHtml(t("radius.mode.reject"))}</option>
+                <option value="guest-vlan">${escapeHtml(t("radius.mode.guestVlan"))}</option>
+              </select>
+            </label>
+            <label>${escapeHtml(t("radius.policy.guestVlan"))}<input id="radiusPolicyGuestVlan" type="number" min="1" max="4094"></label>
+            <div class="row-actions">
+              <button class="btn primary" type="submit">${escapeHtml(t("radius.policy.save"))}</button>
+              <button id="radiusPolicyCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
+            </div>
+          </form>
+          <pre id="radiusPolicyResult" class="radius-result" aria-live="polite"></pre>
+          <div id="radiusMabPoliciesList" class="radius-profile-list"></div>
+        </section>
+
+        <section class="panel radius-card radius-wide">
           <div class="row-actions">
             <div>
               <h3>${escapeHtml(t("radius.matrix.title"))}</h3>
@@ -387,8 +510,13 @@ export function createUi(ctx) {
     $("radiusNasCancelEdit").addEventListener("click", resetNasEditor);
     $("radiusSavedAdminForm").addEventListener("submit", saveAdminProfile);
     $("radiusAdminCancelEdit").addEventListener("click", resetAdminEditor);
+    $("radiusPolicyForm").addEventListener("submit", saveMabPolicy);
+    $("radiusPolicyKnownMode").addEventListener("change", syncPolicyFields);
+    $("radiusPolicyUnknownMode").addEventListener("change", syncPolicyFields);
+    $("radiusPolicyCancelEdit").addEventListener("click", resetPolicyEditor);
     syncAdminFields();
     syncNasDevice();
+    syncPolicyFields();
     await refreshProfiles();
   }
 

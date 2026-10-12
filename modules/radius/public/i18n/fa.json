@@ -49,5 +49,18 @@
   "radius.admin.enabled": "فعال",
   "radius.admin.save": "ذخیره پروفایل مدیر",
   "radius.admin.empty": "پروفایل مدیر تجهیزات ثبت نشده است.",
-  "radius.admin.confirmDelete": "پروفایل مدیر «{name}» حذف شود؟"
+  "radius.admin.confirmDelete": "پروفایل مدیر «{name}» حذف شود؟",
+  "radius.policy.title": "Policyهای MAB برای هر NAS",
+  "radius.policy.subtitle": "رفتار دسترسی برای هر NAS/سوئیچ به‌صورت صریح ذخیره می‌شود. این Policy فقط داده است و چیزی روی تجهیز Push نمی‌شود.",
+  "radius.policy.id": "شناسه Policy",
+  "radius.policy.nas": "پروفایل NAS",
+  "radius.policy.selectNas": "انتخاب پروفایل NAS",
+  "radius.policy.enabled": "فعال",
+  "radius.policy.knownMode": "رفتار MAC شناخته‌شده",
+  "radius.policy.knownVlan": "VLAN داینامیک پیش‌فرض برای MAC شناخته‌شده",
+  "radius.policy.unknownMode": "رفتار MAC ناشناس",
+  "radius.policy.guestVlan": "Guest VLAN برای MAC ناشناس",
+  "radius.policy.save": "ذخیره Policy MAB",
+  "radius.policy.empty": "Policy اختصاصی MAB ثبت نشده است.",
+  "radius.policy.confirmDelete": "Policy MAB «{name}» حذف شود؟"
 }

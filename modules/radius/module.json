@@ -1,7 +1,7 @@
 {
   "id": "radius",
   "name": "RADIUS / AAA",
-  "version": "0.4.0-rc.1",
+  "version": "0.4.0-rc.2",
   "description": "Modular RADIUS/AAA foundation with persistent per-NAS MAB policies, NAS/admin profiles and safe offline previews.",
   "enabled": true,
   "permissions": [
