@@ -281,6 +281,17 @@ try {
   await page.locator('.branch-card[data-branch-id="' + testBranch.id + '"]').getByText('Branch Edge Updated', { exact: true }).waitFor();
   check('Branches module creates branch, links inventory router, stores public IP, and edits independently');
 
+  await page.locator('button.module-nav-link[data-module-id="reports"]').click();
+  await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
+  assert.match(page.url(), /#\/module\/reports$/);
+  const reportText = await page.locator('#reportsMetrics').textContent();
+  assert.match(reportText, /Branches/);
+  assert.match(reportText, /Branch Routers/);
+  assert.match(reportText, /RADIUS NAS Profiles/);
+  await page.locator('#reportsAuditBody').getByText(/branches\.router\.(create|update)/).first().waitFor();
+  assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
+  check('Reports module summarizes optional modules and shows redacted audit activity');
+
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();
   assert.equal(await page.locator('#settingsDialog [data-settings-tab=personnel], #settingsDialog [data-settings-tab=device-types]').count(), 0);
