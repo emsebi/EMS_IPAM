@@ -14,3 +14,6 @@ The module now has its own manifest, backend preview endpoints, panel UI, styles
 
 ## Module-owned database foundation
 Version 0.3 introduces `migrations/001-radius-foundation.sql`. NAS profiles, device-admin profiles and MAB policy records now have module-owned tables recorded in the shared migration ledger. The migration deliberately contains no shared-secret, password, token or credential columns. A failure in this module migration disables RADIUS without replaying or rebuilding the Core schema.
+
+## Persistent profile APIs
+The module now owns admin-only CRUD APIs for NAS profiles and device-administrator profiles. NAS records must reference an existing EMS inventory device in the same company and use exactly that device IP as the RADIUS source address. Device-admin profiles keep Cisco privilege and MikroTik group mappings separately. No endpoint accepts or stores a RADIUS shared secret, password or token yet.
