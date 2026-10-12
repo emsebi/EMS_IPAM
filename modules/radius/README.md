@@ -8,3 +8,6 @@ Operational deployment requires authenticated tenant-scoped APIs, audit logs, se
 
 ## Panel integration — 0.2.0-rc.1
 The module now has its own manifest, backend preview endpoints, panel UI, styles and English/Persian catalogs under `modules/radius`. It uses the generic panel-module contract and therefore does not require a dedicated RADIUS route in Core. The panel endpoints remain preview-only and admin-only; they do not store secrets, listen for RADIUS packets, or push configuration.
+
+## 802.1X authorization preview
+`dot1x-policy-preview.mjs` is deliberately offline-only. It models authorization after an external trusted EAP verification and is not exposed as a caller-controlled authentication API. Failed EAP never falls back to MAB or guest access.
