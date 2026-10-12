@@ -284,10 +284,12 @@ try {
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();
   await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/reports$/);
-  const reportText = await page.locator('#reportsMetrics').textContent();
-  assert.match(reportText, /Branches/);
-  assert.match(reportText, /Branch Routers/);
-  assert.match(reportText, /RADIUS NAS Profiles/);
+  assert.equal(await page.locator('#reportsMetrics .report-metric').count(), 9);
+  const reportSummary = await api('/api/reports/summary');
+  assert.equal(reportSummary.summary.branches, 1);
+  assert.equal(reportSummary.summary.routers, 1);
+  assert.equal(reportSummary.summary.radiusNas, 1);
+  assert.equal(reportSummary.summary.radiusPolicies, 1);
   await page.locator('#reportsAuditBody').getByText(/branches\.router\.(create|update)/).first().waitFor();
   assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
   check('Reports module summarizes optional modules and shows redacted audit activity');
