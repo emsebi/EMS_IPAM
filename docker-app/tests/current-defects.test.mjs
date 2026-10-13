@@ -12,7 +12,7 @@ test("personnel creation requires only full name", async () => {
   assert.doesNotMatch(html, /id="personnelCode" required/);
   assert.match(html, /id="personnelName" required/);
   assert.match(app, /\$\("personnelForm"\)\.addEventListener\("submit"/);
-  assert.match(server, /if \(!fullName\) throw new Error\("نام و نام خانوادگی الزامی است\."\)/);
+  assert.match(server, /if \(!fullName\) throw new Error\("Full name is required\."\)/);
   assert.match(schema, /ALTER TABLE personnel ALTER COLUMN employee_code DROP NOT NULL/);
 });
 
