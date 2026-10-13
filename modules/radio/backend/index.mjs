@@ -14,7 +14,7 @@ export function createModule(ctx) {
       [id],
     );
     const host = found.rows[0];
-    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("تجهیز پیدا نشد یا دسترسی ندارید."), { status: 404 });
+    if (!host || !(await canAccessSpace(user, host.spaceId))) throw Object.assign(new Error("Radio device was not found or access was denied."), { status: 404 });
     const results = await pingMany([host.ip], { concurrency: 1, timeoutSeconds: 1 });
     await storePingResults(host.spaceId, results);
     const online = results.get(host.ip) === true;
