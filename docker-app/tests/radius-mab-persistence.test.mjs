@@ -19,7 +19,7 @@ async function fixture(){
  const handler=createModule({pool,json:(_res,status,value)=>{response={status,value};return response},readBody:async(req)=>req.body,
   requireAdmin:()=>{},requireModuleAccess:async()=>{},audit:async()=>{},broadcast:()=>{}});
  const call=async(method,path,body)=>{const req={method,body};const url=new URL("http://x"+path);assert.equal(handler.match(req,url),true);await handler.handle(req,{},url,{role:"admin"});return response};
- return {db,call};
+ return {db,pool,call};
 }
 
 test("per-NAS MAB policy CRUD persists requested known/unknown behavior",async()=>{
@@ -45,5 +45,19 @@ test("MAB policy refuses missing NAS and invalid VLAN/mode combinations",async()
   await assert.rejects(()=>f.call("POST","/api/radius/mab-policies",{...base,nasProfileId:"missing"}),/not found/);
   await assert.rejects(()=>f.call("POST","/api/radius/mab-policies",{...base,knownMode:"accept-dynamic",knownVlan:null}),/invalid-known-vlan/);
   await assert.rejects(()=>f.call("POST","/api/radius/mab-policies",{...base,guestVlan:30}),/unexpected-guest-vlan/);
+ }finally{await f.db.close()}
+});
+
+test("MAB policy updates fail closed when NAS is disabled or lacks MAB service",async()=>{
+ const f=await fixture();
+ try{
+  const policy={id:"policy-guard",nasProfileId:"nas-1",enabled:true,knownMode:"reject",knownVlan:null,unknownMode:"reject",guestVlan:null};
+  assert.equal((await f.call("POST","/api/radius/mab-policies",policy)).status,201);
+  await f.pool.query("UPDATE radius_nas_profiles SET enabled=false WHERE id='nas-1'");
+  await assert.rejects(()=>f.call("PUT","/api/radius/mab-policies/policy-guard",policy),/nas-mab-disabled/);
+  await f.pool.query("UPDATE radius_nas_profiles SET enabled=true,services='[\"dot1x\"]'::jsonb WHERE id='nas-1'");
+  await assert.rejects(()=>f.call("PUT","/api/radius/mab-policies/policy-guard",policy),/nas-mab-disabled/);
+  await f.pool.query("UPDATE radius_nas_profiles SET services='[\"mab\"]'::jsonb WHERE id='nas-1'");
+  assert.equal((await f.call("PUT","/api/radius/mab-policies/policy-guard",policy)).status,200);
  }finally{await f.db.close()}
 });
