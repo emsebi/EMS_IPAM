@@ -206,6 +206,9 @@ try {
   const nasDraft = await page.locator('#radiusNasResult').textContent();
   assert.ok(nasDraft.split('\n').filter(Boolean).every((line) => line.startsWith('#')));
   assert.equal(/(^|\n)client\s/m.test(nasDraft), false);
+  // Active MAB policies require an enabled, MAB-capable NAS.
+  await page.locator('#radiusNasEnabled').check();
+  await page.locator('[name="radiusNasService"][value="mab"]').check();
   await page.locator('#radiusNasSave').click();
   await page.locator('#radiusNasProfilesList').getByText('Lab NAS', { exact: true }).waitFor();
   await page.locator('#radiusNasProfilesList .radius-nas-edit').click();
@@ -228,6 +231,8 @@ try {
   await page.locator('#radiusPolicyUnknownMode').selectOption('guest-vlan');
   await page.locator('#radiusPolicyGuestVlan').fill('30');
   await page.locator('#radiusPolicyForm [type=submit]').click();
+  await page.locator('#radiusPolicyResult').getByText(/"status": "(?:saved|error)"/).waitFor();
+  assert.match(await page.locator('#radiusPolicyResult').textContent(), /"status": "saved"/);
   await page.locator('#radiusMabPoliciesList').getByText('lab-mab-policy', { exact: true }).waitFor();
   assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /accept-dynamic/);
   assert.match(await page.locator('#radiusMabPoliciesList').textContent(), /guest-vlan/);
