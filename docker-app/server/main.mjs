@@ -902,7 +902,7 @@ async function api(req, res, url, user) {
   if (req.method === "POST" && pathname === "/api/personnel/import") {
     requireAdmin(user);
     const body=await readBody(req);
-    if (!Array.isArray(body.items)) throw new Error("لیست پرسنل معتبر نیست.");
+    if (!Array.isArray(body.items)) throw new Error("Personnel list must be an array.");
     let created=0,updated=0,skipped=0;
     const client=await pool.connect();
     try {
@@ -926,7 +926,7 @@ async function api(req, res, url, user) {
   }
 
   if (req.method === "GET" && pathname === "/api/personnel") {
-    if (user.role !== "admin") throw Object.assign(new Error("مشاهده فهرست کامل پرسنل فقط برای مدیر سیستم مجاز است."), { status: 403 });
+    if (user.role !== "admin") throw Object.assign(new Error("Only administrators may view the full personnel list."), { status: 403 });
     const q = cleanText(url.searchParams.get("q") || "", 120);
     const params = [];
     let where = "";
@@ -944,7 +944,7 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const employeeCode = cleanText(body.employeeCode, 80) || null;
     const fullName = cleanText(body.fullName, 180);
-    if (!fullName) throw new Error("نام و نام خانوادگی الزامی است.");
+    if (!fullName) throw new Error("Full name is required.");
     const id = crypto.randomUUID();
     await pool.query(`INSERT INTO personnel(id,employee_code,full_name,phone,mobile,email,department,job_title,company_id,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [id,employeeCode,fullName,cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
     await audit(user,"create","personnel",id,{detail:{employeeCode,fullName}});
@@ -957,9 +957,9 @@ async function api(req, res, url, user) {
     const body = await readBody(req);
     const id = personnelMatch[1];
     const fullName = cleanText(body.fullName,180);
-    if (!fullName) throw new Error("نام و نام خانوادگی الزامی است.");
+    if (!fullName) throw new Error("Full name is required.");
     const updated = await pool.query(`UPDATE personnel SET employee_code=$2,full_name=$3,phone=$4,mobile=$5,email=$6,department=$7,job_title=$8,company_id=$9,notes=$10,active=$11,updated_at=now() WHERE id=$1 RETURNING id`, [id,cleanText(body.employeeCode,80)||null,fullName,cleanText(body.phone,80),cleanText(body.mobile,80),cleanText(body.email,180),cleanText(body.department,180),cleanText(body.jobTitle,180),cleanText(body.companyId,80)||null,cleanText(body.notes,1000),body.active!==false]);
-    if (!updated.rowCount) throw Object.assign(new Error("پرسنل پیدا نشد."),{status:404});
+    if (!updated.rowCount) throw Object.assign(new Error("Personnel record was not found."),{status:404});
     await audit(user,"update","personnel",id);
     return json(res,200,{ok:true});
   }
@@ -967,7 +967,7 @@ async function api(req, res, url, user) {
   if (personnelMatch && req.method === "DELETE") {
     requireAdmin(user);
     const removed = await pool.query("DELETE FROM personnel WHERE id=$1 RETURNING id",[personnelMatch[1]]);
-    if (!removed.rowCount) throw Object.assign(new Error("پرسنل پیدا نشد."),{status:404});
+    if (!removed.rowCount) throw Object.assign(new Error("Personnel record was not found."),{status:404});
     await audit(user,"delete","personnel",personnelMatch[1]);
     return json(res,200,{ok:true});
   }
