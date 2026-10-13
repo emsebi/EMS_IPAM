@@ -61,3 +61,17 @@ test("MAB policy updates fail closed when NAS is disabled or lacks MAB service",
   assert.equal((await f.call("PUT","/api/radius/mab-policies/policy-guard",policy)).status,200);
  }finally{await f.db.close()}
 });
+
+test("MAB policy NAS binding cannot be changed after creation",async()=>{
+ const f=await fixture();
+ try{
+  await f.pool.query("INSERT INTO hosts(id,space_id,ip,name) VALUES('sw-2','space-a','192.0.2.11','SW2')");
+  await f.pool.query(`INSERT INTO radius_nas_profiles(id,company_id,device_id,name,vendor,nas_ip,enabled,services)
+    VALUES('nas-2','co-a','sw-2','SW2','cisco','192.0.2.11',true,'["mab"]'::jsonb)`);
+  const policy={id:"policy-bound",nasProfileId:"nas-1",enabled:true,knownMode:"reject",knownVlan:null,unknownMode:"reject",guestVlan:null};
+  assert.equal((await f.call("POST","/api/radius/mab-policies",policy)).status,201);
+  await assert.rejects(()=>f.call("PUT","/api/radius/mab-policies/policy-bound",{...policy,nasProfileId:"nas-2"}),/nas-binding-immutable/);
+  const list=await f.call("GET","/api/radius/mab-policies");
+  assert.equal(list.value.items[0].nasProfileId,"nas-1");
+ }finally{await f.db.close()}
+});
