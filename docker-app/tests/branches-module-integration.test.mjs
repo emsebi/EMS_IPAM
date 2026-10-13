@@ -12,9 +12,6 @@ async function fixture(){
   const db=new PGlite(); const pool=adapter(db);
   await migrateDatabase(pool); await migrateModuleSchemas(pool,[{id:"branches",dir:moduleDir}]);
   await pool.query("INSERT INTO companies(id,name,kind) VALUES('co-a','Company A','company'),('co-b','Company B','company')");
-  await pool.query("INSERT INTO companies(id,parent_company_id,name,kind) VALUES('br-a','Branch A','Branch A','branch')").catch(()=>{});
-  // PGlite helper above intentionally catches malformed fixture statement so we can insert the correct branch below.
-  await pool.query("DELETE FROM companies WHERE id='br-a'");
   await pool.query("INSERT INTO companies(id,parent_company_id,name,kind) VALUES('br-a','co-a','Branch A','branch')");
   await pool.query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES('sp-a','br-a','LAN','10.10.0.0/24'),('sp-b','co-b','LAN','10.20.0.0/24')");
   await pool.query("INSERT INTO hosts(id,space_id,ip,name) VALUES('host-a','sp-a','10.10.0.1','Router A'),('host-b','sp-b','10.20.0.1','Other')");
