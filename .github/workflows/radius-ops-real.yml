@@ -1,0 +1,50 @@
+name: EMS-IPAM RADIUS Real Lab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/i18n-personnel-foundation
+    paths:
+      - "modules/radius/**"
+      - "modules/radius-ops/**"
+      - "scripts/radius-ops-docker-smoke.py"
+      - ".github/workflows/radius-ops-real.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-radius-real-lab
+  cancel-in-progress: false
+
+jobs:
+  radius-real:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 75
+    env:
+      EMS_RADIUS_SKIP_BROWSER: "1"
+    steps:
+      - name: Checkout trusted branch commit
+        uses: actions/checkout@v4
+
+      - name: Verify lab runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          docker compose version
+          python3 --version
+
+      - name: Clean stale disposable RADIUS lab resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker ps -aq --filter 'name=emsradius' | xargs -r docker rm -f
+          docker volume ls -q | grep -E '^emsradius[0-9a-f]+-db$' | xargs -r docker volume rm -f || true
+          docker network ls --format '{{.Name}}' | grep -E '^emsradius[0-9a-f]+-network$' | xargs -r docker network rm || true
+
+      - name: Run real Docker PostgreSQL FreeRADIUS smoke
+        shell: bash
+        run: python3 scripts/radius-ops-docker-smoke.py
