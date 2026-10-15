@@ -59,6 +59,18 @@
   "radius.simple.vendorMikrotik": "MikroTik",
   "radius.simple.vendorOther": "سایر",
   "radius.simple.secretHint": "حداقل ۲۰ کاراکتر",
-  "radius.simple.mikrotikGroupHint": "read / write / full",
-  "radius.simple.passwordHint": "حداقل ۱۲ کاراکتر"
+  "radius.simple.mikrotikGroupHint": "یکی از گروه‌های پیش‌فرض RouterOS را انتخاب کنید یا برای گروه ساخته‌شده روی روتر، گزینه سفارشی را بزنید.",
+  "radius.simple.passwordHint": "حداقل ۱۲ کاراکتر",
+  "radius.simple.ciscoHelpTitle": "راهنمای سطح دسترسی Cisco",
+  "radius.simple.ciscoHelp0": "0 — دسترسی حداقلی؛ معمولاً فقط مجموعه بسیار محدودی از فرمان‌ها مثل خروج/راهنما.",
+  "radius.simple.ciscoHelp1": "1 — User EXEC؛ سطح معمول ورود با دسترسی پایین.",
+  "radius.simple.ciscoHelp2to14": "2 تا 14 — سطوح میانی سفارشی. Cisco برای این اعداد دسترسی ثابت تعریف نمی‌کند و سطح واقعی به فرمان‌هایی بستگی دارد که روی خود تجهیز به آن Level اختصاص داده شده‌اند.",
+  "radius.simple.ciscoHelp15": "15 — Privileged EXEC؛ به‌صورت پیش‌فرض سطح مدیریتی کامل.",
+  "radius.simple.ciscoHelpNote": "RADIUS مقدار shell:priv-lvl=N را برمی‌گرداند؛ اجرای نهایی فرمان‌ها را خود تجهیز Cisco کنترل می‌کند.",
+  "radius.simple.mikrotikRead": "read (پیش‌فرض RouterOS)",
+  "radius.simple.mikrotikWrite": "write (پیش‌فرض RouterOS)",
+  "radius.simple.mikrotikFull": "full (پیش‌فرض RouterOS)",
+  "radius.simple.mikrotikCustom": "گروه سفارشی…",
+  "radius.simple.mikrotikCustomName": "نام گروه سفارشی MikroTik",
+  "radius.simple.mikrotikCustomHint": "نام گروهی که قبلاً روی RouterOS ساخته شده است"
 }

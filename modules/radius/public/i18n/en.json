@@ -59,6 +59,18 @@
   "radius.simple.vendorMikrotik": "MikroTik",
   "radius.simple.vendorOther": "Other",
   "radius.simple.secretHint": "20+ characters",
-  "radius.simple.mikrotikGroupHint": "read / write / full",
-  "radius.simple.passwordHint": "12+ characters"
+  "radius.simple.mikrotikGroupHint": "Choose a RouterOS default group or select Custom for a group you created on the router.",
+  "radius.simple.passwordHint": "12+ characters",
+  "radius.simple.ciscoHelpTitle": "Cisco privilege levels",
+  "radius.simple.ciscoHelp0": "0 — Minimal access; normally only a very small command set such as logout/help.",
+  "radius.simple.ciscoHelp1": "1 — User EXEC; the normal low-privilege login level.",
+  "radius.simple.ciscoHelp2to14": "2–14 — Custom intermediate levels. Cisco does not define fixed permissions for these levels; access depends on commands assigned on the device.",
+  "radius.simple.ciscoHelp15": "15 — Privileged EXEC / full administrative level by default.",
+  "radius.simple.ciscoHelpNote": "RADIUS returns shell:priv-lvl=N. The Cisco device ultimately enforces which commands that level may run.",
+  "radius.simple.mikrotikRead": "read (RouterOS default)",
+  "radius.simple.mikrotikWrite": "write (RouterOS default)",
+  "radius.simple.mikrotikFull": "full (RouterOS default)",
+  "radius.simple.mikrotikCustom": "Custom group…",
+  "radius.simple.mikrotikCustomName": "Custom MikroTik group name",
+  "radius.simple.mikrotikCustomHint": "Enter an existing RouterOS group name"
 }
