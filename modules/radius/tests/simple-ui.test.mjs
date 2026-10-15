@@ -11,8 +11,13 @@ test('simple RADIUS UI leads with clients, groups, users and logs',()=>{
  for(const marker of ["tab='clients'","radius.simple.clients","radius.simple.groups","radius.simple.users","radius.simple.logs"])assert.match(ui,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
  assert.doesNotMatch(ui,/MAB Policy Preview|Policy Regression Matrix|Run Safe Demo/);
 });
-test('client form uses direct IP/CIDR and a shared secret',()=>{
+test('client form uses direct IP/CIDR and a shared secret without vendor coupling',()=>{
  assert.match(ui,/name=\"nasIp\"/);assert.match(ui,/name=\"secret\"/);assert.match(ui,/\/api\/radius-ops/);
+ const clientForm=ui.split('function clientForm()')[1].split('function groupForm()')[0];
+ assert.doesNotMatch(clientForm,/name=\"vendor\"/);
+ const configPanel=ui.split('function configPanel()')[1].split('function content()')[0];
+ assert.match(configPanel,/name=\"vendor\"/);
+ assert.match(ui,/vendor:d\.get\('vendor'\),radiusIp/);
  assert.match(en['radius.simple.sourceHint'],/CIDR|network/i);assert.ok(fa['radius.simple.sourceHint']);
 });
 test('group and user flow is explicit',()=>{
