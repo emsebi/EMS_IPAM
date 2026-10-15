@@ -141,7 +141,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           cd "$HOME/ems-ipam-lab/current"
-          timeout 420 python3 scripts/radius-ops-docker-smoke.py
+          EMS_RADIUS_SKIP_BROWSER=1 timeout 420 python3 scripts/radius-ops-docker-smoke.py
 
       - name: Fail if RADIUS deployment or smoke failed
         shell: bash

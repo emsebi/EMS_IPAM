@@ -195,7 +195,6 @@ try {
   await page.locator('#rClientForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rClientForm [name="label"]').fill('Browser NAS');
   await page.locator('#rClientForm [name="nasIp"]').fill('192.0.2.200');
-  await page.locator('#rClientForm [name="vendor"]').selectOption('cisco-ios');
   await page.locator('#rClientForm [name="secret"]').fill('browser-radius-secret-123456');
   await page.locator('#rClientForm [type=submit]').click();
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
@@ -209,7 +208,7 @@ try {
   await page.locator('#rGroupForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rGroupForm [name="name"]').fill('Network Admin');
   await page.locator('#rGroupForm [name="ciscoPrivilege"]').fill('15');
-  await page.locator('#rGroupForm [name="mikrotikGroup"]').fill('full');
+  await page.locator('#rGroupForm [name="mikrotikPreset"]').selectOption('full');
   await page.locator('#rGroupForm [type=submit]').click();
   await page.locator('.r-list').getByText('Network Admin', { exact: true }).waitFor();
 
@@ -230,6 +229,7 @@ try {
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   const nasRow = page.locator('.r-list tbody tr').filter({ hasText: 'Browser NAS' });
   await nasRow.locator('.rConfig').click();
+  await page.locator('#rConfigForm [name="vendor"]').selectOption('cisco-ios');
   await page.locator('#rConfigForm [name="radiusIp"]').fill('192.0.2.5');
   await page.locator('#rConfigForm [type=submit]').click();
   await page.locator('#rConfigText').getByText(/aaa new-model/).waitFor();
