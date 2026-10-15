@@ -383,12 +383,26 @@ def main():
             print('PASS UDP authentication recovered after database restart')
             print('REAL DOCKER RADIUS INTEGRATION: PASS')
         except Exception:
-            print('Diagnostic logs (redacted by service, inspect locally for errors):', file=sys.stderr)
+            print('Diagnostic logs (test-only values redacted):', file=sys.stderr)
+            sensitive = [
+                secret_a, secret_b, password_a, password_b,
+                env.get('POSTGRES_PASSWORD',''), env.get('EMS_ADMIN_PASSWORD',''),
+            ]
+            def redact_log(value):
+                text = value
+                for item in sensitive:
+                    if item:
+                        text = text.replace(item, '<redacted>')
+                text = re.sub(r'(?i)((?:password|secret)\\s*[=:]\\s*)\\S+', r'\\1<redacted>', text)
+                return text
             for service in ('app', 'radius_ops'):
                 with contextlib.suppress(Exception):
-                    result = dc('logs', '--tail=70', service, timeout=15, check=False)
-                    # Do not echo raw logs: passwords and SQL queries may contain secrets.
-                    print(f'  {service}: exit={result.returncode}, log lines={len(result.stdout.splitlines())}', file=sys.stderr)
+                    result = dc('logs', '--tail=100', service, timeout=15, check=False)
+                    safe = redact_log((result.stdout or '') + '\\n' + (result.stderr or ''))
+                    lines = safe.splitlines()[-100:]
+                    print(f'--- {service} redacted tail ({len(lines)} lines) ---', file=sys.stderr)
+                    for line in lines:
+                        print(line[:1000], file=sys.stderr)
             raise
         finally:
             dc('down', '-v', '--remove-orphans', timeout=90, check=False)
