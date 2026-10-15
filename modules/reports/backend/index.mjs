@@ -13,6 +13,11 @@ async function optionalCount(pool, table, where = "") {
   return Number(result.rows[0]?.count || 0);
 }
 
+async function preferredOptionalCount(pool, primaryTable, fallbackTable) {
+  const primary = await optionalCount(pool, primaryTable);
+  return primary > 0 ? primary : optionalCount(pool, fallbackTable);
+}
+
 export function createModule(ctx) {
   const { pool, json, requireAdmin, requireModuleAccess } = ctx;
   return {
@@ -30,7 +35,7 @@ export function createModule(ctx) {
           pool.query("SELECT count(*)::int AS count FROM hosts WHERE deleted_at IS NULL AND radio_mode='ap'"),
           pool.query("SELECT count(*)::int AS count FROM hosts WHERE deleted_at IS NULL AND radio_mode='station'"),
           optionalCount(pool, "branch_routers"),
-          optionalCount(pool, "radius_nas_profiles"),
+          preferredOptionalCount(pool, "radius_ops_devices", "radius_nas_profiles"),
           optionalCount(pool, "radius_mab_policies"),
         ]);
         return json(res, 200, { ok: true, summary: {

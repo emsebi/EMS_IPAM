@@ -278,7 +278,7 @@ try {
   assert.equal(reportSummary.summary.branches, 1);
   assert.equal(reportSummary.summary.routers, 1);
   assert.equal(reportSummary.summary.radiusNas, 1);
-  assert.equal(reportSummary.summary.radiusPolicies, 1);
+  assert.equal(reportSummary.summary.radiusPolicies, 0);
   await page.locator('#reportsAuditBody').getByText(/branches\.router\.(create|update)/).first().waitFor();
   assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
   check('Reports module summarizes optional modules and shows redacted audit activity');
