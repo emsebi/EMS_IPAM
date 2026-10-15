@@ -4,8 +4,7 @@ export function createUi(ctx) {
     ["companies", "reports.metric.companies"], ["branches", "reports.metric.branches"],
     ["hosts", "reports.metric.hosts"], ["activePersonnel", "reports.metric.personnel"],
     ["accessPoints", "reports.metric.aps"], ["stations", "reports.metric.stations"],
-    ["routers", "reports.metric.routers"], ["radiusNas", "reports.metric.radiusNas"],
-    ["radiusPolicies", "reports.metric.radiusPolicies"],
+    ["radiusNas", "reports.metric.radiusNas"], ["radiusPolicies", "reports.metric.radiusPolicies"],
   ];
 
   async function refresh() {

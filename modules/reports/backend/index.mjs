@@ -27,14 +27,13 @@ export function createModule(ctx) {
       await requireModuleAccess(user, "reports");
 
       if (url.pathname === SUMMARY) {
-        const [companies, branches, hosts, personnel, accessPoints, stations, routers, radiusNas, radiusPolicies] = await Promise.all([
+        const [companies, branches, hosts, personnel, accessPoints, stations, radiusNas, radiusPolicies] = await Promise.all([
           pool.query("SELECT count(*)::int AS count FROM companies WHERE deleted_at IS NULL AND kind <> 'branch'"),
           pool.query("SELECT count(*)::int AS count FROM companies WHERE deleted_at IS NULL AND kind='branch'"),
           pool.query("SELECT count(*)::int AS count FROM hosts WHERE deleted_at IS NULL"),
           pool.query("SELECT count(*)::int AS count FROM personnel WHERE active=true"),
           pool.query("SELECT count(*)::int AS count FROM hosts WHERE deleted_at IS NULL AND radio_mode='ap'"),
           pool.query("SELECT count(*)::int AS count FROM hosts WHERE deleted_at IS NULL AND radio_mode='station'"),
-          optionalCount(pool, "branch_routers"),
           preferredOptionalCount(pool, "radius_ops_devices", "radius_nas_profiles"),
           optionalCount(pool, "radius_mab_policies"),
         ]);
@@ -42,7 +41,7 @@ export function createModule(ctx) {
           companies: Number(companies.rows[0].count), branches: Number(branches.rows[0].count),
           hosts: Number(hosts.rows[0].count), activePersonnel: Number(personnel.rows[0].count),
           accessPoints: Number(accessPoints.rows[0].count), stations: Number(stations.rows[0].count),
-          routers, radiusNas, radiusPolicies,
+          radiusNas, radiusPolicies,
         } });
       }
 

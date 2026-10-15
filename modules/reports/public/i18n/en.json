@@ -10,7 +10,6 @@
   "reports.metric.personnel": "Active Personnel",
   "reports.metric.aps": "Access Points",
   "reports.metric.stations": "Stations",
-  "reports.metric.routers": "Branch Routers",
   "reports.metric.radiusNas": "RADIUS NAS Profiles",
   "reports.metric.radiusPolicies": "MAB Policies",
   "reports.audit.title": "Recent Activity",

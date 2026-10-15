@@ -10,7 +10,6 @@
   "reports.metric.personnel": "پرسنل فعال",
   "reports.metric.aps": "Access Pointها",
   "reports.metric.stations": "Stationها",
-  "reports.metric.routers": "روترهای شعب",
   "reports.metric.radiusNas": "پروفایل‌های RADIUS NAS",
   "reports.metric.radiusPolicies": "Policyهای MAB",
   "reports.audit.title": "فعالیت‌های اخیر",
