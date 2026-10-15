@@ -1,568 +1,79 @@
-export function createUi(ctx) {
-  const { state, $, page, request, escapeHtml, navActive, t, ensureInventory } = ctx;
-
-  const jsonText = (value) => JSON.stringify(value, null, 2);
-  const setResult = (id, value) => {
-    const node = $(id);
-    if (!node) return;
-    node.textContent = jsonText(value);
-  };
-  let nasProfiles = [];
-  let adminProfiles = [];
-  let mabPolicies = [];
-  let nasEditId = null;
-  let adminEditId = null;
-  let policyEditId = null;
-
-  function syncAdminFields() {
-    const cisco = $("radiusAdminVendor")?.value === "cisco";
-    $("radiusCiscoFields")?.classList.toggle("hidden", !cisco);
-    $("radiusMikrotikFields")?.classList.toggle("hidden", cisco);
+/** Simple RADIUS/AAA operator UI. Operational data lives in the isolated radius-ops module. */
+export function createUi(ctx){
+  const {state,page,request,escapeHtml:esc,toast,t}=ctx;
+  const tr=(key,params={})=>t?.(key,params)||key;
+  let tab='clients', clients=[],groups=[],users=[],events=[],health={running:false},editing=null,formOpen=false,configClient=null;
+  const companies=()=>state.bootstrap?.companies?.filter(x=>x.deletedAt==null)||[];
+  const companyName=id=>companies().find(x=>x.id===id)?.name||id||'—';
+  const opt=(value,label,selected)=>`<option value="${esc(value)}" ${String(value)===String(selected)?'selected':''}>${esc(label)}</option>`;
+  const yes=v=>`<span class="r-pill ${v?'ok':'off'}">${esc(v?tr('radius.simple.enabled'):tr('radius.simple.disabled'))}</span>`;
+  const api=(path,options)=>request('/api/radius-ops'+path,options);
+  const safeCompany=()=>state.currentCompanyId||companies()[0]?.id||'';
+  const activeGroups=(companyId)=>groups.filter(g=>g.companyId===companyId&&g.enabled);
+  function tabs(){return `<div class="r-tabs">
+    <button data-tab="clients" class="${tab==='clients'?'active':''}">◎ ${esc(tr('radius.simple.clients'))}</button>
+    <button data-tab="groups" class="${tab==='groups'?'active':''}">♙ ${esc(tr('radius.simple.groups'))}</button>
+    <button data-tab="users" class="${tab==='users'?'active':''}">♟ ${esc(tr('radius.simple.users'))}</button>
+    <button data-tab="logs" class="${tab==='logs'?'active':''}">◷ ${esc(tr('radius.simple.logs'))}</button>
+  </div>`;}
+  function hero(){return `<div class="r-hero"><div><div class="r-kicker">${esc(tr('radius.simple.crumb'))}</div><h2>${esc(tr('radius.simple.title'))}</h2><p>${esc(tr('radius.simple.subtitle'))}</p></div><div class="r-health ${health.running?'ok':'off'}"><i></i>${esc(health.running?tr('radius.simple.running'):tr('radius.simple.offline'))}</div></div>${tabs()}`;}
+  function companyOptions(selected){return companies().map(c=>opt(c.id,c.name,selected)).join('');}
+  function clientForm(){if(!formOpen||tab!=='clients')return '';const x=editing||{},companyId=x.companyId||safeCompany();return `<section class="panel r-form-card"><div class="r-form-head"><h3>${esc(editing?tr('radius.simple.edit'):tr('radius.simple.addClient'))}</h3><button id="rCancel" class="btn">${esc(tr('radius.simple.cancel'))}</button></div><form id="rClientForm" class="r-form">
+    <label>${esc(tr('radius.simple.company'))}<select name="companyId" required>${companyOptions(companyId)}</select></label>
+    <label>${esc(tr('radius.simple.name'))}<input name="label" required maxlength="120" value="${esc(x.label||'')}"></label>
+    <label>${esc(tr('radius.simple.source'))}<input name="nasIp" required dir="ltr" value="${esc(x.nasIp||'')}" placeholder="10.10.10.5 / 10.10.10.0/24"><small>${esc(tr('radius.simple.sourceHint'))}</small></label>
+    <label>${esc(tr('radius.simple.vendor'))}<select name="vendor">${[['cisco-ios',tr('radius.simple.vendorCiscoIos')],['cisco-legacy',tr('radius.simple.vendorCiscoLegacy')],['mikrotik',tr('radius.simple.vendorMikrotik')],['other',tr('radius.simple.vendorOther')]].map(([v,l])=>opt(v,l,x.vendor||'cisco-ios')).join('')}</select></label>
+    <label class="wide">${esc(editing?tr('radius.simple.secretEdit'):tr('radius.simple.secret'))}<input name="secret" type="password" ${editing?'':'required'} minlength="20" maxlength="128" autocomplete="new-password" placeholder="${esc(tr('radius.simple.secretHint'))}"></label>
+    <label class="r-check wide"><input name="enabled" type="checkbox" ${x.enabled!==false?'checked':''}> ${esc(tr('radius.simple.enabled'))}</label>
+    <p class="r-note wide">🔒 ${esc(tr('radius.simple.noSecrets'))}</p><div class="r-actions wide"><button class="btn primary" type="submit">${esc(tr('radius.simple.save'))}</button></div>
+  </form></section>`;}
+  function groupForm(){if(!formOpen||tab!=='groups')return '';const x=editing||{},companyId=x.companyId||safeCompany();return `<section class="panel r-form-card"><div class="r-form-head"><h3>${esc(editing?tr('radius.simple.edit'):tr('radius.simple.addGroup'))}</h3><button id="rCancel" class="btn">${esc(tr('radius.simple.cancel'))}</button></div><form id="rGroupForm" class="r-form">
+    <label>${esc(tr('radius.simple.company'))}<select name="companyId" required>${companyOptions(companyId)}</select></label>
+    <label>${esc(tr('radius.simple.groupName'))}<input name="name" required maxlength="120" value="${esc(x.name||'')}"></label>
+    <label>${esc(tr('radius.simple.ciscoPrivilege'))}<input name="ciscoPrivilege" type="number" min="0" max="15" required value="${esc(x.ciscoPrivilege??1)}"></label>
+    <label>${esc(tr('radius.simple.mikrotikGroup'))}<input name="mikrotikGroup" required maxlength="32" value="${esc(x.mikrotikGroup||'read')}" placeholder="${esc(tr('radius.simple.mikrotikGroupHint'))}"></label>
+    <label class="wide">${esc(tr('radius.simple.description'))}<input name="description" maxlength="500" value="${esc(x.description||'')}"></label>
+    <label class="r-check wide"><input name="enabled" type="checkbox" ${x.enabled!==false?'checked':''}> ${esc(tr('radius.simple.enabled'))}</label>
+    <div class="r-actions wide"><button class="btn primary" type="submit">${esc(tr('radius.simple.save'))}</button></div>
+  </form></section>`;}
+  function userForm(){if(!formOpen||tab!=='users')return '';const x=editing||{},companyId=x.companyId||safeCompany(),gs=groups.filter(g=>g.companyId===companyId);return `<section class="panel r-form-card"><div class="r-form-head"><h3>${esc(editing?tr('radius.simple.edit'):tr('radius.simple.addUser'))}</h3><button id="rCancel" class="btn">${esc(tr('radius.simple.cancel'))}</button></div><form id="rUserForm" class="r-form">
+    <label>${esc(tr('radius.simple.company'))}<select id="rUserCompany" name="companyId" required>${companyOptions(companyId)}</select></label>
+    <label>${esc(tr('radius.simple.username'))}<input name="username" required maxlength="64" dir="ltr" ${editing?'disabled':''} value="${esc(x.username||'')}"></label>
+    <label>${esc(tr('radius.simple.displayName'))}<input name="label" required maxlength="120" value="${esc(x.label||x.username||'')}"></label>
+    <label>${esc(tr('radius.simple.group'))}<select id="rUserGroup" name="groupId" required><option value="">${esc(tr('radius.simple.selectGroup'))}</option>${gs.map(g=>opt(g.id,g.name,x.groupId)).join('')}</select></label>
+    <label class="wide">${esc(editing?tr('radius.simple.passwordEdit'):tr('radius.simple.password'))}<input name="password" type="password" ${editing?'':'required'} minlength="12" maxlength="128" autocomplete="new-password" placeholder="${esc(tr('radius.simple.passwordHint'))}"></label>
+    <label class="r-check wide"><input name="enabled" type="checkbox" ${x.enabled!==false?'checked':''}> ${esc(tr('radius.simple.enabled'))}</label>
+    <p class="r-note wide">🔒 ${esc(tr('radius.simple.noSecrets'))}</p><div class="r-actions wide"><button class="btn primary" type="submit">${esc(tr('radius.simple.save'))}</button></div>
+  </form></section>`;}
+  function clientTable(){const rows=clients.map(x=>`<tr><td><b>${esc(x.label)}</b><small>${esc(x.companyName||companyName(x.companyId))}</small></td><td class="mono ltr">${esc(x.nasIp)}</td><td>${esc(x.vendor)}</td><td>${yes(x.enabled)}</td><td class="r-row-actions"><button class="btn sm rEdit" data-kind="client" data-id="${esc(x.id)}">${esc(tr('radius.simple.edit'))}</button><button class="btn sm rConfig" data-id="${esc(x.id)}">${esc(tr('radius.simple.config'))}</button><button class="btn sm danger rDelete" data-kind="client" data-id="${esc(x.id)}">${esc(tr('radius.simple.delete'))}</button></td></tr>`).join('');return table([tr('radius.simple.name'),tr('radius.simple.source'),tr('radius.simple.vendor'),tr('radius.simple.status'),tr('radius.simple.actions')],rows);}
+  function groupTable(){const rows=groups.map(x=>`<tr><td><b>${esc(x.name)}</b><small>${esc(x.companyName||companyName(x.companyId))}</small></td><td>${esc(x.ciscoPrivilege)}</td><td>${esc(x.mikrotikGroup)}</td><td>${esc(x.members??0)}</td><td>${yes(x.enabled)}</td><td class="r-row-actions"><button class="btn sm rEdit" data-kind="group" data-id="${esc(x.id)}">${esc(tr('radius.simple.edit'))}</button><button class="btn sm danger rDelete" data-kind="group" data-id="${esc(x.id)}">${esc(tr('radius.simple.delete'))}</button></td></tr>`).join('');return table([tr('radius.simple.groupName'),tr('radius.simple.ciscoPrivilege'),tr('radius.simple.mikrotikGroup'),tr('radius.simple.members'),tr('radius.simple.status'),tr('radius.simple.actions')],rows);}
+  function userTable(){const rows=users.map(x=>`<tr><td><b class="mono">${esc(x.username)}</b><small>${esc(x.label||'')}</small></td><td>${esc(x.companyName||companyName(x.companyId))}</td><td>${esc(x.groupName||'—')}</td><td>${yes(x.enabled)}</td><td class="r-row-actions"><button class="btn sm rEdit" data-kind="user" data-id="${esc(x.id)}">${esc(tr('radius.simple.edit'))}</button><button class="btn sm danger rDelete" data-kind="user" data-id="${esc(x.id)}">${esc(tr('radius.simple.delete'))}</button></td></tr>`).join('');return table([tr('radius.simple.username'),tr('radius.simple.company'),tr('radius.simple.group'),tr('radius.simple.status'),tr('radius.simple.actions')],rows);}
+  function logTable(){const rows=events.map(x=>`<tr><td>${esc(x.at?new Date(x.at).toLocaleString():'—')}</td><td class="mono">${esc(x.username||'—')}</td><td>${esc(x.deviceLabel||'—')}</td><td class="mono ltr">${esc(x.sourceIp||'—')}</td><td><span class="r-pill ${x.reply==='Access-Accept'?'ok':'off'}">${esc(x.reply||'—')}</span></td></tr>`).join('');return table([tr('radius.simple.time'),tr('radius.simple.username'),tr('radius.simple.device'),tr('radius.simple.sourceIp'),tr('radius.simple.result')],rows);}
+  function table(head,rows){return `<div class="r-table-wrap"><table><thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td class="r-empty" colspan="${head.length}">${esc(tr('radius.simple.empty'))}</td></tr>`}</tbody></table></div>`;}
+  function configPanel(){if(!configClient)return '';return `<section class="panel r-form-card"><div class="r-form-head"><h3>${esc(tr('radius.simple.configTitle'))} — ${esc(configClient.label)}</h3><button id="rConfigClose" class="btn">${esc(tr('radius.simple.cancel'))}</button></div><form id="rConfigForm" class="r-config-form"><label>${esc(tr('radius.simple.radiusServer'))}<input name="radiusIp" dir="ltr" required placeholder="192.0.2.5"></label><button class="btn primary" type="submit">${esc(tr('radius.simple.generate'))}</button></form><p class="r-note">⚠ ${esc(tr('radius.simple.noAutoPush'))}</p><pre id="rConfigText" class="r-config-text">—</pre><button id="rCopyConfig" class="btn" type="button">${esc(tr('radius.simple.copy'))}</button></section>`;}
+  function content(){const add=tab==='clients'?tr('radius.simple.addClient'):tab==='groups'?tr('radius.simple.addGroup'):tab==='users'?tr('radius.simple.addUser'):'';const body=tab==='clients'?clientTable():tab==='groups'?groupTable():tab==='users'?userTable():logTable();return `${hero()}<div class="r-toolbar"><div><b>${esc(tab==='clients'?tr('radius.simple.clients'):tab==='groups'?tr('radius.simple.groups'):tab==='users'?tr('radius.simple.users'):tr('radius.simple.logs'))}</b>${tab==='users'&&!groups.length?`<small>${esc(tr('radius.simple.requiresGroup'))}</small>`:''}</div>${add?`<button id="rAdd" class="btn primary">＋ ${esc(add)}</button>`:'<button id="rRefresh" class="btn">↻</button>'}</div>${clientForm()}${groupForm()}${userForm()}${configPanel()}<section class="panel r-list">${body}</section><p class="r-advanced">${esc(tr('radius.simple.advancedNote'))}</p>`;}
+  function bind(){
+    page.querySelectorAll('.r-tabs button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;editing=null;formOpen=false;configClient=null;draw();}));
+    page.querySelector('#rAdd')?.addEventListener('click',()=>{editing=null;formOpen=true;draw();page.querySelector('.r-form input, .r-form select')?.focus();});
+    page.querySelector('#rRefresh')?.addEventListener('click',load);
+    page.querySelector('#rCancel')?.addEventListener('click',()=>{editing=null;formOpen=false;draw();});
+    page.querySelectorAll('.rEdit').forEach(b=>b.addEventListener('click',()=>{editing=(b.dataset.kind==='client'?clients:b.dataset.kind==='group'?groups:users).find(x=>x.id===b.dataset.id)||null;formOpen=Boolean(editing);configClient=null;draw();}));
+    page.querySelectorAll('.rDelete').forEach(b=>b.addEventListener('click',async()=>{if(!confirm(tr('radius.simple.confirmDelete')))return;const path=b.dataset.kind==='client'?'devices':b.dataset.kind==='group'?'groups':'accounts';try{await api(`/${path}/${encodeURIComponent(b.dataset.id)}`,{method:'DELETE'});toast(tr('radius.simple.deleted'));await load();}catch(e){toast(e.message);}}));
+    page.querySelectorAll('.rConfig').forEach(b=>b.addEventListener('click',()=>{configClient=clients.find(x=>x.id===b.dataset.id)||null;formOpen=false;editing=null;draw();}));
+    page.querySelector('#rConfigClose')?.addEventListener('click',()=>{configClient=null;draw();});
+    page.querySelector('#rClientForm')?.addEventListener('submit',saveClient);
+    page.querySelector('#rGroupForm')?.addEventListener('submit',saveGroup);
+    page.querySelector('#rUserForm')?.addEventListener('submit',saveUser);
+    page.querySelector('#rUserCompany')?.addEventListener('change',e=>{const sel=page.querySelector('#rUserGroup');sel.innerHTML=`<option value="">${esc(tr('radius.simple.selectGroup'))}</option>`+activeGroups(e.target.value).map(g=>opt(g.id,g.name,'')).join('');});
+    page.querySelector('#rConfigForm')?.addEventListener('submit',generateConfig);
+    page.querySelector('#rCopyConfig')?.addEventListener('click',async()=>{const text=page.querySelector('#rConfigText')?.textContent||'';if(text&&text!=='—')await navigator.clipboard.writeText(text);});
   }
-
-  async function runMabPreview(event) {
-    event.preventDefault();
-    const known = $("radiusMabKnown").checked;
-    const knownMode = $("radiusMabKnownMode").value;
-    const unknownMode = $("radiusMabUnknownMode").value;
-    const vlanText = $("radiusMabKnownVlan").value.trim();
-    const guestText = $("radiusMabGuestVlan").value.trim();
-    const mac = $("radiusMabMac").value.trim();
-    const record = { mac, enabled: true };
-    if (vlanText) record.vlan = vlanText;
-    const knownRule = { mode: knownMode };
-    const unknownRule = { mode: unknownMode };
-    if (guestText) unknownRule.vlan = guestText;
-    try {
-      const response = await request("/api/radius/preview/mab", {
-        method: "POST",
-        body: {
-          mac,
-          switchId: $("radiusMabSwitch").value.trim(),
-          knownMacs: known ? [record] : [],
-          policy: { enabled: true, known: knownRule, unknown: unknownRule },
-        },
-      });
-      setResult("radiusMabResult", response.result);
-    } catch (error) {
-      setResult("radiusMabResult", { decision: "error", reason: error.message });
-    }
-  }
-
-  async function runAdminPreview(event) {
-    event.preventDefault();
-    const vendor = $("radiusAdminVendor").value;
-    const profile = { enabled: true };
-    if (vendor === "cisco") profile.ciscoPrivilege = Number($("radiusCiscoPrivilege").value);
-    else profile.mikrotikGroup = $("radiusMikrotikGroup").value.trim();
-    try {
-      const response = await request("/api/radius/preview/admin-profile", {
-        method: "POST",
-        body: { vendor, profile },
-      });
-      setResult("radiusAdminResult", response.result);
-    } catch (error) {
-      setResult("radiusAdminResult", { decision: "error", reason: error.message });
-    }
-  }
-
-  function selectedNasDevice() {
-    const id = $("radiusNasDevice")?.value || "";
-    return (state.inventory || []).find((item) => item.id === id) || null;
-  }
-
-  function syncNasDevice() {
-    const device = selectedNasDevice();
-    if ($("radiusNasIp")) $("radiusNasIp").value = device?.ip || "";
-    if ($("radiusNasId") && !$("radiusNasId").value && device) $("radiusNasId").value = `nas-${device.id}`.slice(0, 80);
-  }
-
-  function currentNasProfile() {
-    const device = selectedNasDevice();
-    if (!device) return null;
-    return {
-      id: $("radiusNasId").value.trim(),
-      companyId: device.companyId,
-      deviceId: device.id,
-      name: $("radiusNasName").value.trim(),
-      vendor: $("radiusNasVendor").value,
-      nasIp: $("radiusNasIp").value.trim(),
-      enabled: $("radiusNasEnabled").checked,
-      services: [...document.querySelectorAll('[name="radiusNasService"]:checked')].map((node) => node.value),
-    };
-  }
-
-  async function runNasPreview(event) {
-    event.preventDefault();
-    const profile = currentNasProfile();
-    if (!profile) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
-    try {
-      const response = await request("/api/radius/preview/nas-client", {
-        method: "POST",
-        body: { profile },
-      });
-      const result = response.result;
-      $("radiusNasResult").textContent = result?.text || jsonText(result);
-    } catch (error) {
-      setResult("radiusNasResult", { status: "error", reason: error.message });
-    }
-  }
-
-  function resetNasEditor() {
-    nasEditId = null;
-    $("radiusNasForm").reset();
-    $("radiusNasId").disabled = false;
-    $("radiusNasName").value = "Lab NAS";
-    $("radiusNasVendor").value = "cisco";
-    document.querySelectorAll('[name="radiusNasService"]').forEach((node) => { node.checked = node.value === "mab"; });
-    $("radiusNasEnabled").checked = false;
-    $("radiusNasCancelEdit").classList.add("hidden");
-    syncNasDevice();
-  }
-
-  function renderNasProfiles() {
-    $("radiusNasProfilesList").innerHTML = nasProfiles.map((item) => `
-      <div class="radius-profile-row">
-        <div><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.vendor)} · <span class="ltr mono">${escapeHtml(item.nasIp)}</span> · ${escapeHtml((item.services || []).join(", "))}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
-        <div class="row-actions"><button class="btn sm radius-nas-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-nas-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
-      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.nas.empty"))}</div>`;
-    page.querySelectorAll(".radius-nas-edit").forEach((node) => node.addEventListener("click", () => {
-      const item = nasProfiles.find((entry) => entry.id === node.dataset.id);
-      if (!item) return;
-      nasEditId = item.id;
-      $("radiusNasId").value = item.id; $("radiusNasId").disabled = true;
-      $("radiusNasDevice").value = item.deviceId; $("radiusNasName").value = item.name;
-      $("radiusNasVendor").value = item.vendor; $("radiusNasEnabled").checked = item.enabled;
-      document.querySelectorAll('[name="radiusNasService"]').forEach((input) => { input.checked = (item.services || []).includes(input.value); });
-      $("radiusNasCancelEdit").classList.remove("hidden"); syncNasDevice();
-      $("radiusNasForm").scrollIntoView({ block: "nearest" });
-    }));
-    page.querySelectorAll(".radius-nas-delete").forEach((node) => node.addEventListener("click", async () => {
-      const item = nasProfiles.find((entry) => entry.id === node.dataset.id);
-      if (!item || !confirm(t("radius.nas.confirmDelete", { name: item.name }))) return;
-      try { await request(`/api/radius/nas-profiles/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
-      catch (error) { setResult("radiusNasResult", { status: "error", reason: error.message }); }
-    }));
-  }
-
-  function resetAdminEditor() {
-    adminEditId = null;
-    $("radiusSavedAdminForm").reset();
-    $("radiusSavedAdminId").disabled = false;
-    $("radiusSavedCiscoPrivilege").value = "1";
-    $("radiusSavedMikrotikGroup").value = "read";
-    $("radiusSavedAdminEnabled").checked = false;
-    $("radiusAdminCancelEdit").classList.add("hidden");
-  }
-
-  function renderAdminProfiles() {
-    $("radiusAdminProfilesList").innerHTML = adminProfiles.map((item) => `
-      <div class="radius-profile-row">
-        <div><b>${escapeHtml(item.name)}</b><small>Cisco privilege: ${escapeHtml(item.ciscoPrivilege)} · MikroTik: ${escapeHtml(item.mikrotikGroup)}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
-        <div class="row-actions"><button class="btn sm radius-admin-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-admin-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
-      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.admin.empty"))}</div>`;
-    page.querySelectorAll(".radius-admin-edit").forEach((node) => node.addEventListener("click", () => {
-      const item = adminProfiles.find((entry) => entry.id === node.dataset.id);
-      if (!item) return;
-      adminEditId = item.id;
-      $("radiusSavedAdminId").value = item.id; $("radiusSavedAdminId").disabled = true;
-      $("radiusSavedAdminName").value = item.name; $("radiusSavedAdminDescription").value = item.description || "";
-      $("radiusSavedCiscoPrivilege").value = String(item.ciscoPrivilege);
-      $("radiusSavedMikrotikGroup").value = item.mikrotikGroup;
-      $("radiusSavedAdminEnabled").checked = item.enabled;
-      $("radiusAdminCancelEdit").classList.remove("hidden");
-      $("radiusSavedAdminForm").scrollIntoView({ block: "nearest" });
-    }));
-    page.querySelectorAll(".radius-admin-delete").forEach((node) => node.addEventListener("click", async () => {
-      const item = adminProfiles.find((entry) => entry.id === node.dataset.id);
-      if (!item || !confirm(t("radius.admin.confirmDelete", { name: item.name }))) return;
-      try { await request(`/api/radius/admin-profiles/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
-      catch (error) { setResult("radiusSavedAdminResult", { status: "error", reason: error.message }); }
-    }));
-  }
-
-  function syncPolicyFields() {
-    const knownDynamic = $("radiusPolicyKnownMode")?.value === "accept-dynamic";
-    const unknownGuest = $("radiusPolicyUnknownMode")?.value === "guest-vlan";
-    if ($("radiusPolicyKnownVlan")) $("radiusPolicyKnownVlan").disabled = !knownDynamic;
-    if ($("radiusPolicyGuestVlan")) $("radiusPolicyGuestVlan").disabled = !unknownGuest;
-  }
-
-  function renderPolicyNasOptions() {
-    const select = $("radiusPolicyNas");
-    if (!select) return;
-    const current = select.value;
-    select.innerHTML = `<option value="">${escapeHtml(t("radius.policy.selectNas"))}</option>` +
-      nasProfiles.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} — ${escapeHtml(item.nasIp)}</option>`).join("");
-    if (nasProfiles.some((item) => item.id === current)) select.value = current;
-  }
-
-  function resetPolicyEditor() {
-    policyEditId = null;
-    $("radiusPolicyForm").reset();
-    $("radiusPolicyId").disabled = false;
-    $("radiusPolicyKnownMode").value = "reject";
-    $("radiusPolicyUnknownMode").value = "reject";
-    $("radiusPolicyKnownVlan").value = "";
-    $("radiusPolicyGuestVlan").value = "";
-    $("radiusPolicyEnabled").checked = false;
-    $("radiusPolicyCancelEdit").classList.add("hidden");
-    renderPolicyNasOptions();
-    syncPolicyFields();
-  }
-
-  function renderMabPolicies() {
-    $("radiusMabPoliciesList").innerHTML = mabPolicies.map((item) => `
-      <div class="radius-profile-row">
-        <div><b>${escapeHtml(item.id)}</b><small>${escapeHtml(item.nasName || item.nasProfileId)} · ${escapeHtml(item.knownMode)}${item.knownVlan ? ` VLAN ${escapeHtml(item.knownVlan)}` : ""} · ${escapeHtml(item.unknownMode)}${item.guestVlan ? ` VLAN ${escapeHtml(item.guestVlan)}` : ""}</small></div>
-        <span class="status-pill">${escapeHtml(t(item.enabled ? "radius.status.enabled" : "radius.status.disabled"))}</span>
-        <div class="row-actions"><button class="btn sm radius-policy-edit" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger radius-policy-delete" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div>
-      </div>`).join("") || `<div class="empty-state compact-empty">${escapeHtml(t("radius.policy.empty"))}</div>`;
-    page.querySelectorAll(".radius-policy-edit").forEach((node) => node.addEventListener("click", () => {
-      const item = mabPolicies.find((entry) => entry.id === node.dataset.id);
-      if (!item) return;
-      policyEditId = item.id;
-      $("radiusPolicyId").value = item.id; $("radiusPolicyId").disabled = true;
-      $("radiusPolicyNas").value = item.nasProfileId;
-      $("radiusPolicyEnabled").checked = item.enabled;
-      $("radiusPolicyKnownMode").value = item.knownMode;
-      $("radiusPolicyKnownVlan").value = item.knownVlan ?? "";
-      $("radiusPolicyUnknownMode").value = item.unknownMode;
-      $("radiusPolicyGuestVlan").value = item.guestVlan ?? "";
-      $("radiusPolicyCancelEdit").classList.remove("hidden");
-      syncPolicyFields();
-      $("radiusPolicyForm").scrollIntoView({ block: "nearest" });
-    }));
-    page.querySelectorAll(".radius-policy-delete").forEach((node) => node.addEventListener("click", async () => {
-      const item = mabPolicies.find((entry) => entry.id === node.dataset.id);
-      if (!item || !confirm(t("radius.policy.confirmDelete", { name: item.id }))) return;
-      try { await request(`/api/radius/mab-policies/${encodeURIComponent(item.id)}`, { method: "DELETE" }); await refreshProfiles(); }
-      catch (error) { setResult("radiusPolicyResult", { status: "error", reason: error.message }); }
-    }));
-  }
-
-  async function saveMabPolicy(event) {
-    event.preventDefault();
-    const knownMode = $("radiusPolicyKnownMode").value;
-    const unknownMode = $("radiusPolicyUnknownMode").value;
-    const policy = {
-      id: $("radiusPolicyId").value.trim(),
-      nasProfileId: $("radiusPolicyNas").value,
-      enabled: $("radiusPolicyEnabled").checked,
-      knownMode,
-      knownVlan: knownMode === "accept-dynamic" ? Number($("radiusPolicyKnownVlan").value) : null,
-      unknownMode,
-      guestVlan: unknownMode === "guest-vlan" ? Number($("radiusPolicyGuestVlan").value) : null,
-    };
-    try {
-      const result = await request(policyEditId ? `/api/radius/mab-policies/${encodeURIComponent(policyEditId)}` : "/api/radius/mab-policies", {
-        method: policyEditId ? "PUT" : "POST", body: policy,
-      });
-      setResult("radiusPolicyResult", { status: "saved", id: result.item.id });
-      resetPolicyEditor();
-      await refreshProfiles();
-    } catch (error) { setResult("radiusPolicyResult", { status: "error", reason: error.message }); }
-  }
-
-  async function refreshProfiles() {
-    const [nas, admins, policies] = await Promise.all([
-      request("/api/radius/nas-profiles"),
-      request("/api/radius/admin-profiles"),
-      request("/api/radius/mab-policies"),
-    ]);
-    nasProfiles = nas.items || [];
-    adminProfiles = admins.items || [];
-    mabPolicies = policies.items || [];
-    renderNasProfiles();
-    renderAdminProfiles();
-    renderPolicyNasOptions();
-    renderMabPolicies();
-  }
-
-  async function saveNasProfile() {
-    const profile = currentNasProfile();
-    if (!profile) return setResult("radiusNasResult", { status: "invalid", issues: ["device-required"] });
-    try {
-      const result = await request(nasEditId ? `/api/radius/nas-profiles/${encodeURIComponent(nasEditId)}` : "/api/radius/nas-profiles", {
-        method: nasEditId ? "PUT" : "POST", body: profile,
-      });
-      setResult("radiusNasResult", { status: "saved", id: result.item.id });
-      resetNasEditor();
-      await refreshProfiles();
-    } catch (error) { setResult("radiusNasResult", { status: "error", reason: error.message }); }
-  }
-
-  async function saveAdminProfile(event) {
-    event.preventDefault();
-    const profile = {
-      id: $("radiusSavedAdminId").value.trim(),
-      name: $("radiusSavedAdminName").value.trim(),
-      description: $("radiusSavedAdminDescription").value.trim(),
-      ciscoPrivilege: Number($("radiusSavedCiscoPrivilege").value),
-      mikrotikGroup: $("radiusSavedMikrotikGroup").value.trim(),
-      enabled: $("radiusSavedAdminEnabled").checked,
-    };
-    try {
-      const result = await request(adminEditId ? `/api/radius/admin-profiles/${encodeURIComponent(adminEditId)}` : "/api/radius/admin-profiles", {
-        method: adminEditId ? "PUT" : "POST", body: profile,
-      });
-      setResult("radiusSavedAdminResult", { status: "saved", id: result.item.id });
-      resetAdminEditor();
-      await refreshProfiles();
-    } catch (error) { setResult("radiusSavedAdminResult", { status: "error", reason: error.message }); }
-  }
-
-  function syncDeviceConfigFields() {
-    const mab = $("radiusConfigPurpose")?.value === "mab";
-    $("radiusConfigInterfaceWrap")?.classList.toggle("hidden", !mab);
-  }
-
-  async function runDeviceConfigPreview(event) {
-    event.preventDefault();
-    try {
-      const response = await request("/api/radius/preview/device-config", {
-        method: "POST",
-        body: {
-          vendor: $("radiusConfigVendor").value,
-          purpose: $("radiusConfigPurpose").value,
-          radiusServerIp: $("radiusConfigServerIp").value.trim(),
-          interfaceName: $("radiusConfigInterface").value.trim(),
-          serverName: $("radiusConfigServerName").value.trim(),
-        },
-      });
-      const result = response.result;
-      $("radiusConfigResult").textContent = result?.text || jsonText(result);
-    } catch (error) { setResult("radiusConfigResult", { status: "error", reason: error.message }); }
-  }
-
-  async function runMatrixDemo() {
-    const inventory = [{ mac: "02:00:00:00:00:50", enabled: true, vlan: 20 }];
-    const policy = { enabled: true, known: { mode: "accept-dynamic" }, unknown: { mode: "reject" } };
-    try {
-      const response = await request("/api/radius/preview/mab-matrix", {
-        method: "POST",
-        body: { cases: [
-          { label: "known-device", input: { mac: inventory[0].mac, knownMacs: inventory, policy, switchId: "lab-switch" }, expectedDecision: "accept", expectedReason: "known-dynamic-vlan" },
-          { label: "unknown-device", input: { mac: "02:00:00:00:00:51", knownMacs: inventory, policy, switchId: "lab-switch" }, expectedDecision: "reject", expectedReason: "unknown-mac" },
-        ] },
-      });
-      setResult("radiusMatrixResult", response.result);
-    } catch (error) {
-      setResult("radiusMatrixResult", { status: "error", reason: error.message });
-    }
-  }
-
-  async function openPage() {
-    state.view = "module";
-    navActive("radius");
-    await ensureInventory(true);
-    const nasDevices = (state.inventory || []).filter((item) => item.id && item.ip && item.companyId);
-    page.innerHTML = `
-      <div class="headline radius-head">
-        <div>
-          <div class="crumb">${escapeHtml(t("radius.crumb"))}</div>
-          <h2 id="radiusTitle">${escapeHtml(t("radius.title"))}</h2>
-          <p class="subtitle">${escapeHtml(t("radius.subtitle"))}</p>
-        </div>
-        <span class="status-pill">${escapeHtml(t("radius.previewOnly"))}</span>
-      </div>
-
-      <div class="radius-grid">
-        <section class="panel radius-card">
-          <h3>${escapeHtml(t("radius.mab.title"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.mab.subtitle"))}</p>
-          <form id="radiusMabForm" class="radius-form">
-            <label>${escapeHtml(t("radius.mab.mac"))}<input id="radiusMabMac" class="ltr mono" required value="02:00:00:00:00:50"></label>
-            <label>${escapeHtml(t("radius.mab.switchId"))}<input id="radiusMabSwitch" class="ltr" value="lab-switch"></label>
-            <label class="check-row"><input id="radiusMabKnown" type="checkbox" checked> ${escapeHtml(t("radius.mab.known"))}</label>
-            <label>${escapeHtml(t("radius.mab.knownMode"))}
-              <select id="radiusMabKnownMode">
-                <option value="accept-static">${escapeHtml(t("radius.mode.acceptStatic"))}</option>
-                <option value="accept-dynamic" selected>${escapeHtml(t("radius.mode.acceptDynamic"))}</option>
-                <option value="reject">${escapeHtml(t("radius.mode.reject"))}</option>
-              </select>
-            </label>
-            <label>${escapeHtml(t("radius.mab.knownVlan"))}<input id="radiusMabKnownVlan" type="number" min="1" max="4094" value="20"></label>
-            <label>${escapeHtml(t("radius.mab.unknownMode"))}
-              <select id="radiusMabUnknownMode">
-                <option value="reject" selected>${escapeHtml(t("radius.mode.reject"))}</option>
-                <option value="guest-vlan">${escapeHtml(t("radius.mode.guestVlan"))}</option>
-              </select>
-            </label>
-            <label>${escapeHtml(t("radius.mab.guestVlan"))}<input id="radiusMabGuestVlan" type="number" min="1" max="4094" value="30"></label>
-            <button class="btn primary" type="submit">${escapeHtml(t("radius.action.preview"))}</button>
-          </form>
-          <pre id="radiusMabResult" class="radius-result" aria-live="polite"></pre>
-        </section>
-
-        <section class="panel radius-card">
-          <h3>${escapeHtml(t("radius.admin.title"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.admin.subtitle"))}</p>
-          <form id="radiusAdminForm" class="radius-form">
-            <label>${escapeHtml(t("radius.admin.vendor"))}
-              <select id="radiusAdminVendor">
-                <option value="cisco">Cisco</option>
-                <option value="mikrotik">MikroTik</option>
-              </select>
-            </label>
-            <div id="radiusCiscoFields">
-              <label>${escapeHtml(t("radius.admin.ciscoPrivilege"))}<input id="radiusCiscoPrivilege" type="number" min="0" max="15" value="15"></label>
-            </div>
-            <div id="radiusMikrotikFields" class="hidden">
-              <label>${escapeHtml(t("radius.admin.mikrotikGroup"))}<input id="radiusMikrotikGroup" class="ltr" value="full"></label>
-            </div>
-            <button class="btn primary" type="submit">${escapeHtml(t("radius.action.preview"))}</button>
-          </form>
-          <pre id="radiusAdminResult" class="radius-result" aria-live="polite"></pre>
-        </section>
-
-        <section class="panel radius-card">
-          <h3>${escapeHtml(t("radius.nas.title"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.nas.subtitle"))}</p>
-          <form id="radiusNasForm" class="radius-form">
-            <label>${escapeHtml(t("radius.nas.device"))}
-              <select id="radiusNasDevice" required>
-                <option value="">${escapeHtml(t("radius.nas.selectDevice"))}</option>
-                ${nasDevices.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.ip)} — ${escapeHtml(item.ip)}</option>`).join("")}
-              </select>
-            </label>
-            <label>${escapeHtml(t("radius.nas.id"))}<input id="radiusNasId" class="ltr" required value=""></label>
-            <label>${escapeHtml(t("radius.nas.name"))}<input id="radiusNasName" required value="Lab NAS"></label>
-            <label>${escapeHtml(t("radius.nas.ip"))}<input id="radiusNasIp" class="ltr mono" readonly></label>
-            <label>${escapeHtml(t("radius.admin.vendor"))}
-              <select id="radiusNasVendor">
-                <option value="cisco">Cisco</option>
-                <option value="mikrotik">MikroTik</option>
-                <option value="other">${escapeHtml(t("radius.nas.otherVendor"))}</option>
-              </select>
-            </label>
-            <div class="radius-service-grid">
-              <label class="check-row"><input type="checkbox" name="radiusNasService" value="mab" checked> MAB</label>
-              <label class="check-row"><input type="checkbox" name="radiusNasService" value="dot1x"> 802.1X</label>
-              <label class="check-row"><input type="checkbox" name="radiusNasService" value="device-admin"> AAA</label>
-            </div>
-            <label class="check-row"><input id="radiusNasEnabled" type="checkbox"> ${escapeHtml(t("radius.nas.enabled"))}</label>
-            <div class="row-actions">
-              <button class="btn primary" type="submit">${escapeHtml(t("radius.nas.generateDraft"))}</button>
-              <button id="radiusNasSave" class="btn" type="button">${escapeHtml(t("radius.nas.save"))}</button>
-              <button id="radiusNasCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
-            </div>
-          </form>
-          <pre id="radiusNasResult" class="radius-result" aria-live="polite"></pre>
-          <h4>${escapeHtml(t("radius.nas.savedTitle"))}</h4>
-          <div id="radiusNasProfilesList" class="radius-profile-list"></div>
-        </section>
-
-        <section class="panel radius-card">
-          <h3>${escapeHtml(t("radius.admin.savedTitle"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.admin.savedSubtitle"))}</p>
-          <form id="radiusSavedAdminForm" class="radius-form">
-            <label>${escapeHtml(t("radius.admin.profileId"))}<input id="radiusSavedAdminId" class="ltr" required value=""></label>
-            <label>${escapeHtml(t("radius.admin.profileName"))}<input id="radiusSavedAdminName" required value=""></label>
-            <label>${escapeHtml(t("radius.admin.description"))}<input id="radiusSavedAdminDescription" value=""></label>
-            <label>${escapeHtml(t("radius.admin.ciscoPrivilege"))}<input id="radiusSavedCiscoPrivilege" type="number" min="0" max="15" value="1"></label>
-            <label>${escapeHtml(t("radius.admin.mikrotikGroup"))}<input id="radiusSavedMikrotikGroup" class="ltr" value="read"></label>
-            <label class="check-row"><input id="radiusSavedAdminEnabled" type="checkbox"> ${escapeHtml(t("radius.admin.enabled"))}</label>
-            <div class="row-actions">
-              <button class="btn primary" type="submit">${escapeHtml(t("radius.admin.save"))}</button>
-              <button id="radiusAdminCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
-            </div>
-          </form>
-          <pre id="radiusSavedAdminResult" class="radius-result" aria-live="polite"></pre>
-          <div id="radiusAdminProfilesList" class="radius-profile-list"></div>
-        </section>
-
-        <section class="panel radius-card radius-wide">
-          <h3>${escapeHtml(t("radius.policy.title"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.policy.subtitle"))}</p>
-          <form id="radiusPolicyForm" class="radius-form radius-policy-form">
-            <label>${escapeHtml(t("radius.policy.id"))}<input id="radiusPolicyId" class="ltr" required value=""></label>
-            <label>${escapeHtml(t("radius.policy.nas"))}<select id="radiusPolicyNas" required></select></label>
-            <label class="check-row"><input id="radiusPolicyEnabled" type="checkbox"> ${escapeHtml(t("radius.policy.enabled"))}</label>
-            <label>${escapeHtml(t("radius.policy.knownMode"))}
-              <select id="radiusPolicyKnownMode">
-                <option value="reject">${escapeHtml(t("radius.mode.reject"))}</option>
-                <option value="accept-static">${escapeHtml(t("radius.mode.acceptStatic"))}</option>
-                <option value="accept-dynamic">${escapeHtml(t("radius.mode.acceptDynamic"))}</option>
-              </select>
-            </label>
-            <label>${escapeHtml(t("radius.policy.knownVlan"))}<input id="radiusPolicyKnownVlan" type="number" min="1" max="4094"></label>
-            <label>${escapeHtml(t("radius.policy.unknownMode"))}
-              <select id="radiusPolicyUnknownMode">
-                <option value="reject">${escapeHtml(t("radius.mode.reject"))}</option>
-                <option value="guest-vlan">${escapeHtml(t("radius.mode.guestVlan"))}</option>
-              </select>
-            </label>
-            <label>${escapeHtml(t("radius.policy.guestVlan"))}<input id="radiusPolicyGuestVlan" type="number" min="1" max="4094"></label>
-            <div class="row-actions">
-              <button class="btn primary" type="submit">${escapeHtml(t("radius.policy.save"))}</button>
-              <button id="radiusPolicyCancelEdit" class="btn hidden" type="button">${escapeHtml(t("common.cancel"))}</button>
-            </div>
-          </form>
-          <pre id="radiusPolicyResult" class="radius-result" aria-live="polite"></pre>
-          <div id="radiusMabPoliciesList" class="radius-profile-list"></div>
-        </section>
-
-        <section class="panel radius-card radius-wide">
-          <h3>${escapeHtml(t("radius.config.title"))}</h3>
-          <p class="subtitle">${escapeHtml(t("radius.config.subtitle"))}</p>
-          <form id="radiusConfigForm" class="radius-form radius-config-form">
-            <label>${escapeHtml(t("radius.admin.vendor"))}
-              <select id="radiusConfigVendor"><option value="cisco">Cisco</option><option value="mikrotik">MikroTik</option></select>
-            </label>
-            <label>${escapeHtml(t("radius.config.purpose"))}
-              <select id="radiusConfigPurpose"><option value="device-admin">${escapeHtml(t("radius.config.deviceAdmin"))}</option><option value="mab">MAB</option></select>
-            </label>
-            <label>${escapeHtml(t("radius.config.serverIp"))}<input id="radiusConfigServerIp" class="ltr mono" required value="192.0.2.5"></label>
-            <label>${escapeHtml(t("radius.config.serverName"))}<input id="radiusConfigServerName" class="ltr" required value="EMS_RADIUS"></label>
-            <label id="radiusConfigInterfaceWrap" class="hidden">${escapeHtml(t("radius.config.interface"))}<input id="radiusConfigInterface" class="ltr" value="GigabitEthernet1/0/12"></label>
-            <button class="btn primary" type="submit">${escapeHtml(t("radius.config.generate"))}</button>
-          </form>
-          <pre id="radiusConfigResult" class="radius-result" aria-live="polite"></pre>
-        </section>
-
-        <section class="panel radius-card radius-wide">
-          <div class="row-actions">
-            <div>
-              <h3>${escapeHtml(t("radius.matrix.title"))}</h3>
-              <p class="subtitle">${escapeHtml(t("radius.matrix.subtitle"))}</p>
-            </div>
-            <button id="radiusMatrixDemo" class="btn" type="button">${escapeHtml(t("radius.matrix.runDemo"))}</button>
-          </div>
-          <pre id="radiusMatrixResult" class="radius-result" aria-live="polite"></pre>
-        </section>
-      </div>
-
-      <section class="panel radius-warning">
-        <b>${escapeHtml(t("radius.warning.title"))}</b>
-        <p>${escapeHtml(t("radius.warning.body"))}</p>
-      </section>
-    `;
-
-    $("radiusMabForm").addEventListener("submit", runMabPreview);
-    $("radiusAdminForm").addEventListener("submit", runAdminPreview);
-    $("radiusAdminVendor").addEventListener("change", syncAdminFields);
-    $("radiusMatrixDemo").addEventListener("click", runMatrixDemo);
-    $("radiusNasForm").addEventListener("submit", runNasPreview);
-    $("radiusNasDevice").addEventListener("change", syncNasDevice);
-    $("radiusNasSave").addEventListener("click", saveNasProfile);
-    $("radiusNasCancelEdit").addEventListener("click", resetNasEditor);
-    $("radiusSavedAdminForm").addEventListener("submit", saveAdminProfile);
-    $("radiusAdminCancelEdit").addEventListener("click", resetAdminEditor);
-    $("radiusPolicyForm").addEventListener("submit", saveMabPolicy);
-    $("radiusPolicyKnownMode").addEventListener("change", syncPolicyFields);
-    $("radiusPolicyUnknownMode").addEventListener("change", syncPolicyFields);
-    $("radiusPolicyCancelEdit").addEventListener("click", resetPolicyEditor);
-    $("radiusConfigForm").addEventListener("submit", runDeviceConfigPreview);
-    $("radiusConfigPurpose").addEventListener("change", syncDeviceConfigFields);
-    syncAdminFields();
-    syncNasDevice();
-    syncPolicyFields();
-    syncDeviceConfigFields();
-    await refreshProfiles();
-  }
-
-  return { openPage };
+  function draw(){page.innerHTML=`<div class="r-simple">${content()}</div>`;bind();}
+  async function saveClient(e){e.preventDefault();const d=new FormData(e.currentTarget),body={companyId:d.get('companyId'),hostId:null,label:d.get('label'),nasIp:d.get('nasIp'),vendor:d.get('vendor'),secret:d.get('secret')||null,enabled:d.get('enabled')==='on'};try{await api(editing?`/devices/${editing.id}`:'/devices',{method:editing?'PUT':'POST',body});toast(tr('radius.simple.saved'));editing=null;formOpen=false;await load();}catch(err){toast(err.message);}}
+  async function saveGroup(e){e.preventDefault();const d=new FormData(e.currentTarget),body={companyId:d.get('companyId'),name:d.get('name'),description:d.get('description'),ciscoPrivilege:Number(d.get('ciscoPrivilege')),mikrotikGroup:d.get('mikrotikGroup'),enabled:d.get('enabled')==='on'};try{await api(editing?`/groups/${editing.id}`:'/groups',{method:editing?'PUT':'POST',body});toast(tr('radius.simple.saved'));editing=null;formOpen=false;await load();}catch(err){toast(err.message);}}
+  async function saveUser(e){e.preventDefault();const d=new FormData(e.currentTarget),body={companyId:d.get('companyId'),username:editing?.username||d.get('username'),label:d.get('label'),groupId:d.get('groupId'),password:d.get('password')||null,enabled:d.get('enabled')==='on'};try{await api(editing?`/accounts/${editing.id}`:'/accounts',{method:editing?'PUT':'POST',body});toast(tr('radius.simple.saved'));editing=null;formOpen=false;await load();}catch(err){toast(err.message);}}
+  async function generateConfig(e){e.preventDefault();try{const d=new FormData(e.currentTarget),r=await api('/config',{method:'POST',body:{id:configClient.id,radiusIp:d.get('radiusIp'),mode:'admin'}});page.querySelector('#rConfigText').textContent=r.text||'—';}catch(err){toast(err.message);}}
+  async function load(){try{const rs=await Promise.all([api('/devices'),api('/groups'),api('/accounts'),api('/events'),api('/health')]);clients=rs[0].items||[];groups=rs[1].items||[];users=rs[2].items||[];events=rs[3].items||[];health=rs[4]||{running:false};draw();}catch(e){toast(e.message);page.innerHTML=`<section class="panel r-simple-error">${esc(e.message)}</section>`;}}
+  async function openPage(){await load();}
+  return {openPage};
 }

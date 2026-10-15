@@ -64,8 +64,12 @@ test("RADIUS UI owns its translations and contains no Persian literals", async (
     read("../../modules/radius/public/i18n/en.json").then(JSON.parse),
     read("../../modules/radius/public/i18n/fa.json").then(JSON.parse),
   ]);
-  assert.match(ui, /radius\.mab\.title/);
-  assert.match(ui, /\/api\/radius\/preview\/mab/);
+  assert.match(ui, /radius\.simple\.clients/);
+  assert.match(ui, /radius\.simple\.groups/);
+  assert.match(ui, /radius\.simple\.users/);
+  assert.match(ui, /radius\.simple\.logs/);
+  assert.match(ui, /\/api\/radius-ops/);
+  assert.doesNotMatch(ui, /MAB Policy Preview|Policy Regression Matrix|Run Safe Demo/);
   assert.doesNotMatch(ui, /[\u0600-\u06FF]/);
   for (const key of Object.keys(english)) assert.ok(persian[key]?.trim(), `Missing Persian module key: ${key}`);
 });

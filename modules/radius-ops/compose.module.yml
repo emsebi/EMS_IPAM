@@ -1,0 +1,32 @@
+services:
+  radius_ops:
+    build:
+      context: ./modules/radius-ops/freeradius
+    image: ems-ipam-radius-ops:1.0.0-lab
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB:-ems_ipam}
+      PGUSER: ${POSTGRES_USER:-ems_ipam}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    expose: ["18120"]
+    ports:
+      - "${EMS_RADIUS_BIND:-0.0.0.0}:${EMS_RADIUS_AUTH_PORT:-1812}:1812/udp"
+      - "${EMS_RADIUS_BIND:-0.0.0.0}:${EMS_RADIUS_ACCT_PORT:-1813}:1813/udp"
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/run:size=16m,mode=1777", "/tmp:size=16m,mode=1777", "/var/log/freeradius:size=16m,mode=1777", "/var/lib/freeradius:size=16m,mode=1777"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:18120/health',timeout=2)); assert d['running']"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    networks: [ems_ipam_internal]

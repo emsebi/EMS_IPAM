@@ -1,11 +1,12 @@
 {
   "id": "radius",
   "name": "RADIUS / AAA",
-  "version": "0.5.0-rc.1",
-  "description": "Modular RADIUS/AAA with persistent NAS/MAB/admin profiles, safe previews and manual-only Cisco/MikroTik configuration templates.",
+  "version": "1.0.0-lab",
+  "description": "Simple operational RADIUS/AAA management backed by the isolated radius-ops service; legacy preview APIs remain available for compatibility.",
   "enabled": true,
   "permissions": [
     "radius.read",
+    "radius.write",
     "radius.preview"
   ],
   "roles": [
