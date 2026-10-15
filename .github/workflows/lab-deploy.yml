@@ -1,0 +1,158 @@
+name: EMS-IPAM Lab Deploy
+
+on:
+  push:
+    branches:
+      - "work/i18n-personnel-foundation"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-lab:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/work/i18n-personnel-foundation'
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - ems-ipam-lab
+    timeout-minutes: 35
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Verify dedicated Docker lab
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker info >/dev/null
+          docker compose version
+          test -f compose.yml
+          test -f modules/radius-ops/compose.module.yml
+          echo "Runner: $RUNNER_NAME"
+          echo "Commit: $GITHUB_SHA"
+
+      - name: Preserve installed lab configuration
+        id: preserve
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LAB_ROOT="$HOME/ems-ipam-lab"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          mkdir -p "$LAB_ROOT"
+
+          if docker run --rm -v /var/lib/ems-ipam:/state:ro postgres:16-alpine             sh -c 'test -s /state/.env && cat /state/.env' > "$ENV_FILE.tmp"; then
+            mv "$ENV_FILE.tmp" "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+            echo "Existing EMS-IPAM lab credentials/config preserved without printing secrets."
+          else
+            rm -f "$ENV_FILE.tmp"
+            echo "::error::Existing /var/lib/ems-ipam/.env could not be read. Refusing to replace credentials."
+            exit 1
+          fi
+
+          grep -q '^EMS_HTTP_PORT=8888$' "$ENV_FILE" || {
+            echo "::error::Expected existing lab web port 8888. Refusing to silently change the panel port."
+            exit 1
+          }
+
+      - name: Stage current branch for persistent lab deployment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          NEXT="$HOME/ems-ipam-lab/next"
+          rm -rf "$NEXT"
+          mkdir -p "$NEXT"
+          cp -a "$GITHUB_WORKSPACE/." "$NEXT/"
+          rm -rf "$NEXT/.git"
+          rm -rf "$DEPLOY"
+          mv "$NEXT" "$DEPLOY"
+          test -f "$DEPLOY/modules/radius/module.json"
+          test -f "$DEPLOY/modules/radius-ops/module.json"
+
+      - name: Replace only EMS-IPAM lab containers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ids="$(docker ps -aq --filter label=com.docker.compose.project=ems-ipam)"
+          if [ -n "$ids" ]; then
+            docker rm -f $ids
+          fi
+          docker network rm ems_ipam_internal >/dev/null 2>&1 || true
+          echo "Existing database volume and /var/lib/ems-ipam state were preserved."
+
+      - name: Build and start current EMS-IPAM lab
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f compose.yml -f modules/radius-ops/compose.module.yml)
+
+          "${COMPOSE[@]}" build app radius_ops
+          "${COMPOSE[@]}" up -d
+          "${COMPOSE[@]}" up -d --wait --wait-timeout 180
+
+      - name: Show lab health and safe diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cd "$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f compose.yml -f modules/radius-ops/compose.module.yml)
+
+          "${COMPOSE[@]}" ps
+          echo "---- RADIUS health ----"
+          docker inspect --format '{{json .State.Health}}' ems-ipam-radius_ops-1 2>/dev/null || true
+          echo "---- RADIUS logs ----"
+          "${COMPOSE[@]}" logs --no-color --tail=220 radius_ops 2>/dev/null || true
+          echo "---- App logs ----"
+          "${COMPOSE[@]}" logs --no-color --tail=100 app 2>/dev/null || true
+
+      - name: Verify panel on port 8888
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8888/health >/dev/null; then
+              echo "EMS-IPAM panel is healthy on http://127.0.0.1:8888"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::EMS-IPAM panel did not become healthy on port 8888."
+          exit 1
+
+      - name: Run real Docker PostgreSQL FreeRADIUS smoke
+        id: smoke
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$HOME/ems-ipam-lab/current"
+          timeout 420 python3 scripts/radius-ops-docker-smoke.py
+
+      - name: Fail if RADIUS deployment or smoke failed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ "${{ steps.deploy.outcome }}" != "success" ]; then
+            echo "::error::Persistent radius_ops deployment is unhealthy. The new Core/UI remains deployed for inspection."
+            exit 1
+          fi
+          if [ "${{ steps.smoke.outcome }}" != "success" ]; then
+            echo "::error::Real RADIUS Docker smoke failed. Persistent lab remains available for diagnosis."
+            exit 1
+          fi
+          echo "Persistent lab and real RADIUS smoke both passed."
