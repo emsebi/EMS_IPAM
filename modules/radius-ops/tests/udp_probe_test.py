@@ -110,11 +110,11 @@ class RadiusProbeTest(unittest.TestCase):
 
             worker = threading.Thread(target=answer, daemon=True)
             worker.start()
-            self.assertEqual(probe.probe('127.0.0.2', '127.0.0.1',
+            self.assertEqual(probe.probe('127.10.20.2', '127.0.0.1',
                                           'testadminA', 'example-password',
                                           secret.decode(), destination_port=port), 'Access-Accept')
             worker.join(timeout=4)
-            self.assertEqual(seen, {'source': '127.0.0.2', 'claimed': True})
+            self.assertEqual(seen, {'source': '127.10.20.2', 'claimed': True})
 
     def test_probe_cannot_send_to_real_network_or_unapproved_sources(self):
         with patch.object(probe.socket, 'socket') as mocked:
@@ -122,6 +122,8 @@ class RadiusProbeTest(unittest.TestCase):
                 probe.probe('10.0.0.1', '127.0.0.1', 'user', 'pass', 'secret')
             with self.assertRaises(ValueError):
                 probe.probe('127.0.0.1', '10.0.0.1', 'user', 'pass', 'secret')
+            with self.assertRaises(ValueError):
+                probe.probe('::1', '127.0.0.1', 'user', 'pass', 'secret')
             mocked.assert_not_called()
 
 

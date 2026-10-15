@@ -91,9 +91,14 @@ def verify_response(packet, request_authenticator, secret, identifier):
 
 
 def probe(source, claimed, username, password, secret_text, timeout=4, destination_port=1812):
-    if source not in ('127.0.0.1', '127.0.0.2'):
+    try:
+        source_ip = ipaddress.ip_address(source)
+        claimed_ip = ipaddress.ip_address(claimed)
+    except ValueError as exc:
+        raise ValueError('Only lab loopback IPv4 addresses are permitted') from exc
+    if source_ip.version != 4 or not source_ip.is_loopback:
         raise ValueError('Only lab loopback NAS source IPs are permitted')
-    if claimed not in ('127.0.0.1', '127.0.0.2'):
+    if claimed_ip.version != 4 or not claimed_ip.is_loopback:
         raise ValueError('Only lab loopback NAS claims are permitted')
     if not isinstance(destination_port, int) or not 1 <= destination_port <= 65535:
         raise ValueError('Invalid loopback RADIUS port')
