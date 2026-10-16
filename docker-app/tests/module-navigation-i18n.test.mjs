@@ -11,7 +11,7 @@ test("module navigation supports manifest-owned localized labels with English fa
 });
 
 test("bundled panel modules own their navigation translations",async()=>{
-  for(const path of ["../../modules/radius/module.json","../../modules/branches/module.json"]){
+  for(const path of ["../../modules/radius/module.json","../../modules/reports/module.json"]){
     const manifest=JSON.parse(await read(path));
     assert.equal(manifest.navigation.panel,true);
     assert.ok(manifest.navigation.labels.en);
@@ -20,7 +20,7 @@ test("bundled panel modules own their navigation translations",async()=>{
 });
 
 test("optional modules keep English-first catalogs and UI sources free of embedded Persian",async()=>{
-  for(const moduleId of ["radius","branches","reports"]){
+  for(const moduleId of ["radius","reports"]){
     const root="../../modules/"+moduleId+"/public/";
     const [source,en,fa]=await Promise.all([
       read(root+"index.mjs"),

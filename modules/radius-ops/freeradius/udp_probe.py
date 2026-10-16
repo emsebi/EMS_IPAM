@@ -8,6 +8,7 @@ No credentials are logged, persisted, or sent to any non-loopback address.
 import argparse
 import hashlib
 import hmac
+import ipaddress
 import os
 import socket
 import struct
