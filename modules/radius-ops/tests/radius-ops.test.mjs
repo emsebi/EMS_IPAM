@@ -180,3 +180,14 @@ test('live RADIUS operator feed is volatile and admin-proxied',()=>{
  assert.match(backend,/base\+'\/live\/events'/);
  assert.match(backend,/Cache-Control','no-store/);
 });
+
+test('operator UI exposes one volatile Live RADIUS Logs console',()=>{
+ const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
+ const en=JSON.parse(fs.readFileSync(path.join(root,'../radius/public/i18n/en.json'),'utf8'));
+ assert.match(ui,/id="rLiveOpen"/);
+ assert.match(ui,/api\('\/live\/start'/);
+ assert.match(ui,/api\('\/live\/events'/);
+ assert.match(ui,/liveItems\.length>1000/);
+ assert.match(ui,/attemptedPassword/);
+ assert.equal(en['radius.simple.liveLogs'],'Live RADIUS Logs');
+});

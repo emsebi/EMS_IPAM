@@ -87,5 +87,19 @@
   "radius.simple.requiresCollection": "Create a NAS Collection before creating an enabled device-admin user.",
   "radius.simple.requiresAccess": "An enabled user needs at least one NAS Collection and permission profile.",
   "radius.simple.sampleConfig": "Sample Config",
-  "radius.simple.selectClient": "Select RADIUS client / NAS"
+  "radius.simple.selectClient": "Select RADIUS client / NAS",
+  "radius.simple.liveLogs": "Live RADIUS Logs",
+  "radius.simple.liveVolatileHint": "Live only — this console buffer is not stored in the EMS database.",
+  "radius.simple.fullscreen": "Full screen",
+  "radius.simple.liveFilter": "Filter user, NAS, IP or client…",
+  "radius.simple.liveAll": "All logs",
+  "radius.simple.liveAuth": "Authentication",
+  "radius.simple.liveAccounting": "Accounting",
+  "radius.simple.liveService": "Service / errors",
+  "radius.simple.liveAllResults": "All results",
+  "radius.simple.pause": "Pause",
+  "radius.simple.resume": "Resume",
+  "radius.simple.clear": "Clear",
+  "radius.simple.autoScroll": "Auto-scroll",
+  "radius.simple.liveWaiting": "Waiting for live RADIUS events…"
 }

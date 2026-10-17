@@ -87,5 +87,19 @@
   "radius.simple.requiresCollection": "قبل از ساخت کاربر فعال، یک گروه تجهیزات / NAS بسازید.",
   "radius.simple.requiresAccess": "کاربر فعال باید حداقل به یک گروه تجهیزات با یک پروفایل دسترسی متصل باشد.",
   "radius.simple.sampleConfig": "کانفیگ نمونه",
-  "radius.simple.selectClient": "کلاینت / NAS را انتخاب کنید"
+  "radius.simple.selectClient": "کلاینت / NAS را انتخاب کنید",
+  "radius.simple.liveLogs": "لاگ زنده RADIUS",
+  "radius.simple.liveVolatileHint": "فقط نمایش زنده — بافر این کنسول در دیتابیس EMS ذخیره نمی‌شود.",
+  "radius.simple.fullscreen": "تمام‌صفحه",
+  "radius.simple.liveFilter": "فیلتر کاربر، NAS، IP یا کلاینت…",
+  "radius.simple.liveAll": "همه لاگ‌ها",
+  "radius.simple.liveAuth": "احراز هویت",
+  "radius.simple.liveAccounting": "Accounting",
+  "radius.simple.liveService": "سرویس / خطاها",
+  "radius.simple.liveAllResults": "همه نتایج",
+  "radius.simple.pause": "توقف نمایش",
+  "radius.simple.resume": "ادامه",
+  "radius.simple.clear": "پاک‌کردن",
+  "radius.simple.autoScroll": "اسکرول خودکار",
+  "radius.simple.liveWaiting": "در انتظار رویداد زنده RADIUS…"
 }
