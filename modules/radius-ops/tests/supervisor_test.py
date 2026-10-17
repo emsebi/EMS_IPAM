@@ -223,6 +223,7 @@ class NasReloadLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):

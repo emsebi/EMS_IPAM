@@ -177,6 +177,6 @@ test('live RADIUS operator feed is volatile and admin-proxied',()=>{
  assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
  assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
  assert.match(supervisor,/LIVE_EVENTS\.clear\(\)/);
- assert.match(backend,/radius-ops\/live\/events/);
+ assert.match(backend,/base\+'\/live\/events'/);
  assert.match(backend,/Cache-Control','no-store/);
 });
