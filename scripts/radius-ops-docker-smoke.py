@@ -239,9 +239,14 @@ def main():
             assert sql(f"SELECT count(*) FROM radgroupreply WHERE groupname='{group_name_a}' AND attribute='Cisco-AVPair' AND value='shell:priv-lvl=15'") == '1'
             assert sql(f"SELECT count(*) FROM radgroupreply WHERE groupname='{group_name_a}' AND attribute='Mikrotik-Group' AND value='full'") == '1'
             assert sql(f"SELECT count(*) FROM radgroupreply WHERE groupname='{group_name_b}' AND attribute='Cisco-AVPair' AND value='shell:priv-lvl=1'") == '1'
-            assert sql(f"SELECT count(*) FROM radusergroup WHERE username='testadminA' AND groupname='{group_name_a}'") == '1'
-            assert sql(f"SELECT count(*) FROM radusergroup WHERE username='testadminB' AND groupname='{group_name_b}'") == '1'
-            print('PASS Group/Role and User membership sync to FreeRADIUS SQL tables')
+            # v24 keeps profile reply templates in radgroupreply, but device-admin
+            # authorization is selected dynamically by NAS Collection.  Static
+            # radusergroup membership would leak one privilege level to every NAS.
+            assert sql("SELECT count(*) FROM radusergroup WHERE username IN ('testadminA','testadminB')") == '0'
+            assert sql(f"SELECT count(*) FROM radius_ops_access_rules ar JOIN radius_ops_accounts a ON a.id=ar.account_id WHERE a.username='testadminA' AND ar.profile_id='{group_a}'") == '1'
+            assert sql(f"SELECT count(*) FROM radius_ops_access_rules ar JOIN radius_ops_accounts a ON a.id=ar.account_id WHERE a.username='testadminB' AND ar.profile_id='{group_b}'") == '1'
+            assert sql("SELECT collection_name FROM radius_ops_resolve_access('testadminA','127.0.0.1'::inet)") == 'All registered NAS'
+            print('PASS Permission Profiles and per-NAS access rules sync to FreeRADIUS SQL policy')
 
             api('/api/radius-ops/macs', 'POST', {
                 'companyId':'lab-company-a','mac':'02:aa:bb:cc:dd:ee',
