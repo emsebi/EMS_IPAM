@@ -174,7 +174,6 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
-                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread') as thread, \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -194,7 +193,6 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', return_value=None), \
                  patch.object(supervisor, 'sql_config'), \
-                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen') as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -223,7 +221,6 @@ class NasReloadLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
-                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -403,3 +400,47 @@ class VolatileLiveMonitorTest(TestCase):
             self.assertEqual(conn.getresponse().status,200);conn.close()
         finally:
             server.shutdown();server.server_close()
+
+
+class LiveUdpTransportTest(TestCase):
+    def setUp(self):
+        with supervisor.LIVE_LOCK:
+            supervisor.LIVE_EVENTS.clear()
+            supervisor.LIVE_SUBSCRIBERS.clear()
+            supervisor.LIVE_SEQ=0
+
+    def tearDown(self):
+        with supervisor.LIVE_LOCK:
+            supervisor.LIVE_EVENTS.clear()
+            supervisor.LIVE_SUBSCRIBERS.clear()
+
+    def test_udp_datagram_feed_is_best_effort_and_memory_only(self):
+        token,_=supervisor.live_start()
+        server=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        server.bind(('127.0.0.1',0))
+        address=server.getsockname()
+        server.close()
+        old_stop=supervisor.STOP
+        supervisor.STOP=False
+        thread=Thread(target=supervisor.live_udp_listener,args=(address,),daemon=True)
+        thread.start()
+        sender=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        try:
+            hx=lambda s:s.encode().hex()
+            line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
+                           hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
+                           hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
+            for _ in range(10):
+                sender.sendto((line+'\n').encode(),address)
+                time.sleep(.02)
+                data=supervisor.live_snapshot(token,0)
+                if data and data['items']:
+                    break
+            self.assertTrue(data['items'])
+            self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
+        finally:
+            sender.close()
+            supervisor.STOP=True
+            thread.join(1)
+            supervisor.STOP=old_stop
+            supervisor.live_stop(token)

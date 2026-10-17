@@ -4,7 +4,7 @@ import collections,json,os,pathlib,re,secrets,signal,socket,subprocess,threading
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 STOP=False;RUNNING=False;RUNNING_SINCE=0.0;CHILD=None;DB_READY=False
 LIVE_LOCK=threading.Lock();LIVE_EVENTS=collections.deque(maxlen=1000);LIVE_SUBSCRIBERS={};LIVE_SEQ=0
-LIVE_FIFO=pathlib.Path('/run/ems-radius-live.fifo')
+LIVE_UDP=('127.0.0.1',18121)
 
 def stop(*_):
  global STOP
@@ -108,30 +108,24 @@ def parse_live_line(line):
   'reason':_hex_text(reason_hex),
  }
 
-def setup_live_pipe(path=LIVE_FIFO):
- p=pathlib.Path(path)
- try:
-  if p.exists() or p.is_symlink():p.unlink()
- except OSError:pass
- os.mkfifo(p,0o600)
- return p
-
-def live_pipe_reader(path=LIVE_FIFO):
- # Keep one RDWR descriptor open so rlm_linelog never blocks waiting for a
- # transient reader.  The FIFO lives in /run and is never a persistent log.
- fd=os.open(path,os.O_RDWR)
- buffer=b''
+def live_udp_listener(address=LIVE_UDP):
+ # RADIUS request processing must never wait for the operator monitor.  UDP
+ # makes the feed best-effort: if this listener is unavailable the event is
+ # dropped by the kernel and authentication continues normally.
+ sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+ sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
+ sock.bind(address);sock.settimeout(.5)
  try:
   while not STOP:
-   chunk=os.read(fd,4096)
-   if not chunk:time.sleep(.05);continue
-   buffer+=chunk
-   while b'\n' in buffer:
-    raw,buffer=buffer.split(b'\n',1)
+   try:data,_=sock.recvfrom(65535)
+   except socket.timeout:continue
+   except OSError:
+    if STOP:break
+    continue
+   for raw in data.splitlines():
     event=parse_live_line(raw.decode('ascii','replace'))
     if event:live_add(event)
- finally:
-  os.close(fd)
+ finally:sock.close()
 
 def service_output_reader(pipe):
  # Normal daemon output is also volatile.  It is streamed only while an
@@ -244,8 +238,7 @@ def fingerprint():
 
 def main():
  global RUNNING,RUNNING_SINCE,CHILD,DB_READY
- setup_live_pipe()
- threading.Thread(target=live_pipe_reader,daemon=True).start()
+ threading.Thread(target=live_udp_listener,daemon=True).start()
  threading.Thread(target=lambda:ThreadingHTTPServer(('0.0.0.0',18120),Health).serve_forever(),daemon=True).start()
  sql_config()
  print('[radius-ops] Waiting for database migrations',flush=True)
