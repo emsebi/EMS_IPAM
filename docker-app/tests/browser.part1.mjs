@@ -212,23 +212,35 @@ try {
   await page.locator('#rGroupForm [type=submit]').click();
   await page.locator('.r-list').getByText('Network Admin', { exact: true }).waitFor();
 
+  await page.locator('.r-tabs button[data-tab="collections"]').click();
+  await page.locator('#rAdd').click();
+  await page.locator('#rCollectionForm [name="companyId"]').selectOption('test-co');
+  await page.locator('#rCollectionForm [name="name"]').fill('Browser Hotspot');
+  await page.locator('#rCollectionForm [name="members"]').fill('192.0.2.0/24');
+  await page.locator('#rCollectionForm [type=submit]').click();
+  await page.locator('.r-list').getByText('Browser Hotspot', { exact: true }).waitFor();
+
   await page.locator('.r-tabs button[data-tab="users"]').click();
   await page.locator('#rAdd').click();
   await page.locator('#rUserForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rUserForm [name="username"]').fill('browseradmin');
   await page.locator('#rUserForm [name="label"]').fill('Browser Admin');
-  await page.locator('#rUserGroup').selectOption({ label: 'Network Admin' });
   await page.locator('#rUserForm [name="password"]').fill('BrowserAdminPassword123!');
+  const accessRow = page.locator('.r-rule-row').filter({ hasText: 'Browser Hotspot' });
+  await accessRow.locator('.rRuleCheck').check();
+  await accessRow.locator('.rRuleProfile').selectOption({ label: 'Network Admin' });
   await page.locator('#rUserForm [type=submit]').click();
   await page.locator('.r-list').getByText('browseradmin', { exact: true }).waitFor();
   const radiusUsers = await api('/api/radius-ops/accounts');
   const browserUser = radiusUsers.items.find((item) => item.username === 'browseradmin');
-  assert.ok(browserUser); assert.equal(browserUser.groupName, 'Network Admin');
+  assert.ok(browserUser); assert.equal(browserUser.accessRules.length, 1);
+  assert.equal(browserUser.accessRules[0].collectionName, 'Browser Hotspot');
+  assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
 
   await page.locator('.r-tabs button[data-tab="clients"]').click();
-  const nasRow = page.locator('.r-list tbody tr').filter({ hasText: 'Browser NAS' });
-  await nasRow.locator('.rConfig').click();
+  await page.locator('#rOpenConfig').click();
+  await page.locator('#rConfigForm [name="clientId"]').selectOption({ label: 'Browser NAS — 192.0.2.200' });
   await page.locator('#rConfigForm [name="vendor"]').selectOption('cisco-ios');
   await page.locator('#rConfigForm [name="radiusIp"]').fill('192.0.2.5');
   await page.locator('#rConfigForm [type=submit]').click();
