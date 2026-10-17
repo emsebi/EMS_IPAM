@@ -191,3 +191,12 @@ test('operator UI exposes one volatile Live RADIUS Logs console',()=>{
  assert.match(ui,/attemptedPassword/);
  assert.equal(en['radius.simple.liveLogs'],'Live RADIUS Logs');
 });
+
+test('v25 per-NAS resolver preserves Inventory fail-closed guards',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/007-per-nas-inventory-guard.sql'),'utf8');
+ assert.match(sql,/LEFT JOIN hosts h ON h\.id=d\.host_id/);
+ assert.match(sql,/h\.deleted_at IS NULL/);
+ assert.match(sql,/s\.deleted_at IS NULL/);
+ assert.match(sql,/s\.company_id=d\.company_id/);
+ assert.match(sql,/d\.host_id IS NULL OR/);
+});
