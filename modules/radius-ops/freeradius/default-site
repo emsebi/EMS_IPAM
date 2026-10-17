@@ -26,6 +26,15 @@ server default {
     chap
     mschap
     sql
+    # Device-admin authorization is resolved from the actual UDP packet
+    # source.  The most-specific NAS collection member wins; ambiguous
+    # equal-prefix profiles fail closed in radius_ops_resolve_access().
+    if ("%{sql:SELECT count(*) FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}" == "1") {
+      update reply {
+        Cisco-AVPair := "shell:priv-lvl=%{sql:SELECT cisco_privilege FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}"
+        Mikrotik-Group := "%{sql:SELECT mikrotik_group FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}"
+      }
+    }
     pap
   }
 

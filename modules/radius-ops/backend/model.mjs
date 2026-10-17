@@ -18,6 +18,16 @@ export function nasSource(v){
  const mask=(0xffffffff << (32-prefix))>>>0;
  return `${intIpv4(ipv4Int(parts[0])&mask)}/${prefix}`;
 }
+export function accessScope(v){
+ if(typeof v!=='string')throw fail('Invalid access scope');
+ const raw=v.trim(),parts=raw.split('/');
+ if(parts.length>2||isIP(parts[0])!==4||Number(parts[0].split('.')[0])>=224)throw fail('Invalid access scope');
+ const prefix=parts.length===1?32:Number(parts[1]);
+ if(!Number.isInteger(prefix)||prefix<0||prefix>32||String(prefix)!==(parts[1]??'32'))throw fail('Access scope prefix must be between /0 and /32');
+ if(prefix===32)return parts[0];
+ const mask=prefix===0?0:(0xffffffff << (32-prefix))>>>0;
+ return `${intIpv4(ipv4Int(parts[0])&mask)}/${prefix}`;
+}
 export function mac(v){if(typeof v!=='string')throw fail('Invalid MAC');const x=v.replace(/[.:-]/g,'').toLowerCase();if(!/^[0-9a-f]{12}$/.test(x)||x==='000000000000'||(parseInt(x.slice(0,2),16)&1))throw fail('Invalid unicast MAC');return x.match(/../g).join(':');}
 export function aliases(v){const h=mac(v).replaceAll(':','');return [...new Set([h,h.toUpperCase(),h.match(/.{4}/g).join('.'),h.match(/.{4}/g).join('.').toUpperCase(),h.match(/.{2}/g).join(':'),h.match(/.{2}/g).join(':').toUpperCase(),h.match(/.{2}/g).join('-'),h.match(/.{2}/g).join('-').toUpperCase()])];}
 export function vid(v){if(v===null||v===undefined||v==='')return null;if(!/^[1-9][0-9]{0,3}$/.test(String(v))||Number(v)>4094)throw fail('Invalid VLAN');return Number(v);}

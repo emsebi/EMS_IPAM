@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
-import {mac,aliases,secret,cli,replies,vid,nasSource} from '../backend/model.mjs';import {createModule} from '../backend/index.mjs';
+import {mac,aliases,secret,cli,replies,vid,nasSource,accessScope} from '../backend/model.mjs';import {createModule} from '../backend/index.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const shared='aabbccddeeff00112233445566778899';
 test('MAC formats, multicast denial and aliases',()=>{assert.equal(mac('aa-bb-cc-dd-ee-f0'),'aa:bb:cc:dd:ee:f0');assert.ok(aliases('aa:bb:cc:dd:ee:f0').includes('aabb.ccdd.eef0'));assert.throws(()=>mac('ff:ff:ff:ff:ff:ff'));});
@@ -130,4 +130,35 @@ test('v23 simple AAA migration supports direct NAS ranges and group membership',
 test('device update treats explicit null hostId as unlink from inventory', () => {
   const source = fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
   assert.match(source, /hasOwnProperty\.call\(b,'hostId'\)\?f\.hostId:old\.host_id/);
+});
+
+test('v24 access scopes accept /0 and canonicalize individual addresses',()=>{
+ assert.equal(accessScope('0.0.0.0/0'),'0.0.0.0/0');
+ assert.equal(accessScope('192.168.2.1'),'192.168.2.1');
+ assert.equal(accessScope('192.168.2.99/21'),'192.168.0.0/21');
+ assert.throws(()=>accessScope('239.1.1.1/32'));
+});
+
+test('v24 per-NAS permission profiles are fail-closed and most-specific',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/006-per-nas-permission-profiles.sql'),'utf8');
+ const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS radius_ops_collections/);
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS radius_ops_access_rules/);
+ assert.match(sql,/radius_ops_resolve_access/);
+ assert.match(sql,/ORDER BY masklen\(d\.nas_ip\) DESC/);
+ assert.match(sql,/prefix_len=\(SELECT max\(prefix_len\) FROM candidates\)/);
+ assert.match(sql,/count\(DISTINCT profile_id\).*winners/);
+ assert.match(sql,/'0\.0\.0\.0\/0'::inet/);
+ assert.match(site,/radius_ops_resolve_access/);
+ assert.match(site,/Cisco-AVPair/);
+ assert.match(site,/Mikrotik-Group/);
+});
+
+test('v24 backend exposes NAS collections and user access-rule matrix',()=>{
+ const source=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ assert.match(source,/radius_ops_collections/);
+ assert.match(source,/radius_ops_collection_members/);
+ assert.match(source,/radius_ops_access_rules/);
+ assert.match(source,/accessRules:accessRules\(b\.accessRules\)/);
+ assert.match(source,/Conflicting permission profiles for access scope/);
 });
