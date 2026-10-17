@@ -7,10 +7,11 @@ RUN python3 /opt/ems-radius/sanitize-queries.py \
  && ln -s /run/ems-radius-sql.conf /etc/freeradius/3.0/mods-available/sql \
  && ln -sf ../mods-available/sql /etc/freeradius/3.0/mods-enabled/sql
 COPY default-site /etc/freeradius/3.0/sites-enabled/default
+COPY live-log /etc/freeradius/3.0/mods-enabled/ems-live-log
 COPY clients.conf /etc/freeradius/3.0/clients.conf
 COPY supervisor.py /opt/ems-radius/supervisor.py
 COPY udp_probe.py /opt/ems-radius/udp_probe.py
-RUN chmod 0644 /etc/freeradius/3.0/sites-enabled/default /etc/freeradius/3.0/clients.conf
+RUN chmod 0644 /etc/freeradius/3.0/sites-enabled/default /etc/freeradius/3.0/mods-enabled/ems-live-log /etc/freeradius/3.0/clients.conf
 # Drop privileges permanently. Docker Compose drops CAP_CHOWN and every other capability.
 USER freerad
 EXPOSE 1812/udp 1813/udp

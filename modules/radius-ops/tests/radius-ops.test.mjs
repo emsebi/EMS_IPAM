@@ -162,3 +162,21 @@ test('v24 backend exposes NAS collections and user access-rule matrix',()=>{
  assert.match(source,/accessRules:accessRules\(b\.accessRules\)/);
  assert.match(source,/Conflicting permission profiles for access scope/);
 });
+
+test('live RADIUS operator feed is volatile and admin-proxied',()=>{
+ const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
+ const log=fs.readFileSync(path.join(root,'freeradius/live-log'),'utf8');
+ const supervisor=fs.readFileSync(path.join(root,'freeradius/supervisor.py'),'utf8');
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ assert.match(site,/ems_live_reject/);
+ assert.match(site,/ems_live_accounting/);
+ assert.match(log,/\/run\/ems-radius-live\.fifo/);
+ assert.match(log,/AUTH\|REJECT/);
+ assert.match(log,/%\{hex:%\{User-Password\}\}/);
+ assert.doesNotMatch(log,/\/var\/log|syslog|stdout/);
+ assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
+ assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
+ assert.match(supervisor,/LIVE_EVENTS\.clear\(\)/);
+ assert.match(backend,/radius-ops\/live\/events/);
+ assert.match(backend,/Cache-Control','no-store/);
+});

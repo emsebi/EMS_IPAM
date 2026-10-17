@@ -1,6 +1,7 @@
 """Sidecar unit checks without Docker or a live FreeRADIUS daemon."""
 import importlib.util
 import http.client
+import json
 import os
 import socket
 import time
@@ -173,6 +174,7 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread') as thread, \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -180,7 +182,7 @@ class DatabaseOutageLifecycleTest(TestCase):
             self.assertTrue(child.terminated, 'Database outage must close the UDP listener')
             self.assertFalse(supervisor.DB_READY)
             self.assertEqual(launch.call_count, 1)
-            thread.assert_called_once()
+            self.assertGreaterEqual(thread.call_count, 2)
         finally:
             (supervisor.STOP, supervisor.RUNNING, supervisor.CHILD,
              supervisor.DB_READY, supervisor.RUNNING_SINCE) = old
@@ -192,6 +194,7 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', return_value=None), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'setup_live_pipe'), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen') as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -344,3 +347,58 @@ class UdpListenerHealthTest(TestCase):
             server.shutdown();server.server_close()
             (supervisor.RUNNING,supervisor.RUNNING_SINCE,
              supervisor.CHILD,supervisor.DB_READY)=old
+
+
+class VolatileLiveMonitorTest(TestCase):
+    def setUp(self):
+        with supervisor.LIVE_LOCK:
+            supervisor.LIVE_EVENTS.clear()
+            supervisor.LIVE_SUBSCRIBERS.clear()
+            supervisor.LIVE_SEQ=0
+
+    def tearDown(self):
+        with supervisor.LIVE_LOCK:
+            supervisor.LIVE_EVENTS.clear()
+            supervisor.LIVE_SUBSCRIBERS.clear()
+
+    def test_events_exist_only_for_active_subscriber_and_stop_clears(self):
+        self.assertFalse(supervisor.live_add({'type':'service','message':'discard me'}))
+        token,seq=supervisor.live_start()
+        self.assertEqual(seq,0)
+        self.assertTrue(supervisor.live_add({'type':'authentication','result':'REJECT','attemptedPassword':'bad'}))
+        data=supervisor.live_snapshot(token,0)
+        self.assertEqual(data['items'][0]['attemptedPassword'],'bad')
+        supervisor.live_stop(token)
+        self.assertEqual(list(supervisor.LIVE_EVENTS),[])
+
+    def test_freeradius_line_decodes_failed_pap_value_without_persistence(self):
+        hx=lambda s:s.encode().hex()
+        line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
+                       hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
+                       hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
+        event=supervisor.parse_live_line(line)
+        self.assertEqual(event['username'],'ali')
+        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertEqual(event['nasIdentifier'],'QAZVIN-RTR')
+        self.assertEqual(event['callingStationId'],'10.0.0.5')
+
+    def test_http_live_session_is_short_lived_and_no_store(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),supervisor.Health)
+        Thread(target=server.serve_forever,daemon=True).start()
+        try:
+            conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
+            conn.request('POST','/live/start',body='{}',headers={'Content-Type':'application/json'})
+            response=conn.getresponse();self.assertEqual(response.status,200)
+            self.assertEqual(response.getheader('Cache-Control'),'no-store')
+            token=json.loads(response.read())['token'];conn.close()
+            supervisor.live_add({'type':'service','message':'ready'})
+            conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
+            body=json.dumps({'token':token,'after':0})
+            conn.request('POST','/live/events',body=body,headers={'Content-Type':'application/json'})
+            response=conn.getresponse();payload=json.loads(response.read())
+            self.assertEqual(payload['items'][0]['message'],'ready');conn.close()
+            conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
+            conn.request('POST','/live/stop',body=json.dumps({'token':token}),headers={'Content-Type':'application/json'})
+            self.assertEqual(conn.getresponse().status,200);conn.close()
+        finally:
+            server.shutdown();server.server_close()

@@ -12,6 +12,42 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_.:-]{1,80}$/.test(v))throw f
 const text=(v,max=500)=>{if(v===undefined||v===null)return '';if(typeof v!=='string'||v.length>max||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v))throw fail('Invalid text');return v.trim();};
 const groupRadiusName=id=>`emsgrp_${id.replaceAll('-','')}`;
 
+async function radiusRuntime(path,body){
+ const c=new AbortController(),timer=setTimeout(()=>c.abort(),2500);
+ try{
+  const r=await fetch('http://radius_ops:18120'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),signal:c.signal});
+  const data=await r.json().catch(()=>({ok:false}));
+  if(!r.ok)throw fail(r.status===410?'Live RADIUS session expired':'RADIUS live monitor unavailable',r.status===410?410:503);
+  return data;
+ }catch(e){if(e?.status)throw e;throw fail('RADIUS live monitor unavailable',503);}
+ finally{clearTimeout(timer);}
+}
+async function enrichLiveEvents(pool,items){
+ const candidates=[];
+ for(let i=0;i<items.length&&candidates.length<200;i++){
+  const e=items[i];
+  if(e?.type!=='authentication'&&e?.type!=='accounting')continue;
+  try{ip(e.sourceIp);}catch{continue;}
+  candidates.push({i,u:String(e.username||''),s:e.sourceIp});
+ }
+ if(!candidates.length)return items;
+ const r=await pool.query(`WITH input AS (
+   SELECT (x->>'i')::int AS i,x->>'u' AS username,(x->>'s')::inet AS source_ip
+   FROM jsonb_array_elements($1::jsonb) x
+ )
+ SELECT input.i,d.label AS "deviceLabel",a.collection_name AS "collectionName",g.name AS "profileName"
+ FROM input
+ LEFT JOIN LATERAL (
+   SELECT label FROM radius_ops_devices
+   WHERE enabled AND input.source_ip <<= nas_ip
+   ORDER BY masklen(nas_ip) DESC,id LIMIT 1
+ ) d ON true
+ LEFT JOIN LATERAL radius_ops_resolve_access(input.username,input.source_ip) a ON true
+ LEFT JOIN radius_ops_groups g ON g.id=a.profile_id`,[JSON.stringify(candidates)]);
+ const meta=new Map(r.rows.map(x=>[x.i,x]));
+ return items.map((e,i)=>meta.has(i)?{...e,...meta.get(i)}:e);
+}
+
 function accessRules(v){
  if(v===undefined)return undefined;
  if(!Array.isArray(v)||v.length>256)throw fail('Invalid access rules');
@@ -131,6 +167,9 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
    const reason=!r.nasRegistered?'nas-not-registered':!r.credentialsReady?'identity-not-provisioned':!r.policyAllowed?'tenant-or-inventory-denied':'ready';
    return json(res,200,{ok:true,allowed,reason,nasRegistered:Boolean(r.nasRegistered),credentialsReady:Boolean(r.credentialsReady),policyAllowed:Boolean(r.policyAllowed),scope:'sql-policy-only',udpTested:false});
   }
+  if(m==='POST'&&p===base+'/live/start'){res.setHeader('Cache-Control','no-store');const r=await radiusRuntime('/live/start',{});await audit?.(actor,'start','radius-ops-live','live',{detail:{volatile:true}});return json(res,200,r);}
+  if(m==='POST'&&p===base+'/live/events'){res.setHeader('Cache-Control','no-store');const b=await readBody(req),token=key(b.token),after=Number(b.after??0);if(!Number.isSafeInteger(after)||after<0)throw fail('Invalid live sequence');const r=await radiusRuntime('/live/events',{token,after});r.items=await enrichLiveEvents(pool,r.items||[]);return json(res,200,r);}
+  if(m==='POST'&&p===base+'/live/stop'){res.setHeader('Cache-Control','no-store');const b=await readBody(req),token=key(b.token);const r=await radiusRuntime('/live/stop',{token});await audit?.(actor,'stop','radius-ops-live','live',{detail:{volatile:true}});return json(res,200,r);}
   if(m==='GET'&&p===base+'/overview'){
    const [d,g,a,macs,events]=await Promise.all([
     pool.query('SELECT count(*)::int total,count(*) FILTER(WHERE enabled)::int active FROM radius_ops_devices'),

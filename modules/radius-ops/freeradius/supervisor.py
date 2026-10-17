@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """FreeRADIUS SQL NAS watcher. Does not log secrets or expose Docker socket."""
-import json,os,pathlib,re,signal,socket,subprocess,threading,time
+import collections,json,os,pathlib,re,secrets,signal,socket,subprocess,threading,time
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 STOP=False;RUNNING=False;RUNNING_SINCE=0.0;CHILD=None;DB_READY=False
+LIVE_LOCK=threading.Lock();LIVE_EVENTS=collections.deque(maxlen=1000);LIVE_SUBSCRIBERS={};LIVE_SEQ=0
+LIVE_FIFO=pathlib.Path('/run/ems-radius-live.fifo')
 
 def stop(*_):
  global STOP
@@ -42,11 +44,136 @@ def udp_listeners_ready(ports=(1812, 1813), proc_file='/proc/net/udp', pid=None)
   return all(bool(inodes & owned) for inodes in port_inodes.values())
  except (OSError,ValueError):return False
 
+def _live_prune(now=None):
+ now=time.monotonic() if now is None else now
+ expired=[token for token,deadline in LIVE_SUBSCRIBERS.items() if deadline<=now]
+ for token in expired:LIVE_SUBSCRIBERS.pop(token,None)
+ if not LIVE_SUBSCRIBERS:LIVE_EVENTS.clear()
+
+def live_start():
+ global LIVE_SEQ
+ with LIVE_LOCK:
+  _live_prune()
+  if not LIVE_SUBSCRIBERS:
+   LIVE_EVENTS.clear();LIVE_SEQ=0
+  token=secrets.token_urlsafe(24)
+  LIVE_SUBSCRIBERS[token]=time.monotonic()+12
+  return token,LIVE_SEQ
+
+def live_snapshot(token,after=0):
+ with LIVE_LOCK:
+  _live_prune()
+  if token not in LIVE_SUBSCRIBERS:return None
+  LIVE_SUBSCRIBERS[token]=time.monotonic()+12
+  return {'active':True,'seq':LIVE_SEQ,'items':[e for e in LIVE_EVENTS if e['seq']>after]}
+
+def live_stop(token):
+ with LIVE_LOCK:
+  LIVE_SUBSCRIBERS.pop(token,None);_live_prune()
+  return True
+
+def live_add(event):
+ global LIVE_SEQ
+ with LIVE_LOCK:
+  _live_prune()
+  if not LIVE_SUBSCRIBERS:return False
+  LIVE_SEQ+=1
+  item={'seq':LIVE_SEQ,'at':time.time(),**event}
+  LIVE_EVENTS.append(item)
+  return True
+
+def _hex_text(value):
+ if not value:return ''
+ try:return bytes.fromhex(value).decode('utf-8','replace')
+ except (ValueError,UnicodeDecodeError):return ''
+
+def parse_live_line(line):
+ parts=line.rstrip('\r\n').split('|')
+ if len(parts)!=13:return None
+ kind,result,user_hex,password_hex,source_hex,nas_ip_hex,nas_id_hex,calling_hex,called_hex,nas_port_hex,nas_port_id_hex,method_hex,reason_hex=parts
+ if kind not in ('AUTH','ACCT'):return None
+ return {
+  'type':'authentication' if kind=='AUTH' else 'accounting',
+  'result':result,
+  'username':_hex_text(user_hex),
+  'attemptedPassword':_hex_text(password_hex) if kind=='AUTH' and result=='REJECT' else '',
+  'sourceIp':_hex_text(source_hex),
+  'nasIp':_hex_text(nas_ip_hex),
+  'nasIdentifier':_hex_text(nas_id_hex),
+  'callingStationId':_hex_text(calling_hex),
+  'calledStationId':_hex_text(called_hex),
+  'nasPort':_hex_text(nas_port_hex),
+  'nasPortId':_hex_text(nas_port_id_hex),
+  'authMethod':_hex_text(method_hex),
+  'reason':_hex_text(reason_hex),
+ }
+
+def setup_live_pipe(path=LIVE_FIFO):
+ p=pathlib.Path(path)
+ try:
+  if p.exists() or p.is_symlink():p.unlink()
+ except OSError:pass
+ os.mkfifo(p,0o600)
+ return p
+
+def live_pipe_reader(path=LIVE_FIFO):
+ # Keep one RDWR descriptor open so rlm_linelog never blocks waiting for a
+ # transient reader.  The FIFO lives in /run and is never a persistent log.
+ fd=os.open(path,os.O_RDWR)
+ buffer=b''
+ try:
+  while not STOP:
+   chunk=os.read(fd,4096)
+   if not chunk:time.sleep(.05);continue
+   buffer+=chunk
+   while b'\n' in buffer:
+    raw,buffer=buffer.split(b'\n',1)
+    event=parse_live_line(raw.decode('ascii','replace'))
+    if event:live_add(event)
+ finally:
+  os.close(fd)
+
+def service_output_reader(pipe):
+ # Normal daemon output is also volatile.  It is streamed only while an
+ # authenticated live-log subscriber exists; it is not copied to Docker logs.
+ try:
+  for line in pipe:
+   msg=line.rstrip('\r\n')
+   if msg:live_add({'type':'service','result':'INFO','message':msg})
+ finally:
+  try:pipe.close()
+  except Exception:pass
+
 class Health(BaseHTTPRequestHandler):
+ def _json(self,status,payload):
+  data=json.dumps(payload,separators=(',',':')).encode()
+  self.send_response(status);self.send_header('Content-Type','application/json')
+  self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(data)))
+  self.end_headers();self.wfile.write(data)
+ def _body(self):
+  try:n=int(self.headers.get('Content-Length','0'))
+  except ValueError:return {}
+  if n<0 or n>4096:return {}
+  try:return json.loads(self.rfile.read(n) or b'{}')
+  except (json.JSONDecodeError,UnicodeDecodeError):return {}
  def do_GET(self):
   if self.path!='/health':self.send_error(404);return
   healthy=DB_READY and RUNNING and CHILD is not None and CHILD.poll() is None and (time.monotonic()-RUNNING_SINCE)>=2.0 and udp_listeners_ready(pid=getattr(CHILD,'pid',None))
-  data=json.dumps({'running':healthy,'eap':False}).encode();self.send_response(200 if healthy else 503);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+  self._json(200 if healthy else 503,{'running':healthy,'eap':False,'liveVolatile':True})
+ def do_POST(self):
+  if self.path=='/live/start':
+   token,seq=live_start();self._json(200,{'ok':True,'token':token,'seq':seq,'volatile':True});return
+  if self.path=='/live/events':
+   body=self._body();token=body.get('token','');after=body.get('after',0)
+   if not isinstance(token,str) or not isinstance(after,int) or after<0:self._json(400,{'ok':False});return
+   data=live_snapshot(token,after)
+   if data is None:self._json(410,{'ok':False,'active':False});return
+   self._json(200,{'ok':True,**data});return
+  if self.path=='/live/stop':
+   body=self._body();token=body.get('token','')
+   if isinstance(token,str):live_stop(token)
+   self._json(200,{'ok':True});return
+  self.send_error(404)
  def log_message(self,*_):pass
 
 def sql_config(runtime_dir=None):
@@ -117,6 +244,8 @@ def fingerprint():
 
 def main():
  global RUNNING,RUNNING_SINCE,CHILD,DB_READY
+ setup_live_pipe()
+ threading.Thread(target=live_pipe_reader,daemon=True).start()
  threading.Thread(target=lambda:ThreadingHTTPServer(('0.0.0.0',18120),Health).serve_forever(),daemon=True).start()
  sql_config()
  print('[radius-ops] Waiting for database migrations',flush=True)
@@ -129,12 +258,13 @@ def main():
    time.sleep(3)
    continue
   try:
-   p=subprocess.Popen(['/usr/sbin/freeradius','-f','-l','stdout'])
+   p=subprocess.Popen(['/usr/sbin/freeradius','-f','-l','stdout'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
   except OSError:
    DB_READY=False
    time.sleep(3)
    continue
   CHILD=p
+  if getattr(p,'stdout',None) is not None:threading.Thread(target=service_output_reader,args=(p.stdout,),daemon=True).start()
   RUNNING=p.poll() is None
   RUNNING_SINCE=time.monotonic()
   while not STOP and p.poll() is None:
