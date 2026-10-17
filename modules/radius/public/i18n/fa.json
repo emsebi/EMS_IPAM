@@ -101,5 +101,14 @@
   "radius.simple.resume": "ادامه",
   "radius.simple.clear": "پاک‌کردن",
   "radius.simple.autoScroll": "اسکرول خودکار",
-  "radius.simple.liveWaiting": "در انتظار رویداد زنده RADIUS…"
+  "radius.simple.liveWaiting": "در انتظار رویداد زنده RADIUS…",
+  "radius.simple.secretProfiles": "پروفایل‌های Shared Secret",
+  "radius.simple.secretProfilesHint": "Secretهای قابل استفاده مجدد برای NAS. مقدار Secret فقط هنگام ثبت/تغییر دریافت می‌شود و نمایش داده نمی‌شود.",
+  "radius.simple.secretProfile": "پروفایل Secret",
+  "radius.simple.selectSecretProfile": "پروفایل Secret را انتخاب کنید",
+  "radius.simple.secretProfileHint": "NAS از Secret این پروفایل استفاده می‌کند. در رنج‌های همپوشان، تعریف با Prefix خاص‌تر اولویت دارد.",
+  "radius.simple.profileName": "نام پروفایل",
+  "radius.simple.addSecretProfile": "افزودن پروفایل Secret",
+  "radius.simple.assignedDevices": "NASهای متصل",
+  "radius.simple.cancelEdit": "لغو ویرایش"
 }

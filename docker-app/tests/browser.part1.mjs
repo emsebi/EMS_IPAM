@@ -191,16 +191,24 @@ try {
   await page.locator('.r-tabs button[data-tab="clients"]').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/radius$/);
 
+  await page.locator('#rSecretsOpen').click();
+  await page.locator('#rSecretForm [name="companyId"]').selectOption('test-co');
+  await page.locator('#rSecretForm [name="name"]').fill('Browser Shared Secret');
+  await page.locator('#rSecretForm [name="secret"]').fill('browser-radius-secret-123456');
+  await page.locator('#rSecretForm [type=submit]').click();
+  await page.locator('.r-secret-list').getByText('Browser Shared Secret', { exact: true }).waitFor();
+  await page.locator('#rSecretClose').click();
   await page.locator('#rAdd').click();
   await page.locator('#rClientForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rClientForm [name="label"]').fill('Browser NAS');
   await page.locator('#rClientForm [name="nasIp"]').fill('192.0.2.200');
-  await page.locator('#rClientForm [name="secret"]').fill('browser-radius-secret-123456');
+  await page.locator('#rClientForm [name="secretProfileId"]').selectOption({ label: 'Browser Shared Secret' });
   await page.locator('#rClientForm [type=submit]').click();
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   const radiusDevices = await api('/api/radius-ops/devices');
   const browserNas = radiusDevices.items.find((item) => item.label === 'Browser NAS');
   assert.ok(browserNas); assert.equal(browserNas.nasIp, '192.0.2.200');
+  assert.equal(browserNas.secretProfileName, 'Browser Shared Secret');
   assert.equal(Object.hasOwn(browserNas, 'secret'), false);
 
   await page.locator('.r-tabs button[data-tab="groups"]').click();

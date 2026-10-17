@@ -101,5 +101,14 @@
   "radius.simple.resume": "Resume",
   "radius.simple.clear": "Clear",
   "radius.simple.autoScroll": "Auto-scroll",
-  "radius.simple.liveWaiting": "Waiting for live RADIUS events…"
+  "radius.simple.liveWaiting": "Waiting for live RADIUS events…",
+  "radius.simple.secretProfiles": "Shared Secret Profiles",
+  "radius.simple.secretProfilesHint": "Reusable RADIUS client secrets. Secret values are write-only.",
+  "radius.simple.secretProfile": "Secret profile",
+  "radius.simple.selectSecretProfile": "Select secret profile",
+  "radius.simple.secretProfileHint": "The NAS uses this shared secret. Overlapping CIDRs use the most-specific NAS definition.",
+  "radius.simple.profileName": "Profile name",
+  "radius.simple.addSecretProfile": "Add secret profile",
+  "radius.simple.assignedDevices": "Assigned NAS",
+  "radius.simple.cancelEdit": "Cancel edit"
 }
