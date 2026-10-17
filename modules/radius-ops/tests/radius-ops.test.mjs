@@ -212,3 +212,10 @@ test('v26 secret profiles allow deterministic NAS CIDR overlap',()=>{
  assert.match(backend,/radius_ops_secret_profiles/);
  assert.match(backend,/Secret profile is assigned to a NAS/);
 });
+
+test('NAS source explicitly supports dynamic /0 fallback without relaxing broad CIDRs',()=>{
+ assert.equal(nasSource('0.0.0.0/0'),'0.0.0.0/0');
+ assert.equal(nasSource('192.168.2.99/21'),'192.168.0.0/21');
+ assert.throws(()=>nasSource('0.0.0.1'));
+ assert.throws(()=>nasSource('10.0.0.0/7'));
+});

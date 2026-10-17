@@ -9,11 +9,19 @@ function ipv4Int(v){return v.split('.').reduce((n,p)=>((n<<8)|Number(p))>>>0,0)>
 function intIpv4(n){return [24,16,8,0].map(s=>(n>>>s)&255).join('.');}
 export function nasSource(v){
  if(typeof v!=='string')throw fail('Invalid NAS IP/CIDR');
- const raw=v.trim(), parts=raw.split('/');
- if(parts.length>2||isIP(parts[0])!==4||Number(parts[0].split('.')[0])===0||Number(parts[0].split('.')[0])>=224)throw fail('Invalid NAS IP/CIDR');
- if(parts.length===1)return parts[0];
- if(!/^(?:[8-9]|[12][0-9]|3[0-2])$/.test(parts[1]))throw fail('NAS CIDR prefix must be between /8 and /32');
+ const raw=v.trim(),parts=raw.split('/');
+ if(parts.length>2||isIP(parts[0])!==4||Number(parts[0].split('.')[0])>=224)throw fail('Invalid NAS IP/CIDR');
+ if(parts.length===1){
+  if(Number(parts[0].split('.')[0])===0)throw fail('Invalid NAS IP/CIDR');
+  return parts[0];
+ }
+ if(!/^(?:0|[8-9]|[12][0-9]|3[0-2])$/.test(parts[1]))throw fail('NAS CIDR prefix must be /0 or between /8 and /32');
  const prefix=Number(parts[1]);
+ // /0 is an explicit dynamic-NAS fallback.  Do not silently turn arbitrary
+ // 0/8 addresses into exact clients, and keep the historical /8 minimum for
+ // all narrower broad-client definitions.
+ if(prefix===0)return '0.0.0.0/0';
+ if(Number(parts[0].split('.')[0])===0)throw fail('Invalid NAS IP/CIDR');
  if(prefix===32)return parts[0];
  const mask=(0xffffffff << (32-prefix))>>>0;
  return `${intIpv4(ipv4Int(parts[0])&mask)}/${prefix}`;
