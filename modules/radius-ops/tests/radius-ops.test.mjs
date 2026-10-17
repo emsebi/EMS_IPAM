@@ -200,3 +200,15 @@ test('v25 per-NAS resolver preserves Inventory fail-closed guards',()=>{
  assert.match(sql,/s\.company_id=d\.company_id/);
  assert.match(sql,/d\.host_id IS NULL OR/);
 });
+
+test('v26 secret profiles allow deterministic NAS CIDR overlap',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/008-secret-profiles.sql'),'utf8');
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS radius_ops_secret_profiles/);
+ assert.match(sql,/secret_profile_id/);
+ assert.match(backend,/checkNasDuplicate/);
+ assert.doesNotMatch(backend,/checkNasOverlap/);
+ assert.match(backend,/nas_ip=\$1::inet/);
+ assert.match(backend,/radius_ops_secret_profiles/);
+ assert.match(backend,/Secret profile is assigned to a NAS/);
+});

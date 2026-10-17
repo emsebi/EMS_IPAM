@@ -195,8 +195,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '7', f'Expected seven versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-007')
+            assert count == '8', f'Expected eight versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-008')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -217,6 +217,14 @@ def main():
             assert direct_b['nasIp'] == '127.10.20.0/24'
             assert 'secret' not in direct_b
             print('PASS direct single-IP and CIDR NAS registration with write-only secrets')
+            fallback_secret = secrets.token_hex(22)
+            fallback_nas = api('/api/radius-ops/devices', 'POST', {
+                'hostId':None,'companyId':'lab-company-a',
+                'label':'Dynamic Branch Fallback','nasIp':'0.0.0.0/0',
+                'secret':fallback_secret,'enabled':True})['id']
+            assert sql("SELECT count(*) FROM radius_ops_devices WHERE nas_ip='0.0.0.0/0'::inet") == '1'
+            assert sql("SELECT count(*) FROM radius_ops_secret_profiles p JOIN radius_ops_devices d ON d.secret_profile_id=p.id WHERE d.id='"+fallback_nas+"'") == '1'
+            print('PASS reusable secret profile and overlapping /0 NAS registration')
 
             group_a = api('/api/radius-ops/groups', 'POST', {
                 'companyId':'lab-company-a','name':'Network Admin A',
@@ -297,6 +305,9 @@ def main():
 
             wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'),
                  'UDP Access-Accept from registered NAS', seconds=35)
+            assert not radtest('testadminA',password_a,fallback_secret,'Access-Accept'), 'Specific /32 secret must override /0 fallback'
+            assert nas_udp('127.20.0.2','127.20.0.2','testadminA',password_a,fallback_secret,'Access-Accept')
+            print('PASS longest-prefix NAS secret selection (/32 overrides /0 fallback)')
             assert radtest('testadminA','definitely-wrong-password',secret_a,'Access-Reject')
             print('PASS UDP Access-Reject for wrong password')
             assert radtest('testadminB',password_b,secret_a,'Access-Reject')
@@ -365,7 +376,7 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '7'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '8'
             print('PASS persistent data and migration ledger after restart')
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
