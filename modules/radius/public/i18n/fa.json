@@ -134,5 +134,8 @@
   "radius.simple.collectionMembershipHint": "این Collection فقط یک گروه اسمی از NASهای ثبت‌شده است. عضویت NASها را از تب RADIUS Clients تعیین کنید.",
   "radius.simple.nasCollections": "NAS Collectionها",
   "radius.simple.nasCollectionsHint": "این NAS می‌تواند عضو یک یا چند Collection باشد.",
-  "radius.simple.noNasMembers": "هنوز NASی عضو این Collection نیست"
+  "radius.simple.noNasMembers": "هنوز NASی عضو این Collection نیست",
+  "radius.simple.defaultLabel": "پیش‌فرض",
+  "radius.simple.manageCollections": "مدیریت NAS Collectionها",
+  "radius.simple.manageProfiles": "مدیریت Permission Profileها"
 }
