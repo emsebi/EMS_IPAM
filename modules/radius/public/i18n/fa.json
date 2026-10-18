@@ -41,7 +41,7 @@
   "radius.simple.sourceIp": "IP مبدأ",
   "radius.simple.running": "FreeRADIUS فعال است",
   "radius.simple.offline": "وضعیت FreeRADIUS تأیید نشده",
-  "radius.simple.noSecrets": "Shared Secret و رمز کاربر بعد از ذخیره دوباره نمایش داده نمی‌شوند.",
+  "radius.simple.noSecrets": "Secret و رمز کاربر در جدول مخفی هستند؛ ادمین می‌تواند با Show مقدار واقعی را ببیند.",
   "radius.simple.noAutoPush": "EMS هیچ کانفیگی را خودکار روی تجهیزات شبکه Push نمی‌کند.",
   "radius.simple.configTitle": "کانفیگ دستی تجهیز",
   "radius.simple.radiusServer": "IP سرور RADIUS",
@@ -103,7 +103,7 @@
   "radius.simple.autoScroll": "اسکرول خودکار",
   "radius.simple.liveWaiting": "در انتظار رویداد زنده RADIUS…",
   "radius.simple.secretProfiles": "پروفایل‌های Shared Secret",
-  "radius.simple.secretProfilesHint": "Secretهای قابل استفاده مجدد برای NAS. مقدار Secret فقط هنگام ثبت/تغییر دریافت می‌شود و نمایش داده نمی‌شود.",
+  "radius.simple.secretProfilesHint": "Secretهای قابل استفاده مجدد برای NAS. مقدارها به‌صورت پیش‌فرض مخفی‌اند و ادمین می‌تواند آن‌ها را Reveal کند.",
   "radius.simple.secretProfile": "پروفایل Secret",
   "radius.simple.selectSecretProfile": "پروفایل Secret را انتخاب کنید",
   "radius.simple.secretProfileHint": "NAS از Secret این پروفایل استفاده می‌کند. در رنج‌های همپوشان، تعریف با Prefix خاص‌تر اولویت دارد.",
@@ -123,5 +123,12 @@
   "radius.simple.diagMessages": "پیام‌های اخیر سرویس",
   "radius.simple.loading": "در حال بررسی RADIUS…",
   "radius.simple.liveConnected": "متصل",
-  "radius.simple.liveReconnecting": "در حال اتصال مجدد…"
+  "radius.simple.liveReconnecting": "در حال اتصال مجدد…",
+  "radius.simple.showSecret": "نمایش Secret",
+  "radius.simple.showPassword": "نمایش رمز",
+  "radius.simple.sharedSecret": "Shared Secret",
+  "radius.simple.credentialRevealHint": "این مقدار واقعی Credential است. بعد از استفاده Hide کنید.",
+  "radius.simple.hide": "مخفی‌کردن",
+  "radius.simple.copied": "کپی شد",
+  "radius.simple.copyFailed": "کپی انجام نشد"
 }
