@@ -191,6 +191,15 @@ try {
   await page.locator('.r-tabs button[data-tab="clients"]').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/radius$/);
 
+  await page.locator('.r-tabs button[data-tab="collections"]').click();
+  await page.locator('#rAdd').click();
+  await page.locator('#rCollectionForm [name="companyId"]').selectOption('test-co');
+  await page.locator('#rCollectionForm [name="name"]').fill('Browser Hotspot');
+  assert.equal(await page.locator('#rCollectionForm [name="members"]').count(), 0);
+  await page.locator('#rCollectionForm [type=submit]').click();
+  await page.locator('.r-list').getByText('Browser Hotspot', { exact: true }).waitFor();
+
+  await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('#rSecretsOpen').click();
   await page.locator('#rSecretForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rSecretForm [name="name"]').fill('Browser Shared Secret');
@@ -202,17 +211,21 @@ try {
   await page.locator('.r-credential-value code').getByText('shortsec', { exact: true }).waitFor();
   await page.locator('#rCredentialHide').click();
   await page.locator('#rSecretClose').click();
+
   await page.locator('#rAdd').click();
   await page.locator('#rClientForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rClientForm [name="label"]').fill('Browser NAS');
   await page.locator('#rClientForm [name="nasIp"]').fill('192.0.2.200');
   await page.locator('#rClientForm [name="secretProfileId"]').selectOption({ label: 'Browser Shared Secret' });
+  const collectionChoice = page.locator('#rClientCollections .r-rule-check').filter({ hasText: 'Browser Hotspot' });
+  await collectionChoice.locator('.rClientCollection').check();
   await page.locator('#rClientForm [type=submit]').click();
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   const radiusDevices = await api('/api/radius-ops/devices');
   const browserNas = radiusDevices.items.find((item) => item.label === 'Browser NAS');
   assert.ok(browserNas); assert.equal(browserNas.nasIp, '192.0.2.200');
   assert.equal(browserNas.secretProfileName, 'Browser Shared Secret');
+  assert.deepEqual(browserNas.collectionNames, ['Browser Hotspot']);
   assert.equal(Object.hasOwn(browserNas, 'secret'), false);
 
   await page.locator('.r-tabs button[data-tab="groups"]').click();
@@ -225,12 +238,8 @@ try {
   await page.locator('.r-list').getByText('Network Admin', { exact: true }).waitFor();
 
   await page.locator('.r-tabs button[data-tab="collections"]').click();
-  await page.locator('#rAdd').click();
-  await page.locator('#rCollectionForm [name="companyId"]').selectOption('test-co');
-  await page.locator('#rCollectionForm [name="name"]').fill('Browser Hotspot');
-  await page.locator('#rCollectionForm [name="members"]').fill('192.0.2.0/24');
-  await page.locator('#rCollectionForm [type=submit]').click();
-  await page.locator('.r-list').getByText('Browser Hotspot', { exact: true }).waitFor();
+  const collectionRow = page.locator('.r-list tbody tr').filter({ hasText: 'Browser Hotspot' });
+  await collectionRow.getByText('Browser NAS', { exact: false }).waitFor();
 
   await page.locator('.r-tabs button[data-tab="users"]').click();
   await page.locator('#rAdd').click();
