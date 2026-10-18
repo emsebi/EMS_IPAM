@@ -211,8 +211,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '8', f'Expected eight versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-008')
+            assert count == '9', f'Expected nine versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-009')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -372,15 +372,18 @@ def main():
             api('/api/radius-ops/devices/'+nas_a, 'PUT', {
                 'label':'Lab NAS A','vendor':'cisco-legacy','nasIp':'127.0.0.1',
                 'enabled':False})
-            assert sql("SELECT count(*) FROM nas WHERE nasname='127.0.0.1'") == '0'
-            time.sleep(12)  # Sidecar polls fingerprint every 5 seconds and restarts.
-            assert not radtest('testadminA',password_a,secret_a,'Access-Accept')
-            print('PASS NAS removal and SQL client reload deny authentication')
+            # A disabled specific NAS remains in FreeRADIUS as a client shadow,
+            # so a broader /0 secret can never take over this source.
+            assert sql("SELECT count(*) FROM nas WHERE nasname='127.0.0.1'") == '1'
+            assert sql("SELECT radius_ops_identity_allowed('testadminA','127.0.0.1'::inet)") == 'f'
+            assert radtest('testadminA',password_a,secret_a,'Access-Reject')
+            assert not radtest('testadminA',password_a,fallback_secret,'Access-Accept')
+            print('PASS disabled /32 NAS shadows /0 fallback and rejects authentication')
             api('/api/radius-ops/devices/'+nas_a, 'PUT', {
                 'label':'Lab NAS A','vendor':'cisco-legacy','nasIp':'127.0.0.1',
                 'enabled':True})
             wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'),
-                 'NAS reactivation reloads FreeRADIUS', seconds=45)
+                 'NAS reactivation restores authorization', seconds=30)
             # Secret rotation must invalidate the previous shared secret and
             # reload the live SQL client list without a manual daemon restart.
             old_secret_a = secret_a
@@ -397,7 +400,7 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '8'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '9'
             print('PASS persistent data and migration ledger after restart')
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
