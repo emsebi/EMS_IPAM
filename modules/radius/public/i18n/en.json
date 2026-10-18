@@ -112,5 +112,14 @@
   "radius.simple.assignedDevices": "Assigned NAS",
   "radius.simple.cancelEdit": "Cancel edit",
   "radius.simple.passwordWeakWarning": "Passwords shorter than 12 characters are allowed, but are considered weak.",
-  "radius.simple.secretWeakWarning": "Shared secrets shorter than 20 characters are allowed, but are considered weak."
+  "radius.simple.secretWeakWarning": "Shared secrets shorter than 20 characters are allowed, but are considered weak.",
+  "radius.simple.diagnostics": "RADIUS Diagnostics",
+  "radius.simple.diagnosticsHint": "Checks the database, FreeRADIUS process, UDP listeners and live-log collector.",
+  "radius.simple.diagDb": "Database ready",
+  "radius.simple.diagProcess": "FreeRADIUS process",
+  "radius.simple.diag1812": "UDP 1812 authentication",
+  "radius.simple.diag1813": "UDP 1813 accounting",
+  "radius.simple.diagLive": "Live log collector",
+  "radius.simple.diagMessages": "Recent service messages",
+  "radius.simple.loading": "Checking RADIUS…"
 }
