@@ -58,9 +58,9 @@
   "radius.simple.vendorCiscoLegacy": "Cisco قدیمی",
   "radius.simple.vendorMikrotik": "MikroTik",
   "radius.simple.vendorOther": "سایر",
-  "radius.simple.secretHint": "حداقل ۲۰ کاراکتر",
+  "radius.simple.secretHint": "هر Secret غیرخالی با کاراکترهای مجاز پذیرفته می‌شود؛ ۲۰ کاراکتر یا بیشتر پیشنهاد می‌شود",
   "radius.simple.mikrotikGroupHint": "یکی از گروه‌های پیش‌فرض RouterOS را انتخاب کنید یا برای گروه ساخته‌شده روی روتر، گزینه سفارشی را بزنید.",
-  "radius.simple.passwordHint": "حداقل ۱۲ کاراکتر",
+  "radius.simple.passwordHint": "هر رمز غیرخالی مجاز است؛ ۱۲ کاراکتر یا بیشتر پیشنهاد می‌شود",
   "radius.simple.ciscoHelpTitle": "راهنمای سطح دسترسی Cisco",
   "radius.simple.ciscoHelp0": "0 — دسترسی حداقلی؛ معمولاً فقط مجموعه بسیار محدودی از فرمان‌ها مثل خروج/راهنما.",
   "radius.simple.ciscoHelp1": "1 — User EXEC؛ سطح معمول ورود با دسترسی پایین.",
@@ -110,5 +110,7 @@
   "radius.simple.profileName": "نام پروفایل",
   "radius.simple.addSecretProfile": "افزودن پروفایل Secret",
   "radius.simple.assignedDevices": "NASهای متصل",
-  "radius.simple.cancelEdit": "لغو ویرایش"
+  "radius.simple.cancelEdit": "لغو ویرایش",
+  "radius.simple.passwordWeakWarning": "رمز کمتر از ۱۲ کاراکتر مجاز است، ولی ضعیف محسوب می‌شود.",
+  "radius.simple.secretWeakWarning": "Shared Secret کمتر از ۲۰ کاراکتر مجاز است، ولی ضعیف محسوب می‌شود."
 }

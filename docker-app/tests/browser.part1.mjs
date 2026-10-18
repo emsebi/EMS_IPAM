@@ -194,7 +194,7 @@ try {
   await page.locator('#rSecretsOpen').click();
   await page.locator('#rSecretForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rSecretForm [name="name"]').fill('Browser Shared Secret');
-  await page.locator('#rSecretForm [name="secret"]').fill('browser-radius-secret-123456');
+  await page.locator('#rSecretForm [name="secret"]').fill('shortsec');
   await page.locator('#rSecretForm [type=submit]').click();
   await page.locator('.r-secret-list').getByText('Browser Shared Secret', { exact: true }).waitFor();
   await page.locator('#rSecretClose').click();
@@ -233,7 +233,7 @@ try {
   await page.locator('#rUserForm [name="companyId"]').selectOption('test-co');
   await page.locator('#rUserForm [name="username"]').fill('browseradmin');
   await page.locator('#rUserForm [name="label"]').fill('Browser Admin');
-  await page.locator('#rUserForm [name="password"]').fill('BrowserAdminPassword123!');
+  await page.locator('#rUserForm [name="password"]').fill('1234');
   const accessRow = page.locator('.r-rule-row').filter({ hasText: 'Browser Hotspot' });
   await accessRow.locator('.rRuleCheck').check();
   await accessRow.locator('.rRuleProfile').selectOption({ label: 'Network Admin' });
@@ -255,8 +255,8 @@ try {
   await page.locator('#rConfigText').getByText(/aaa new-model/).waitFor();
   const configText = await page.locator('#rConfigText').textContent();
   assert.match(configText, /radius server EMS-RADIUS/);
-  assert.match(configText, /BrowserAdminPassword123!|browser-radius-secret-123456/);
-  assert.equal(configText.includes('BrowserAdminPassword123!'), false);
+  assert.match(configText, /1234|shortsec/);
+  assert.equal(configText.includes('1234'), false);
   check('RADIUS simple client/group/user flow persists and manual config is generated');
 
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();

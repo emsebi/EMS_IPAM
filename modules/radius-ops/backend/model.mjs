@@ -2,8 +2,8 @@ import {isIP} from 'node:net';
 export const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export function name(v){if(typeof v!=='string'||!v.trim()||v.trim().length>120||/[\u0000-\u001f\u007f]/.test(v))throw fail('Invalid name');return v.trim();}
 export function user(v){if(typeof v!=='string'||!/^[A-Za-z][A-Za-z0-9_.@-]{0,63}$/.test(v))throw fail('Invalid username');return v;}
-export function password(v){if(typeof v!=='string'||v.length<12||v.length>128||/[\u0000-\u001f\u007f]/.test(v))throw fail('Password must be 12-128 characters');return v;}
-export function secret(v){if(typeof v!=='string'||v.length<20||v.length>128||!/^[A-Za-z0-9._@%+=:,!^-]+$/.test(v))throw fail('NAS secret must be 20-128 safe ASCII characters');return v;}
+export function password(v){if(typeof v!=='string'||v.length<1||v.length>128||/[\u0000-\u001f\u007f]/.test(v))throw fail('Password must be 1-128 characters without control characters');return v;}
+export function secret(v){if(typeof v!=='string'||v.length<1||v.length>128||!/^[A-Za-z0-9._@%+=:,!^-]+$/.test(v))throw fail('NAS secret must be 1-128 safe ASCII characters');return v;}
 export function ip(v){if(typeof v!=='string'||isIP(v)!==4||Number(v.split('.')[0])===0||Number(v.split('.')[0])>=224)throw fail('Invalid IPv4');return v;}
 function ipv4Int(v){return v.split('.').reduce((n,p)=>((n<<8)|Number(p))>>>0,0)>>>0;}
 function intIpv4(n){return [24,16,8,0].map(s=>(n>>>s)&255).join('.');}

@@ -223,3 +223,20 @@ test('NAS source explicitly supports dynamic /0 fallback without relaxing broad 
  assert.throws(()=>nasSource('0.0.0.1'));
  assert.throws(()=>nasSource('10.0.0.0/7'));
 });
+
+test('RADIUS credentials allow short values but still reject empty/control characters',()=>{
+ assert.equal(password('1234'),'1234');
+ assert.equal(secret('abc123'),'abc123');
+ assert.throws(()=>password(''));
+ assert.throws(()=>password('ok\nno'));
+ assert.throws(()=>secret(''));
+ assert.throws(()=>secret('bad secret'));
+});
+test('RADIUS UI warns instead of blocking short password and shared secret',()=>{
+ const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
+ const en=JSON.parse(fs.readFileSync(path.join(root,'../radius/public/i18n/en.json'),'utf8'));
+ assert.doesNotMatch(ui,/name="password"[^>]*minlength=/);
+ assert.doesNotMatch(ui,/name="secret"[^>]*minlength=/);
+ assert.match(en['radius.simple.passwordWeakWarning'],/allowed.*weak/i);
+ assert.match(en['radius.simple.secretWeakWarning'],/allowed.*weak/i);
+});

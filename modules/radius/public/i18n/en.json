@@ -58,9 +58,9 @@
   "radius.simple.vendorCiscoLegacy": "Cisco legacy",
   "radius.simple.vendorMikrotik": "MikroTik",
   "radius.simple.vendorOther": "Other",
-  "radius.simple.secretHint": "20+ characters",
+  "radius.simple.secretHint": "Any non-empty safe ASCII secret; 20+ characters recommended",
   "radius.simple.mikrotikGroupHint": "Choose a RouterOS default group or select Custom for a group you created on the router.",
-  "radius.simple.passwordHint": "12+ characters",
+  "radius.simple.passwordHint": "Any non-empty password; 12+ characters recommended",
   "radius.simple.ciscoHelpTitle": "Cisco privilege levels",
   "radius.simple.ciscoHelp0": "0 — Minimal access; normally only a very small command set such as logout/help.",
   "radius.simple.ciscoHelp1": "1 — User EXEC; the normal low-privilege login level.",
@@ -110,5 +110,7 @@
   "radius.simple.profileName": "Profile name",
   "radius.simple.addSecretProfile": "Add secret profile",
   "radius.simple.assignedDevices": "Assigned NAS",
-  "radius.simple.cancelEdit": "Cancel edit"
+  "radius.simple.cancelEdit": "Cancel edit",
+  "radius.simple.passwordWeakWarning": "Passwords shorter than 12 characters are allowed, but are considered weak.",
+  "radius.simple.secretWeakWarning": "Shared secrets shorter than 20 characters are allowed, but are considered weak."
 }
