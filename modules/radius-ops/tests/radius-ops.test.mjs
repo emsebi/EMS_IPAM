@@ -170,13 +170,14 @@ test('live RADIUS operator feed is volatile and admin-proxied',()=>{
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
  assert.match(site,/ems_live_reject/);
  assert.match(site,/ems_live_accounting/);
- assert.match(log,/\/run\/ems-radius-live\.fifo/);
+ assert.match(log,/\/run\/ems-radius-live\.log/);
  assert.match(log,/AUTH\|REJECT/);
  assert.match(log,/%\{hex:%\{User-Password\}\}/);
  assert.doesNotMatch(log,/\/var\/log|syslog|stdout/);
  assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
- assert.match(supervisor,/LIVE_FIFO=pathlib\.Path\('\/run\/ems-radius-live\.fifo'\)/);
- assert.match(supervisor,/os\.open\(path,os\.O_RDWR\)/);
+ assert.match(supervisor,/LIVE_FILE=pathlib\.Path\('\/run\/ems-radius-live\.log'\)/);
+ assert.match(supervisor,/LIVE_FILE_LIMIT=1024\*1024/);
+ assert.match(supervisor,/p\.open\('w'/);
  assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
  assert.match(supervisor,/LIVE_EVENTS\.clear\(\)/);
  assert.match(backend,/base\+'\/live\/events'/);
@@ -237,4 +238,16 @@ test('RADIUS UI warns instead of blocking short password and shared secret',()=>
  assert.doesNotMatch(ui,/name="secret"[^>]*minlength=/);
  assert.match(en['radius.simple.passwordWeakWarning'],/allowed.*weak/i);
  assert.match(en['radius.simple.secretWeakWarning'],/allowed.*weak/i);
+});
+
+test('RADIUS diagnostics are available to the admin UI without shell access',()=>{
+ const supervisor=fs.readFileSync(path.join(root,'freeradius/supervisor.py'),'utf8');
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
+ assert.match(supervisor,/self\.path=='\/diagnostics'/);
+ assert.match(supervisor,/auth1812Ready/);
+ assert.match(supervisor,/accounting1813Ready/);
+ assert.match(supervisor,/liveCollectorReady/);
+ assert.match(backend,/base\+'\/diagnostics'/);
+ assert.match(ui,/id="rDiagOpen"/);
 });
