@@ -163,25 +163,23 @@ test('v24 backend exposes NAS collections and user access-rule matrix',()=>{
  assert.match(source,/Conflicting permission profiles for access scope/);
 });
 
-test('live RADIUS operator feed is volatile and admin-proxied',()=>{
+test('live RADIUS operator feed uses native FreeRADIUS bad-password logging',()=>{
+ const dockerfile=fs.readFileSync(path.join(root,'freeradius/Dockerfile'),'utf8');
  const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
- const log=fs.readFileSync(path.join(root,'freeradius/live-log'),'utf8');
  const supervisor=fs.readFileSync(path.join(root,'freeradius/supervisor.py'),'utf8');
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
- assert.match(site,/ems_live_reject/);
- assert.match(site,/ems_live_accounting/);
- assert.match(log,/destination = udp/);
- assert.match(log,/server = "127\.0\.0\.1"/);
- assert.match(log,/port = 18121/);
- assert.match(log,/AUTH\|REJECT/);
- assert.match(log,/%\{hex:%\{User-Password\}\}/);
- assert.doesNotMatch(log,/\/var\/log|syslog|stdout/);
+ assert.match(dockerfile,/auth_badpass = yes/);
+ assert.match(dockerfile,/auth_goodpass = no/);
+ assert.match(dockerfile,/EMSLIVE\|REJECT/);
+ assert.doesNotMatch(dockerfile,/ems-live-log/);
+ assert.doesNotMatch(site,/ems_live_(?:accept|reject|accounting)/);
+ assert.match(supervisor,/parse_native_auth_line/);
+ assert.match(supervisor,/EMSLIVE\|REJECT/);
  assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
- assert.match(supervisor,/LIVE_UDP=\('127\.0\.0\.1',18121\)/);
- assert.match(supervisor,/LIVE_COLLECTOR_READY/);
- assert.match(supervisor,/socket\.SOCK_DGRAM/);
  assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
  assert.match(supervisor,/LIVE_EVENTS\.clear\(\)/);
+ assert.match(supervisor,/stdout=subprocess\.PIPE/);
+ assert.match(supervisor,/not copied to Docker logs|never forwarded to Docker logs/);
  assert.match(backend,/base\+'\/live\/events'/);
  assert.match(backend,/Cache-Control','no-store/);
 });
