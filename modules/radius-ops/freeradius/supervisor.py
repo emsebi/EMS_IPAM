@@ -100,7 +100,7 @@ def parse_live_line(line):
   method_hex,client_hex,reason_hex)=parts
  if kind not in ('AUTH','ACCT'):return None
  method=_hex_text(method_hex)
- attempted=_hex_text(password_hex) if kind=='AUTH' and result=='REJECT' else ''
+ attempted=_hex_text(password_hex) if kind=='AUTH' else ''
  return {
   'type':'authentication' if kind=='AUTH' else 'accounting',
   'result':result,
