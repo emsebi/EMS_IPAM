@@ -58,15 +58,12 @@ server default {
 
   accounting {
     sql
-    ems_live_accounting
   }
 
   post-auth {
     sql
-    ems_live_accept
     Post-Auth-Type REJECT {
       sql
-      ems_live_reject
     }
   }
 }

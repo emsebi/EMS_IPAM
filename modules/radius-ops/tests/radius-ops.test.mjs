@@ -165,30 +165,20 @@ test('v28 migrates legacy CIDR collection intent to matching registered NAS memb
  assert.match(sql,/ON CONFLICT\(collection_id,device_id\) DO NOTHING/);
 });
 
-test('live RADIUS operator feed uses FreeRADIUS 3.x linelog stdout syntax',()=>{
+test('live RADIUS auth feed uses native FreeRADIUS 3.x logging',()=>{
  const dockerfile=fs.readFileSync(path.join(root,'freeradius/Dockerfile'),'utf8');
- const live=fs.readFileSync(path.join(root,'freeradius/live-log'),'utf8');
  const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
  const supervisor=fs.readFileSync(path.join(root,'freeradius/supervisor.py'),'utf8');
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
- assert.match(dockerfile,/COPY live-log .*mods-available\/ems-live-log/);
- assert.match(dockerfile,/mods-enabled\/ems-live-log/);
- assert.doesNotMatch(dockerfile,/auth_badpass = yes|msg_badpass/);
- assert.match(live,/filename = \/dev\/stdout/);
- assert.match(live,/permissions = 0002/);
- assert.doesNotMatch(live,/destination = stdout/);
- assert.match(live,/EMSLIVE\|AUTH\|REJECT/);
- assert.match(live,/%\{hex:%\{User-Name\}\}/);
- assert.match(live,/%\{hex:%\{User-Password\}\}/);
- assert.match(live,/%\{hex:%\{Packet-Src-IP-Address\}\}/);
- assert.match(live,/%\{hex:%\{NAS-Identifier\}\}/);
- assert.match(live,/%\{hex:%\{Calling-Station-Id\}\}/);
- assert.match(live,/%\{hex:%\{Framed-IP-Address\}\}/);
- assert.match(site,/ems_live_accept/);
- assert.match(site,/ems_live_reject/);
- assert.match(site,/ems_live_accounting/);
- assert.match(supervisor,/parse_native_auth_line/);
- assert.match(supervisor,/marker='EMSLIVE\|'/);
+ assert.match(dockerfile,/auth = yes/);
+ assert.match(dockerfile,/auth_badpass = yes/);
+ assert.match(dockerfile,/auth_goodpass = yes/);
+ assert.match(dockerfile,/msg_badpass = " EMSMETA src=%\{request:Packet-Src-IP-Address\}/);
+ assert.match(dockerfile,/msg_goodpass = " EMSMETA src=%\{request:Packet-Src-IP-Address\}/);
+ assert.doesNotMatch(dockerfile,/ems-live-log/);
+ assert.doesNotMatch(site,/ems_live_(?:accept|reject|accounting)/);
+ assert.match(supervisor,/Login \(\?P<state>OK\|incorrect\)/);
+ assert.match(supervisor,/EMSMETA /);
  assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
  assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
  assert.match(supervisor,/stdout=subprocess\.PIPE/);

@@ -429,33 +429,43 @@ class NativeAuthLogParserTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
-    def test_structured_linelog_reject_decodes_all_operator_fields(self):
-        hx=lambda text:text.encode().hex()
-        msg='EMSLIVE|'+'|'.join([
-            'AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('10.1.1.240'),
-            hx('10.1.1.240'),hx('EMS-VM'),hx('10.1.1.161'),hx('router-login'),
-            hx('10.1.1.161'),hx('1'),hx('login'),hx('PAP'),hx('ems_test'),
-            hx('pap failed')])
+    def test_native_badpass_decodes_operator_fields(self):
+        msg=('Sun Oct 18 12:00:00 2026 : Auth: (7) Login incorrect '
+             '(pap: CLEAR TEXT password check failed): [ali/WrongPass!] '
+             '(from client ems_test port 1 cli 10.1.1.161) '
+             'EMSMETA src=10.1.1.240;nasip=10.1.1.240;nasid=EMS-VM;'
+             'calling=10.1.1.161;called=router-login;framed=10.1.1.161;method=PAP')
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['result'],'REJECT')
         self.assertEqual(event['username'],'ali')
         self.assertEqual(event['attemptedPassword'],'WrongPass!')
         self.assertEqual(event['sourceIp'],'10.1.1.240')
         self.assertEqual(event['nasIdentifier'],'EMS-VM')
+        self.assertEqual(event['callingStationId'],'10.1.1.161')
         self.assertEqual(event['framedIpAddress'],'10.1.1.161')
         self.assertEqual(event['clientShortname'],'ems_test')
+        self.assertEqual(event['authMethod'],'PAP')
 
-    def test_structured_linelog_accept_can_show_pap_password(self):
-        hx=lambda text:text.encode().hex()
-        msg='EMSLIVE|'+'|'.join([
-            'AUTH','ACCEPT',hx('ali'),hx('GoodPass'),hx('10.1.1.240'),
-            hx('10.1.1.240'),hx('EMS-VM'),hx('10.1.1.161'),'',
-            hx('10.1.1.161'),'','',''+hx('PAP'),hx('ems_test'),''])
+    def test_native_goodpass_decodes_accept(self):
+        msg=('Auth: (8) Login OK: [ali/GoodPass] '
+             '(from client ems_test port 2 cli 10.1.1.161) '
+             'EMSMETA src=10.1.1.240;nasip=10.1.1.240;nasid=EMS-VM;'
+             'calling=10.1.1.161;called=router-login;framed=10.1.1.161;method=PAP')
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['result'],'ACCEPT')
         self.assertEqual(event['username'],'ali')
         self.assertEqual(event['attemptedPassword'],'GoodPass')
-        self.assertEqual(event['authMethod'],'PAP')
+        self.assertEqual(event['sourceIp'],'10.1.1.240')
+
+    def test_no_user_password_placeholder_is_not_presented_as_password(self):
+        msg=('Auth: (9) Login incorrect: [ali/<no User-Password attribute>] '
+             '(from client ems_test port 0) EMSMETA src=10.1.1.240;'
+             'nasip=10.1.1.240;nasid=EMS-VM;calling=;called=;framed=;method=CHAP')
+        event=supervisor.parse_native_auth_line(msg)
+        self.assertEqual(event['username'],'ali')
+        self.assertEqual(event['attemptedPassword'],'')
+        self.assertFalse(event['passwordAvailable'])
+        self.assertEqual(event['authMethod'],'CHAP')
 
     def test_unknown_client_transport_error_exposes_source(self):
         event=supervisor.parse_native_auth_line(
@@ -464,13 +474,12 @@ class NativeAuthLogParserTest(TestCase):
         self.assertEqual(event['result'],'DROP')
         self.assertEqual(event['sourceIp'],'192.0.2.9')
 
-    def test_service_reader_keeps_structured_password_only_in_live_memory(self):
+    def test_service_reader_keeps_native_password_only_in_live_memory(self):
         token,_=supervisor.live_start()
-        hx=lambda text:text.encode().hex()
-        line='EMSLIVE|'+'|'.join([
-            'AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
-            hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
-            hx('10.0.0.5'),'','',''+hx('PAP'),hx('ems_test'),hx('pap failed')])+'\n'
+        line=('Auth: (10) Login incorrect: [ali/WrongPass!] '
+              '(from client ems_test port 0 cli 10.0.0.5) '
+              'EMSMETA src=127.0.0.1;nasip=127.0.0.1;nasid=QAZVIN-RTR;'
+              'calling=10.0.0.5;called=;framed=10.0.0.5;method=PAP\n')
         old_ready=supervisor.LIVE_COLLECTOR_READY
         try:
             supervisor.service_output_reader(iter([line]))
@@ -486,4 +495,3 @@ class NativeAuthLogParserTest(TestCase):
         self.assertFalse(supervisor.live_add({'type':'authentication','result':'REJECT',
                                               'username':'nobody','attemptedPassword':'bad'}))
         self.assertEqual(list(supervisor.LIVE_EVENTS),[])
-
