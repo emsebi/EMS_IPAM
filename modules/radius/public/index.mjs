@@ -29,7 +29,7 @@ export function createUi(ctx){
     <label>${esc(tr('radius.simple.name'))}<input name="label" required maxlength="120" value="${esc(x.label||'')}"></label>
     <label>${esc(tr('radius.simple.source'))}<input name="nasIp" required dir="ltr" value="${esc(x.nasIp||'')}" placeholder="10.10.10.5 / 10.10.10.0/24 / 0.0.0.0/0"><small>${esc(tr('radius.simple.sourceHint'))}</small></label>
     <label>${esc(tr('radius.simple.secretProfile'))}<select id="rClientSecret" name="secretProfileId" required><option value="">${esc(tr('radius.simple.selectSecretProfile'))}</option>${profiles.map(p=>opt(p.id,p.name,x.secretProfileId)).join('')}</select><small>${esc(tr('radius.simple.secretProfileHint'))}</small></label>
-    <div class="wide r-access-wrap"><div class="r-access-title"><b>${esc(tr('radius.simple.nasCollections'))}</b><small>${esc(tr('radius.simple.nasCollectionsHint'))}</small></div><div id="rClientCollections">${clientCollectionChecks(companyId,x.collectionIds||[],!editing)}</div><button id="rManageCollections" class="btn sm r-manage-link" type="button">${esc(tr('radius.simple.manageCollections'))}</button></div>
+    <div class="wide r-access-wrap"><div class="r-access-title"><b>${esc(tr('radius.simple.nasCollections'))}</b><small>${esc(tr('radius.simple.nasCollectionsHint'))}</small></div><div id="rClientCollections">${clientCollectionChecks(companyId,x.collectionIds||[],false)}</div><button id="rManageCollections" class="btn sm r-manage-link" type="button">${esc(tr('radius.simple.manageCollections'))}</button></div>
     <label class="r-check wide"><input name="enabled" type="checkbox" ${x.enabled!==false?'checked':''}> ${esc(tr('radius.simple.enabled'))}</label>
     <p class="r-note wide">🔒 ${esc(tr('radius.simple.noSecrets'))}</p><div class="r-actions wide"><button class="btn primary" type="submit">${esc(tr('radius.simple.save'))}</button></div>
   </form></section>`;}
@@ -58,7 +58,7 @@ export function createUi(ctx){
     <label>${esc(tr('radius.simple.username'))}<input name="username" required maxlength="64" dir="ltr" ${editing?'disabled':''} value="${esc(x.username||'')}"></label>
     <label>${esc(tr('radius.simple.displayName'))}<input name="label" required maxlength="120" value="${esc(x.label||x.username||'')}"></label>
     <label class="wide">${esc(editing?tr('radius.simple.passwordEdit'):tr('radius.simple.password'))}<input name="password" type="password" ${editing?'':'required'} maxlength="128" autocomplete="new-password" placeholder="${esc(tr('radius.simple.passwordHint'))}"><small class="r-weak-note">⚠ ${esc(tr('radius.simple.passwordWeakWarning'))}</small></label>
-    <div class="wide r-access-wrap"><div class="r-access-title"><b>${esc(tr('radius.simple.accessRules'))}</b><small>${esc(tr('radius.simple.accessRulesHint'))}</small></div><div id="rAccessMatrix">${accessMatrix(companyId,x.accessRules||[],!editing)}</div><button id="rManageProfiles" class="btn sm r-manage-link" type="button">${esc(tr('radius.simple.manageProfiles'))}</button></div>
+    <div class="wide r-access-wrap"><div class="r-access-title"><b>${esc(tr('radius.simple.accessRules'))}</b><small>${esc(tr('radius.simple.accessRulesHint'))}</small></div><div id="rAccessMatrix">${accessMatrix(companyId,x.accessRules||[],false)}</div><button id="rManageProfiles" class="btn sm r-manage-link" type="button">${esc(tr('radius.simple.manageProfiles'))}</button></div>
     <label class="r-check wide"><input name="enabled" type="checkbox" ${x.enabled!==false?'checked':''}> ${esc(tr('radius.simple.enabled'))}</label>
     <p class="r-note wide">🔒 ${esc(tr('radius.simple.noSecrets'))}</p><div class="r-actions wide"><button class="btn primary" type="submit">${esc(tr('radius.simple.save'))}</button></div>
   </form></section>`;}
@@ -114,11 +114,11 @@ export function createUi(ctx){
     page.querySelector('#rOpenConfig')?.addEventListener('click',()=>{configOpen=true;configClient=null;formOpen=false;editing=null;draw();});
     page.querySelector('#rConfigClose')?.addEventListener('click',()=>{configOpen=false;configClient=null;draw();});
     page.querySelector('#rClientForm')?.addEventListener('submit',saveClient);
-    page.querySelector('#rClientCompany')?.addEventListener('change',e=>{const sel=page.querySelector('#rClientSecret');if(sel)sel.innerHTML=`<option value="">${esc(tr('radius.simple.selectSecretProfile'))}</option>`+activeSecrets(e.target.value).map(p=>opt(p.id,p.name,'')).join('');const wrap=page.querySelector('#rClientCollections');if(wrap)wrap.innerHTML=clientCollectionChecks(e.target.value,[],true);});
+    page.querySelector('#rClientCompany')?.addEventListener('change',e=>{const sel=page.querySelector('#rClientSecret');if(sel)sel.innerHTML=`<option value="">${esc(tr('radius.simple.selectSecretProfile'))}</option>`+activeSecrets(e.target.value).map(p=>opt(p.id,p.name,'')).join('');const wrap=page.querySelector('#rClientCollections');if(wrap)wrap.innerHTML=clientCollectionChecks(e.target.value,[],false);});
     page.querySelector('#rGroupForm')?.addEventListener('submit',saveGroup);
     page.querySelector('#rCollectionForm')?.addEventListener('submit',saveCollection);
     page.querySelector('#rUserForm')?.addEventListener('submit',saveUser);
-    page.querySelector('#rUserCompany')?.addEventListener('change',e=>{const wrap=page.querySelector('#rAccessMatrix');if(wrap){wrap.innerHTML=accessMatrix(e.target.value,[],true);bindRuleRows();}});
+    page.querySelector('#rUserCompany')?.addEventListener('change',e=>{const wrap=page.querySelector('#rAccessMatrix');if(wrap){wrap.innerHTML=accessMatrix(e.target.value,[],false);bindRuleRows();}});
     page.querySelector('#rManageCollections')?.addEventListener('click',()=>{tab='collections';formOpen=false;editing=null;draw();});
     page.querySelector('#rManageProfiles')?.addEventListener('click',()=>{tab='groups';formOpen=false;editing=null;draw();});
     bindRuleRows();
