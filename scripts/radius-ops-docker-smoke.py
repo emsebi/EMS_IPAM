@@ -211,8 +211,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '9', f'Expected nine versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-009')
+            assert count == '10', f'Expected ten versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-010')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -241,6 +241,22 @@ def main():
             assert sql("SELECT count(*) FROM radius_ops_devices WHERE nas_ip='0.0.0.0/0'::inet") == '1'
             assert sql("SELECT count(*) FROM radius_ops_secret_profiles p JOIN radius_ops_devices d ON d.secret_profile_id=p.id WHERE d.id='"+fallback_nas+"'") == '1'
             print('PASS reusable secret profile and overlapping /0 NAS registration')
+
+            collection_a = api('/api/radius-ops/collections', 'POST', {
+                'companyId':'lab-company-a','name':'Main Routers',
+                'description':'Named NAS group, no raw CIDR scope','enabled':True})['id']
+            # Assign membership from the NAS object itself.
+            api('/api/radius-ops/devices/'+nas_a, 'PUT', {
+                'hostId':'lab-host-a','companyId':'lab-company-a',
+                'label':'Lab NAS A','vendor':'cisco-legacy','nasIp':'127.0.0.1',
+                'secretProfileId':next(x['secretProfileId'] for x in api('/api/radius-ops/devices')['items'] if x['id']==nas_a),
+                'collectionIds':[collection_a],'enabled':True})
+            cols = api('/api/radius-ops/collections')['items']
+            main_col = next(x for x in cols if x['id'] == collection_a)
+            assert [m['id'] for m in main_col['members']] == [nas_a]
+            assert main_col['members'][0]['nasIp'] == '127.0.0.1'
+            assert sql(f"SELECT count(*) FROM radius_ops_collection_devices WHERE collection_id='{collection_a}' AND device_id='{nas_a}'") == '1'
+            print('PASS named NAS Collection membership is assigned from the NAS object')
 
             group_a = api('/api/radius-ops/groups', 'POST', {
                 'companyId':'lab-company-a','name':'Network Admin A',
@@ -421,7 +437,7 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '9'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '10'
             print('PASS persistent data and migration ledger after restart')
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
