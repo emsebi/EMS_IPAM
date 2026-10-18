@@ -409,7 +409,7 @@ class VolatileLiveMonitorTest(TestCase):
 
 
 
-class LiveUdpTransportTest(TestCase):
+class NativeAuthLogParserTest(TestCase):
     def setUp(self):
         with supervisor.LIVE_LOCK:
             supervisor.LIVE_EVENTS.clear()
@@ -421,42 +421,51 @@ class LiveUdpTransportTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
-    def test_loopback_udp_feed_is_memory_only_and_decodes_failed_pap(self):
+    def test_native_badpass_suffix_decodes_user_password_and_source(self):
+        hx=lambda text:text.encode().hex()
+        msg=('Login incorrect: [ali/WrongPass!] (from client ems_test port 0) '
+             'EMSLIVE|REJECT|'+hx('ali')+'|'+hx('WrongPass!')+'|'+hx('127.0.0.1')+
+             '|'+hx('127.0.0.1')+'|'+hx('QAZVIN-RTR')+'|'+hx('10.0.0.5')+
+             '||'+hx('1')+'|'+hx('ether1')+'|'+hx('PAP')+'|'+hx('pap failed'))
+        event=supervisor.parse_native_auth_line(msg)
+        self.assertEqual(event['result'],'REJECT')
+        self.assertEqual(event['username'],'ali')
+        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertEqual(event['sourceIp'],'127.0.0.1')
+        self.assertEqual(event['nasIdentifier'],'QAZVIN-RTR')
+
+    def test_native_accept_line_is_structured_without_password(self):
+        event=supervisor.parse_native_auth_line(
+            'Login OK: [ali] (from client ems_123 port 0 cli 10.0.0.5)')
+        self.assertEqual(event['result'],'ACCEPT')
+        self.assertEqual(event['username'],'ali')
+        self.assertEqual(event['attemptedPassword'],'')
+        self.assertEqual(event['clientShortname'],'ems_123')
+
+    def test_unknown_client_transport_error_exposes_source(self):
+        event=supervisor.parse_native_auth_line(
+            'Ignoring request to auth address * port 1812 bound to server default from unknown client 192.0.2.9 port 41234 proto udp')
+        self.assertEqual(event['type'],'transport')
+        self.assertEqual(event['result'],'DROP')
+        self.assertEqual(event['sourceIp'],'192.0.2.9')
+
+    def test_service_reader_keeps_badpass_only_in_live_memory(self):
         token,_=supervisor.live_start()
-        probe=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        probe.bind(('127.0.0.1',0))
-        address=probe.getsockname()
-        probe.close()
-        old_stop=supervisor.STOP
+        hx=lambda text:text.encode().hex()
+        line=('Login incorrect: [ali/WrongPass!] EMSLIVE|REJECT|'+hx('ali')+'|'+
+              hx('WrongPass!')+'|'+hx('127.0.0.1')+'|'+hx('127.0.0.1')+
+              '||||||'+hx('PAP')+'|'+hx('pap failed')+'\n')
         old_ready=supervisor.LIVE_COLLECTOR_READY
-        supervisor.STOP=False
-        thread=Thread(target=supervisor.live_udp_listener,args=(address,),daemon=True)
-        thread.start()
-        sender=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
         try:
-            hx=lambda text:text.encode().hex()
-            line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
-                           hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
-                           hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
-            data=None
-            for _ in range(30):
-                sender.sendto((line+'\n').encode(),address)
-                time.sleep(.03)
-                data=supervisor.live_snapshot(token,0)
-                if data and data['items']:break
+            supervisor.service_output_reader(iter([line]))
+            data=supervisor.live_snapshot(token,0)
             self.assertTrue(data['items'])
-            self.assertEqual(data['items'][0]['username'],'ali')
             self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
-            self.assertEqual(data['items'][0]['sourceIp'],'127.0.0.1')
         finally:
-            sender.close()
-            supervisor.STOP=True
-            thread.join(1)
-            supervisor.STOP=old_stop
             supervisor.LIVE_COLLECTOR_READY=old_ready
             supervisor.live_stop(token)
 
-    def test_datagram_without_subscriber_is_not_retained(self):
+    def test_event_without_subscriber_is_not_retained(self):
         self.assertFalse(supervisor.live_add({'type':'authentication','result':'REJECT',
                                               'username':'nobody','attemptedPassword':'bad'}))
         self.assertEqual(list(supervisor.LIVE_EVENTS),[])
