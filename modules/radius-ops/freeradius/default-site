@@ -57,17 +57,12 @@ server default {
   }
 
   accounting {
-    ems_live_accounting
     sql
   }
 
   post-auth {
-    if (&reply:Packet-Type == Access-Accept) {
-      ems_live_accept
-    }
     sql
     Post-Auth-Type REJECT {
-      ems_live_reject
       sql
     }
   }
