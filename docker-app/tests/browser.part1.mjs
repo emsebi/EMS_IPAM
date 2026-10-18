@@ -197,6 +197,10 @@ try {
   await page.locator('#rSecretForm [name="secret"]').fill('shortsec');
   await page.locator('#rSecretForm [type=submit]').click();
   await page.locator('.r-secret-list').getByText('Browser Shared Secret', { exact: true }).waitFor();
+  const secretRow = page.locator('.r-secret-list tbody tr').filter({ hasText: 'Browser Shared Secret' });
+  await secretRow.locator('.rRevealSecret').click();
+  await page.locator('.r-credential-value code').getByText('shortsec', { exact: true }).waitFor();
+  await page.locator('#rCredentialHide').click();
   await page.locator('#rSecretClose').click();
   await page.locator('#rAdd').click();
   await page.locator('#rClientForm [name="companyId"]').selectOption('test-co');
@@ -245,6 +249,10 @@ try {
   assert.equal(browserUser.accessRules[0].collectionName, 'Browser Hotspot');
   assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
+  const userRow = page.locator('.r-list tbody tr').filter({ hasText: 'browseradmin' });
+  await userRow.locator('.rRevealPassword').click();
+  await page.locator('.r-credential-value code').getByText('1234', { exact: true }).waitFor();
+  await page.locator('#rCredentialHide').click();
 
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('#rOpenConfig').click();
