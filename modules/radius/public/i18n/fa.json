@@ -112,5 +112,14 @@
   "radius.simple.assignedDevices": "NASهای متصل",
   "radius.simple.cancelEdit": "لغو ویرایش",
   "radius.simple.passwordWeakWarning": "رمز کمتر از ۱۲ کاراکتر مجاز است، ولی ضعیف محسوب می‌شود.",
-  "radius.simple.secretWeakWarning": "Shared Secret کمتر از ۲۰ کاراکتر مجاز است، ولی ضعیف محسوب می‌شود."
+  "radius.simple.secretWeakWarning": "Shared Secret کمتر از ۲۰ کاراکتر مجاز است، ولی ضعیف محسوب می‌شود.",
+  "radius.simple.diagnostics": "عیب‌یابی RADIUS",
+  "radius.simple.diagnosticsHint": "اتصال دیتابیس، پردازش FreeRADIUS، پورت‌های UDP و جمع‌آوری Live Log را بررسی می‌کند.",
+  "radius.simple.diagDb": "دیتابیس آماده",
+  "radius.simple.diagProcess": "پردازش FreeRADIUS",
+  "radius.simple.diag1812": "احراز هویت UDP 1812",
+  "radius.simple.diag1813": "Accounting UDP 1813",
+  "radius.simple.diagLive": "جمع‌آوری Live Log",
+  "radius.simple.diagMessages": "پیام‌های اخیر سرویس",
+  "radius.simple.loading": "در حال بررسی RADIUS…"
 }
