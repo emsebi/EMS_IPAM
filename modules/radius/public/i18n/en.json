@@ -41,7 +41,7 @@
   "radius.simple.sourceIp": "Source IP",
   "radius.simple.running": "FreeRADIUS running",
   "radius.simple.offline": "FreeRADIUS not verified",
-  "radius.simple.noSecrets": "Secrets and passwords are never shown again after saving.",
+  "radius.simple.noSecrets": "Secrets and user passwords stay hidden in tables; admins can reveal the real value when needed.",
   "radius.simple.noAutoPush": "EMS does not push configuration to network devices.",
   "radius.simple.configTitle": "Manual device configuration",
   "radius.simple.radiusServer": "RADIUS server IP",
@@ -103,7 +103,7 @@
   "radius.simple.autoScroll": "Auto-scroll",
   "radius.simple.liveWaiting": "Waiting for live RADIUS events…",
   "radius.simple.secretProfiles": "Shared Secret Profiles",
-  "radius.simple.secretProfilesHint": "Reusable RADIUS client secrets. Secret values are write-only.",
+  "radius.simple.secretProfilesHint": "Reusable RADIUS client secrets. Values are hidden by default and can be revealed by an admin.",
   "radius.simple.secretProfile": "Secret profile",
   "radius.simple.selectSecretProfile": "Select secret profile",
   "radius.simple.secretProfileHint": "The NAS uses this shared secret. Overlapping CIDRs use the most-specific NAS definition.",
@@ -123,5 +123,12 @@
   "radius.simple.diagMessages": "Recent service messages",
   "radius.simple.loading": "Checking RADIUS…",
   "radius.simple.liveConnected": "Connected",
-  "radius.simple.liveReconnecting": "Reconnecting…"
+  "radius.simple.liveReconnecting": "Reconnecting…",
+  "radius.simple.showSecret": "Show Secret",
+  "radius.simple.showPassword": "Show Password",
+  "radius.simple.sharedSecret": "Shared Secret",
+  "radius.simple.credentialRevealHint": "This is the real credential value. Hide it again after use.",
+  "radius.simple.hide": "Hide",
+  "radius.simple.copied": "Copied",
+  "radius.simple.copyFailed": "Copy failed"
 }
