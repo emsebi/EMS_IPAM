@@ -329,8 +329,29 @@ def main():
             assert not radtest('testadminA',password_a,fallback_secret,'Access-Accept'), 'Specific /32 secret must override /0 fallback'
             assert nas_udp('127.20.0.2','127.20.0.2','testadminA',password_a,fallback_secret,'Access-Accept')
             print('PASS longest-prefix NAS secret selection (/32 overrides /0 fallback)')
-            assert radtest('testadminA','definitely-wrong-password',secret_a,'Access-Reject')
-            print('PASS UDP Access-Reject for wrong password')
+            live = api('/api/radius-ops/live/start', 'POST', {})
+            live_token = live['token']
+            bad_password = 'definitely-wrong-password'
+            assert radtest('testadminA',bad_password,secret_a,'Access-Reject')
+            live_event = None
+            end = time.monotonic() + 10
+            while time.monotonic() < end:
+                snap = api('/api/radius-ops/live/events', 'POST',
+                           {'token':live_token,'after':0})
+                for item in snap.get('items', []):
+                    if (item.get('type') == 'authentication'
+                            and item.get('username') == 'testadminA'
+                            and item.get('result') == 'REJECT'):
+                        live_event = item
+                        break
+                if live_event:
+                    break
+                time.sleep(.25)
+            api('/api/radius-ops/live/stop', 'POST', {'token':live_token})
+            assert live_event, 'Live log must capture the rejected authentication'
+            assert live_event.get('attemptedPassword') == bad_password
+            assert live_event.get('sourceIp') == '127.0.0.1'
+            print('PASS UDP Access-Reject and volatile Live Log username/password/source capture')
             assert radtest('testadminB',password_b,secret_a,'Access-Reject')
             print('PASS cross-company credentials rejected by the real RADIUS listener')
             # Real UDP packets from NAS B (127.0.0.2), including a spoofed
