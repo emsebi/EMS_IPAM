@@ -131,12 +131,53 @@ def _meta_fields(extra):
  return out
 
 def parse_native_auth_line(msg):
- # FreeRADIUS 3.x already has first-class auth/auth_badpass logging.  Use that
- # stable output instead of inserting a custom module in the auth path.
+ # Use FreeRADIUS 3.x native auth/auth_badpass output instead of inserting a
+ # custom logging module in the authentication path.
  native=re.search(
-  r'Login (?P<state>OK|incorrect)(?: \\((?P<reason>.*?)\\))?: '
-  r'\\[(?P<creds>[^]]*)\\] \\(from client (?P<client>\\S+) '
-  r'port (?P<port>[^ )]+)(?: cli (?P<calling>[^)]*))?\\)(?P<extra>.*)
+  r'Login (?P<state>OK|incorrect)(?: \((?P<reason>.*?)\))?: '
+  r'\[(?P<creds>[^\]]*)\] \(from client (?P<client>\S+) '
+  r'port (?P<port>[^ )]+)(?: cli (?P<calling>[^)]*))?\)(?P<extra>.*)$',
+  msg)
+ if native:
+  creds=native.group('creds');username=creds;attempted=''
+  if '/' in creds:
+   username,attempted=creds.split('/',1)
+  if attempted.startswith('<') and attempted.endswith('>'):attempted=''
+  meta=_meta_fields(native.group('extra') or '')
+  reason=native.group('reason') or ''
+  method=meta.get('method','')
+  if not method:
+   hit=re.search(r'\b(pap|chap|mschapv2?|eap)\b',reason,re.I)
+   if hit:method=hit.group(1).upper().replace('MSCHAP','MS-CHAP')
+   elif attempted:method='PAP'
+  return {
+   'type':'authentication',
+   'result':'ACCEPT' if native.group('state')=='OK' else 'REJECT',
+   'username':username,
+   'attemptedPassword':attempted,
+   'passwordAvailable':bool(attempted),
+   'sourceIp':meta.get('src',''),
+   'nasIp':meta.get('nasip',''),
+   'nasIdentifier':meta.get('nasid',''),
+   'callingStationId':meta.get('calling','') or (native.group('calling') or ''),
+   'calledStationId':meta.get('called',''),
+   'framedIpAddress':meta.get('framed',''),
+   'nasPort':native.group('port') or '',
+   'nasPortId':'',
+   'authMethod':method,
+   'clientShortname':native.group('client') or '',
+   'reason':reason,
+  }
+ unknown=re.search(r'from unknown client ([0-9A-Fa-f:.]+)',msg)
+ if unknown:
+  return {'type':'transport','result':'DROP','sourceIp':unknown.group(1),
+          'reason':'unknown RADIUS client','message':msg}
+ if 'Shared secret is incorrect' in msg or 'invalid Request Authenticator' in msg:
+  src=re.search(r'(?:packet from|from) ([0-9A-Fa-f:.]+)',msg,re.I)
+  return {'type':'transport','result':'DROP','sourceIp':src.group(1) if src else '',
+          'reason':'shared secret mismatch','message':msg}
+ return None
+
 def _safe_service_status(msg):
  low=msg.lower()
  if any(word in low for word in ('user-password','cleartext-password','shared secret','password =','secret =')):return
