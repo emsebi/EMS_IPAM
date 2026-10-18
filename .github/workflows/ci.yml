@@ -32,8 +32,9 @@ jobs:
       - name: Compile and test RADIUS supervisor
         working-directory: .
         run: |
-          python3 -m py_compile modules/radius-ops/freeradius/supervisor.py
+          python3 -m py_compile modules/radius-ops/freeradius/supervisor.py modules/radius-ops/freeradius/configure-logging.py
           python3 -m unittest discover -s modules/radius-ops/tests -p 'supervisor_test.py'
+          python3 -m unittest discover -s modules/radius-ops/tests -p 'configure_logging_test.py'
 
   browser:
     runs-on: ubuntu-latest
