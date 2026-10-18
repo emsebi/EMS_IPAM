@@ -47,13 +47,11 @@ async function enrichLiveEvents(pool,items){
    SELECT (x->>'i')::int AS i,x->>'u' AS username,(x->>'s')::inet AS source_ip
    FROM jsonb_array_elements($1::jsonb) x
  )
- SELECT input.i,d.label AS "deviceLabel",a.collection_name AS "collectionName",g.name AS "profileName"
+ SELECT input.i,d.label AS "deviceLabel",d.nas_ip::text AS "configuredNas",
+        n.active AS "nasActive",a.collection_name AS "collectionName",g.name AS "profileName"
  FROM input
- LEFT JOIN LATERAL (
-   SELECT label FROM radius_ops_devices
-   WHERE enabled AND input.source_ip <<= nas_ip
-   ORDER BY masklen(nas_ip) DESC,id LIMIT 1
- ) d ON true
+ LEFT JOIN LATERAL radius_ops_resolve_nas(input.source_ip) n ON true
+ LEFT JOIN radius_ops_devices d ON d.id=n.device_id
  LEFT JOIN LATERAL radius_ops_resolve_access(input.username,input.source_ip) a ON true
  LEFT JOIN radius_ops_groups g ON g.id=a.profile_id`,[JSON.stringify(candidates)]);
  const meta=new Map(r.rows.map(x=>[x.i,x]));
