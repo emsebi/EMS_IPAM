@@ -300,10 +300,15 @@ def main():
             dc('up', '-d', '--wait', 'radius_ops', timeout=300)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'FreeRADIUS daemon stable')
             assert sql("SELECT radius_ops_identity_allowed('testadminA','127.0.0.1'::inet)") == 't'
+            # The explicit company-A /0 fallback intentionally covers sources
+            # not claimed by a more-specific NAS. A /24 for company B must win
+            # over it and preserve tenant isolation.
+            assert sql("SELECT radius_ops_identity_allowed('testadminA','127.0.0.2'::inet)") == 't'
             assert sql("SELECT radius_ops_identity_allowed('testadminA','127.10.20.2'::inet)") == 'f'
-            assert sql("SELECT radius_ops_identity_allowed('02:aa:bb:cc:dd:ee','127.0.0.2'::inet)") == 'f'
+            assert sql("SELECT radius_ops_identity_allowed('02:aa:bb:cc:dd:ee','127.0.0.2'::inet)") == 't'
+            assert sql("SELECT radius_ops_identity_allowed('02:aa:bb:cc:dd:ee','127.10.20.2'::inet)") == 'f'
             assert sql("SELECT radius_ops_identity_allowed('02:aa:bb:cc:dd:ee','127.0.0.1'::inet)") == 't'
-            print('PASS SQL company and MAB isolation')
+            print('PASS SQL /0 fallback, longest-prefix company isolation and MAB policy')
             # Verify the same tenant decision is exposed through the authenticated
             # UI API, without transmitting passwords or sending test packets.
             for identity, nas_ip, expected in (
