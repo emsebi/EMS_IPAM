@@ -174,6 +174,36 @@ jobs:
             echo "LOCAL_ALI_POLICY none"
           fi
 
+      - name: One-time ali NAS policy map
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[ali-policy-probe]')
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          dbq() {
+            docker exec ems-ipam-db-1 sh -lc 'psql -X -A -F "|" -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "$1"
+          }
+          echo "ALI_ACCESS_RULES"
+          dbq "SELECT a.username,col.name AS collection,g.name AS profile,g.cisco_privilege,g.mikrotik_group
+               FROM radius_ops_accounts a
+               JOIN radius_ops_access_rules ar ON ar.account_id=a.id AND ar.enabled
+               JOIN radius_ops_collections col ON col.id=ar.collection_id
+               JOIN radius_ops_groups g ON g.id=ar.profile_id
+               WHERE a.username='ali'
+               ORDER BY col.name"
+          echo "ALI_COLLECTION_SCOPES"
+          dbq "SELECT col.name,m.nas_source::text
+               FROM radius_ops_accounts a
+               JOIN radius_ops_access_rules ar ON ar.account_id=a.id AND ar.enabled
+               JOIN radius_ops_collections col ON col.id=ar.collection_id AND col.enabled
+               JOIN radius_ops_collection_members m ON m.collection_id=col.id
+               WHERE a.username='ali'
+               ORDER BY col.name,masklen(m.nas_source) DESC,m.nas_source::text"
+          echo "REGISTERED_NAS"
+          dbq "SELECT d.label,d.nas_ip::text,d.enabled,p.name AS secret_profile,
+                      CASE WHEN p.enabled THEN 'profile-enabled' ELSE 'profile-disabled' END
+               FROM radius_ops_devices d
+               JOIN radius_ops_secret_profiles p ON p.id=d.secret_profile_id
+               ORDER BY masklen(d.nas_ip) DESC,d.nas_ip::text,d.label"
       - name: Run real Docker PostgreSQL FreeRADIUS smoke
         id: smoke
         continue-on-error: true
