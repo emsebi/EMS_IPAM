@@ -1,15 +1,35 @@
-# راهنمای آزمون RADIUS روی VM آزمایشگاهی
+# راهنمای آزمون و مدل RADIUS روی VM آزمایشگاهی
 
-**قبل از اتصال تجهیزات واقعی:** سرویس باید در محیط آزمایشگاهی بررسی شود. هیچ دستور شبکه‌ای خودکار روی تجهیزات اعمال نمی‌شود.
+## مدل عملیاتی
 
-1. در EMS-IPAM یک Host آزمایشگاهی با IP مشخص ثبت کنید. در RADIUS Operations، همان Host را به‌عنوان NAS اضافه کنید و **IP مبدأ واقعی بسته UDP** آن را وارد کنید؛ این IP لزوماً با IP مدیریتی تجهیز یکی نیست. Shared Secret قوی تعریف کنید.
-2. یک کاربر AAA با رمز طولانی (حداقل ۱۲ کاراکتر) و همان شرکت NAS ثبت کنید. بررسی کنید وضعیت FreeRADIUS در Dashboard برابر RUNNING است. اگر OFFLINE بود، `docker compose ... logs radius_ops` را ببینید.
-3. از همان ماشین NAS ثبت‌شده، با ابزار RADIUS استاندارد مانند `radtest` یا یک تجهیز آزمایشی، درخواست PAP به UDP 1812 بفرستید. secret و password را روی سیستم اشتراکی یا در لاگ ذخیره نکنید. خروجی مورد انتظار `Access-Accept` است. با رمز اشتباه `Access-Reject`، و از IP مبدأ ثبت‌نشده هیچ پاسخی نباید دریافت شود.
-4. حساب متعلق به شرکت A را از NAS شرکت B امتحان کنید؛ باید `Access-Reject` شود. برای MAB نیز MAC متعلق به شرکت دیگر نباید مجاز شود. MAC ناشناس رد می‌شود.
-5. NAS را در پنل غیرفعال کنید؛ بعد از بازخوانی SQL client list نباید درخواست‌های جدید آن پذیرفته شوند. سپس فعال کنید و دوباره تست کنید. ثبت/حذف NAS موجب restart کوتاه FreeRADIUS می‌شود.
-6. صفحه گزارش احراز هویت باید نام کاربر، نتیجه، نام NAS و **IP واقعی مبدأ UDP** را نمایش دهد. ستون `pass` در جدول `radpostauth` باید خالی باشد؛ رمز کاربر نباید در گزارش ذخیره شود.
-7. قبل از انتقال به شبکه عملیاتی، به‌طور جداگانه وضعیت backup/restore، پورت‌های فایروال UDP 1812/1813، TLS در پنل و حساب local emergency روی تجهیزات را بررسی کنید.
+این پروژه برای مدیریت RADIUS از مدل استاندارد FreeRADIUS استفاده می‌کند و مفاهیم EMS را روی آن سوار می‌کند:
 
-**این موارد هنوز در این checkpoint اجرا و تأیید نشده‌اند.** EAP/802.1X تا زمان نصب گواهی معتبر و تست EAP غیرفعال است. هیچ دستور 802.1X تولید نمی‌شود. MAB در برابر جعل MAC مقاوم نیست.
+- **RADIUS Client / NAS**: همان Client واقعی FreeRADIUS است؛ IP یا CIDR مبدأ واقعی RADIUS و Shared Secret دارد و در جدول استاندارد `nas` همگام می‌شود.
+- **Shared Secret Profile**: فقط برای استفاده مجدد و مدیریت Secret در EMS است؛ هر NAS یکی از این Profileها را انتخاب می‌کند.
+- **NAS Collection**: فقط یک گروه اسمی از NASهای ثبت‌شده است. داخل Collection هیچ IP/CIDR مستقلی تعریف نمی‌شود. عضویت از فرم خود NAS تعیین می‌شود.
+- **Permission Profile**: مشخص می‌کند اگر کاربر روی یک Collection مجاز بود، چه Reply Attributeهایی دریافت کند؛ فعلاً Cisco privilege و MikroTik group.
+- **User**: Password در `radcheck` نگهداری می‌شود. در EMS برای هر Collection مجاز، یک Permission Profile انتخاب می‌شود.
+- اگر یک NAS عضو چند Collection باشد و یک User از آن مسیرها Profileهای متفاوت بگیرد، ذخیره باید fail-closed شود و تعارض رفع شود.
+- IP/CIDR overlap مربوط به **خود NAS Clientها** است، نه Collection. تعریف خاص‌تر NAS باید بر تعریف عمومی‌تر مثل `0.0.0.0/0` اولویت داشته باشد.
 
-**v4:** سرویس با کاربر غیرریشه‌ای `freerad` اجرا می‌شود و با `cap_drop: ALL` نیازی به `chown` ندارد. Docker healthcheck فقط وقتی `running=true` باشد موفق است. این تغییر هنوز در Docker واقعی تأیید نشده است.
+این تفکیک مهم است: FreeRADIUS مسئول تشخیص NAS واقعی، Shared Secret، User credential و Reply Attribute است؛ EMS Collection فقط لایه مدیریت و Policy است.
+
+## تست
+
+1. در EMS-IPAM یک NAS آزمایشگاهی ثبت کنید و **IP مبدأ واقعی بسته UDP** آن را وارد کنید؛ این IP لزوماً IP مدیریتی تجهیز نیست. برای MikroTik، مقدار `src-address` در تنظیم RADIUS معیار خوبی برای تشخیص مبدأ است.
+2. Shared Secret Profile بسازید و روی NAS انتخاب کنید. Secret را می‌توان از دکمه Show Secret در پنل دید و Copy کرد.
+3. یک NAS Collection فقط با نام بسازید، مثلاً `Main Routers`. سپس در فرم NAS، همان Collection را تیک بزنید.
+4. Permission Profile بسازید، مثلاً `full` با Cisco privilege 15 و MikroTik group=full.
+5. User بسازید و برای Collection موردنظر Permission Profile را انتخاب کنید. Password کوتاه مجاز است ولی پنل هشدار ضعف می‌دهد. Password ذخیره‌شده با Show Password قابل مشاهده است.
+6. در RADIUS Diagnostics بررسی کنید Database، FreeRADIUS process، UDP 1812، UDP 1813 و Live Log collector سالم باشند.
+7. Live RADIUS Logs را باز کنید و از همان NAS درخواست واقعی بفرستید. برای PAP Reject باید Username، Password attempt، NAS source و نتیجه قابل مشاهده باشد؛ این buffer زنده است و داده credential در گزارش دائمی EMS ذخیره نمی‌شود.
+8. با Password درست انتظار Access-Accept و با Password غلط انتظار Access-Reject دارید. Source NAS ناشناخته یا Shared Secret اشتباه باید fail-closed باشد.
+9. اگر NAS خاص در کنار fallback عمومی `0.0.0.0/0` وجود دارد، تعریف خاص‌تر باید authoritative باشد و Disable شدن آن نباید باعث مجاز شدن از fallback عمومی شود.
+10. EAP/802.1X تا زمان نصب certificate معتبر و تست مستقل EAP غیرفعال می‌ماند. هیچ config شبکه‌ای auto-push نمی‌شود.
+
+## مبنای FreeRADIUS
+
+- NAS clients از SQL `nas` table با `read_clients = yes` خوانده می‌شوند.
+- User password از `radcheck` با `Cleartext-Password` برای PAP استفاده می‌شود.
+- Reply attributes از `radreply` و `radgroupreply`/group processing می‌آیند.
+- EMS برای Policy per-NAS، انتخاب Permission Profile را قبل از Reply attribute به NAS Collection membership متصل می‌کند، بدون ساختن یک client scope موازی با FreeRADIUS.
