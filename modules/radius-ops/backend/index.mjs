@@ -115,7 +115,12 @@ async function checkCompany(c,id){if(!(await c.query('SELECT 1 FROM companies WH
 async function checkNasDuplicate(c,source,id=null){const r=await c.query('SELECT id,label,nas_ip::text AS "nasIp" FROM radius_ops_devices WHERE nas_ip=$1::inet AND ($2::uuid IS NULL OR id<>$2::uuid) LIMIT 1',[source,id]);if(r.rowCount)throw fail(`NAS IP/CIDR is already registered by ${r.rows[0].label} (${r.rows[0].nasIp})`,409);}
 async function secretProfile(c,id,companyId,requireEnabled=true){const p=(await c.query('SELECT * FROM radius_ops_secret_profiles WHERE id=$1',[id])).rows[0];if(!p||p.company_id!==companyId)throw fail('Secret profile does not belong to this company',409);if(requireEnabled&&!p.enabled)throw fail('Secret profile is disabled',409);return p;}
 async function inlineSecretProfile(c,companyId,label,value){const id=crypto.randomUUID(),profileName=(String(label||'NAS').slice(0,92)+' Secret '+id.slice(0,8));await c.query('INSERT INTO radius_ops_secret_profiles(id,company_id,name,secret,enabled) VALUES($1,$2,$3,$4,true)',[id,companyId,profileName,secret(value)]);return id;}
-async function nasSync(c,d){const short='ems_'+d.id.replaceAll('-','');await c.query('DELETE FROM nas WHERE shortname=$1',[short]);if(!d.enabled)return;let value=d.secret;if(d.secret_profile_id){const p=(await c.query('SELECT secret,enabled FROM radius_ops_secret_profiles WHERE id=$1',[d.secret_profile_id])).rows[0];if(!p||!p.enabled)return;value=p.secret;}await c.query('INSERT INTO nas(nasname,shortname,type,secret,description) VALUES($1,$2,$3,$4,$5)',[d.nas_ip,short,'other',value,d.label]);}
+async function nasSync(c,d){const short='ems_'+d.id.replaceAll('-','');await c.query('DELETE FROM nas WHERE shortname=$1',[short]);let value=d.secret;if(d.secret_profile_id){const p=(await c.query('SELECT secret FROM radius_ops_secret_profiles WHERE id=$1',[d.secret_profile_id])).rows[0];if(p?.secret)value=p.secret;}if(!value)throw fail('NAS shared secret is unavailable',409);/*
+ Keep every registered NAS in the FreeRADIUS client radix tree, even while the
+ EMS object/profile/inventory link is disabled. This preserves the most-specific
+ client match and lets SQL policy return Access-Reject instead of falling
+ through to a broader /0 secret. Deleting the NAS removes this shadow.
+ */await c.query('INSERT INTO nas(nasname,shortname,type,secret,description) VALUES($1,$2,$3,$4,$5)',[d.nas_ip,short,'other',value,d.label]);}
 async function resyncSecretProfile(c,id){const rows=(await c.query('SELECT * FROM radius_ops_devices WHERE secret_profile_id=$1',[id])).rows;for(const d of rows)await nasSync(c,d);}
 async function replySync(c,username,items){await c.query('DELETE FROM radreply WHERE username=$1',[username]);for(const [a,v] of items)await c.query('INSERT INTO radreply(username,attribute,op,value) VALUES($1,$2,$3,$4)',[username,a,':=',v]);}
 async function groupSync(c,g){
@@ -173,13 +178,17 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
    const body=await readBody(req),identity=String(body.identity??'');
    if(!/^[A-Za-z0-9_.:@-]{1,64}$/.test(identity))throw fail('Invalid RADIUS identity');
    const nasIp=ip(body.nasIp);
-   const result=await pool.query(`SELECT
-     EXISTS(SELECT 1 FROM radius_ops_devices d WHERE d.enabled AND $2::inet <<= d.nas_ip) AS "nasRegistered",
-     EXISTS(SELECT 1 FROM radcheck WHERE username=$1 AND attribute='Cleartext-Password') AS "credentialsReady",
-     radius_ops_identity_allowed($1,$2::inet) AS "policyAllowed"`,[identity,nasIp]);
-   const r=result.rows[0],allowed=Boolean(r.nasRegistered&&r.credentialsReady&&r.policyAllowed);
-   const reason=!r.nasRegistered?'nas-not-registered':!r.credentialsReady?'identity-not-provisioned':!r.policyAllowed?'tenant-or-inventory-denied':'ready';
-   return json(res,200,{ok:true,allowed,reason,nasRegistered:Boolean(r.nasRegistered),credentialsReady:Boolean(r.credentialsReady),policyAllowed:Boolean(r.policyAllowed),scope:'sql-policy-only',udpTested:false});
+   const result=await pool.query(`WITH selected AS (
+       SELECT * FROM radius_ops_resolve_nas($2::inet)
+     )
+     SELECT
+       EXISTS(SELECT 1 FROM selected) AS "nasRegistered",
+       COALESCE((SELECT active FROM selected LIMIT 1),false) AS "nasActive",
+       EXISTS(SELECT 1 FROM radcheck WHERE username=$1 AND attribute='Cleartext-Password') AS "credentialsReady",
+       radius_ops_identity_allowed($1,$2::inet) AS "policyAllowed"`,[identity,nasIp]);
+   const r=result.rows[0],allowed=Boolean(r.nasRegistered&&r.nasActive&&r.credentialsReady&&r.policyAllowed);
+   const reason=!r.nasRegistered?'nas-not-registered':!r.nasActive?'nas-disabled-or-inventory-denied':!r.credentialsReady?'identity-not-provisioned':!r.policyAllowed?'tenant-or-policy-denied':'ready';
+   return json(res,200,{ok:true,allowed,reason,nasRegistered:Boolean(r.nasRegistered),nasActive:Boolean(r.nasActive),credentialsReady:Boolean(r.credentialsReady),policyAllowed:Boolean(r.policyAllowed),scope:'sql-policy-only',udpTested:false});
   }
   if(m==='GET'&&p===base+'/diagnostics'){res.setHeader('Cache-Control','no-store');const d=await radiusDiagnostics();const counts=(await pool.query(`SELECT
    (SELECT count(*)::int FROM radius_ops_devices WHERE enabled) AS "enabledNas",
