@@ -429,6 +429,16 @@ class NativeAuthLogParserTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
+    def test_native_line_with_distro_prefix_and_no_reason(self):
+        msg=('Oct 18 19:50:00 radiusd[42]: Auth: (11) Login incorrect: '
+             '[ali/WrongPass!] (from client ems_test port 0) '
+             'EMSMETA src=10.1.1.240;nasip=;nasid=;calling=;called=;framed=;method=PAP')
+        event=supervisor.parse_native_auth_line(msg)
+        self.assertEqual(event['username'],'ali')
+        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertEqual(event['sourceIp'],'10.1.1.240')
+        self.assertEqual(event['clientShortname'],'ems_test')
+
     def test_native_badpass_decodes_operator_fields(self):
         msg=('Sun Oct 18 12:00:00 2026 : Auth: (7) Login incorrect '
              '(pap: CLEAR TEXT password check failed): [ali/WrongPass!] '
