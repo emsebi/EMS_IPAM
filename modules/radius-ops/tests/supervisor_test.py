@@ -147,7 +147,7 @@ class DatabaseHealthTest(TestCase):
                 client.request('GET','/health')
                 response=client.getresponse()
                 self.assertEqual(response.status,200)
-                self.assertIn(b'"running": true',response.read())
+                self.assertIn(b'"running":true',response.read())
                 client.close()
         finally:
             server.shutdown();server.server_close()
