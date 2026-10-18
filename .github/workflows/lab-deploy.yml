@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ems-ipam-lab-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy-lab:
