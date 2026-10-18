@@ -29,6 +29,11 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Compile and test RADIUS supervisor
+        working-directory: .
+        run: |
+          python3 -m py_compile modules/radius-ops/freeradius/supervisor.py
+          python3 -m unittest discover -s modules/radius-ops/tests -p 'supervisor_test.py'
 
   browser:
     runs-on: ubuntu-latest
