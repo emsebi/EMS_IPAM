@@ -87,6 +87,8 @@ def live_add(event):
 
 def _hex_text(value):
  if not value:return ''
+ value=value.strip()
+ if value.lower().startswith('0x'):value=value[2:]
  try:return bytes.fromhex(value).decode('utf-8','replace')
  except (ValueError,UnicodeDecodeError):return ''
 
@@ -100,14 +102,14 @@ def parse_live_line(line):
   'result':result,
   'username':_hex_text(user_hex),
   'attemptedPassword':_hex_text(password_hex) if kind=='AUTH' and result=='REJECT' else '',
-  'sourceIp':_hex_text(source_hex),
-  'nasIp':_hex_text(nas_ip_hex),
+  'sourceIp':source_hex,
+  'nasIp':nas_ip_hex,
   'nasIdentifier':_hex_text(nas_id_hex),
   'callingStationId':_hex_text(calling_hex),
   'calledStationId':_hex_text(called_hex),
-  'nasPort':_hex_text(nas_port_hex),
+  'nasPort':nas_port_hex,
   'nasPortId':_hex_text(nas_port_id_hex),
-  'authMethod':_hex_text(method_hex),
+  'authMethod':method_hex,
   'reason':_hex_text(reason_hex),
  }
 
