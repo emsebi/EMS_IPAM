@@ -35,7 +35,8 @@ def hide_password(password, secret, request_authenticator):
     return bytes(result)
 
 
-def request_packet(username, password, secret, claimed_ip, identifier=7, authenticator=None):
+def request_packet(username, password, secret, claimed_ip, identifier=7, authenticator=None,
+                   nas_identifier='', calling_station_id='', framed_ip=''):
     authenticator = os.urandom(16) if authenticator is None else authenticator
     if len(authenticator) != 16 or not 0 <= identifier <= 255:
         raise ValueError('Invalid RADIUS identifier or authenticator')
@@ -43,6 +44,12 @@ def request_packet(username, password, secret, claimed_ip, identifier=7, authent
     attributes = (attr(1, username_bytes) +
                   attr(2, hide_password(password, secret, authenticator)) +
                   attr(4, socket.inet_aton(claimed_ip)))
+    if nas_identifier:
+        attributes += attr(32, nas_identifier.encode('utf-8'))
+    if calling_station_id:
+        attributes += attr(31, calling_station_id.encode('utf-8'))
+    if framed_ip:
+        attributes += attr(8, socket.inet_aton(framed_ip))
     # Include Message-Authenticator to exercise modern hardened RADIUS servers.
     unsigned = attributes + attr(80, b'\x00' * 16)
     length = 20 + len(unsigned)
@@ -91,7 +98,8 @@ def verify_response(packet, request_authenticator, secret, identifier):
     return {2: 'Access-Accept', 3: 'Access-Reject', 11: 'Access-Challenge'}[code]
 
 
-def probe(source, claimed, username, password, secret_text, timeout=4, destination_port=1812):
+def probe(source, claimed, username, password, secret_text, timeout=4, destination_port=1812,
+          nas_identifier='', calling_station_id='', framed_ip=''):
     try:
         source_ip = ipaddress.ip_address(source)
         claimed_ip = ipaddress.ip_address(claimed)
@@ -105,7 +113,17 @@ def probe(source, claimed, username, password, secret_text, timeout=4, destinati
         raise ValueError('Invalid loopback RADIUS port')
     secret = secret_text.encode('utf-8')
     identifier = os.urandom(1)[0]
-    packet, authenticator = request_packet(username, password, secret, claimed, identifier)
+    if framed_ip:
+        try:
+            framed = ipaddress.ip_address(framed_ip)
+        except ValueError as exc:
+            raise ValueError('Only lab loopback framed IPs are permitted') from exc
+        if framed.version != 4 or not framed.is_loopback:
+            raise ValueError('Only lab loopback framed IPs are permitted')
+    packet, authenticator = request_packet(
+        username, password, secret, claimed, identifier,
+        nas_identifier=nas_identifier, calling_station_id=calling_station_id,
+        framed_ip=framed_ip)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.bind((source, 0))
         sock.settimeout(timeout)
@@ -120,9 +138,15 @@ def main():
     parser = argparse.ArgumentParser(description='Loopback-only NAS source RADIUS probe')
     for name in ('source', 'claimed', 'username', 'password', 'secret'):
         parser.add_argument('--' + name, required=True)
+    parser.add_argument('--nas-identifier', default='')
+    parser.add_argument('--calling-station-id', default='')
+    parser.add_argument('--framed-ip', default='')
     args = parser.parse_args()
     try:
-        print(probe(args.source, args.claimed, args.username, args.password, args.secret))
+        print(probe(args.source, args.claimed, args.username, args.password, args.secret,
+                    nas_identifier=args.nas_identifier,
+                    calling_station_id=args.calling_station_id,
+                    framed_ip=args.framed_ip))
     except (ValueError, OSError, socket.timeout):
         print('Probe-Failed')
         raise SystemExit(1)
