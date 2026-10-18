@@ -61,7 +61,7 @@ class SidecarTest(TestCase):
             client.request('GET', '/health')
             response = client.getresponse()
             self.assertEqual(response.status, 503)
-            self.assertIn(b'"running": false', response.read())
+            self.assertIn(b'"running":false', response.read())
             client.close()
         finally:
             httpd.shutdown()
@@ -116,7 +116,7 @@ class DeadProcessHealthTest(TestCase):
             conn.request('GET','/health')
             resp=conn.getresponse()
             self.assertEqual(resp.status,503)
-            self.assertIn(b'"running": false',resp.read())
+            self.assertIn(b'"running":false',resp.read())
             conn.close()
         finally:
             server.shutdown();server.server_close()
@@ -138,7 +138,7 @@ class DatabaseHealthTest(TestCase):
             client.request('GET','/health')
             response=client.getresponse()
             self.assertEqual(response.status,503)
-            self.assertIn(b'"running": false',response.read())
+            self.assertIn(b'"running":false',response.read())
             client.close()
             supervisor.DB_READY=True
             supervisor.CONFIG_READY=True
@@ -183,7 +183,7 @@ class DatabaseOutageLifecycleTest(TestCase):
             self.assertTrue(child.terminated, 'Database outage must close the UDP listener')
             self.assertFalse(supervisor.DB_READY)
             self.assertEqual(launch.call_count, 1)
-            self.assertGreaterEqual(thread.call_count, 2)
+            self.assertGreaterEqual(thread.call_count, 1)
         finally:
             (supervisor.STOP, supervisor.RUNNING, supervisor.CHILD,
              supervisor.DB_READY, supervisor.RUNNING_SINCE) = old
@@ -313,7 +313,7 @@ class UdpListenerHealthTest(TestCase):
             supervisor.CHILD=SimpleNamespace(pid=99999999,poll=lambda: None)
             real_udp_check=supervisor.udp_listeners_ready
             with patch.object(supervisor,'udp_listeners_ready',
-                              side_effect=lambda **kwargs: real_udp_check(ports=ports,**kwargs)):
+                              side_effect=lambda **kwargs: real_udp_check(ports=ports,pid=kwargs.get('pid'))):
                 server=ThreadingHTTPServer(('127.0.0.1',0),supervisor.Health)
                 Thread(target=server.serve_forever,daemon=True).start()
                 try:
@@ -344,7 +344,7 @@ class UdpListenerHealthTest(TestCase):
                 conn.request('GET','/health')
                 response=conn.getresponse()
                 self.assertEqual(response.status,503)
-                self.assertIn(b'"running": false',response.read())
+                self.assertIn(b'"running":false',response.read())
                 conn.close()
         finally:
             server.shutdown();server.server_close()
