@@ -234,6 +234,8 @@ test('NAS source explicitly supports dynamic /0 fallback without relaxing broad 
 test('RADIUS credentials allow short values but still reject empty/control characters',()=>{
  assert.equal(password('1234'),'1234');
  assert.equal(secret('abc123'),'abc123');
+ assert.equal(password('p'.repeat(600)),'p'.repeat(600));
+ assert.equal(secret('s'.repeat(600)),'s'.repeat(600));
  assert.throws(()=>password(''));
  assert.throws(()=>password('ok\nno'));
  assert.throws(()=>secret(''));
@@ -242,8 +244,8 @@ test('RADIUS credentials allow short values but still reject empty/control chara
 test('RADIUS UI warns instead of blocking short password and shared secret',()=>{
  const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
  const en=JSON.parse(fs.readFileSync(path.join(root,'../radius/public/i18n/en.json'),'utf8'));
- assert.doesNotMatch(ui,/name="password"[^>]*minlength=/);
- assert.doesNotMatch(ui,/name="secret"[^>]*minlength=/);
+ assert.doesNotMatch(ui,/name="password"[^>]*(?:minlength|maxlength)=/);
+ assert.doesNotMatch(ui,/name="secret"[^>]*(?:minlength|maxlength)=/);
  assert.match(en['radius.simple.passwordWeakWarning'],/allowed.*weak/i);
  assert.match(en['radius.simple.secretWeakWarning'],/allowed.*weak/i);
 });
@@ -300,4 +302,12 @@ test('safe default NAS and permission groups guide first-time users',()=>{
  assert.match(ui,/rManageCollections/);
  assert.match(ui,/rManageProfiles/);
  assert.match(ui,/defaultGroup\(/);
+});
+
+test('v30 credential columns are text so UI length warnings are non-blocking',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/012-unbounded-credential-text.sql'),'utf8');
+ assert.match(sql,/ALTER TABLE nas ALTER COLUMN secret TYPE text/);
+ assert.match(sql,/ALTER TABLE radcheck ALTER COLUMN value TYPE text/);
+ assert.match(sql,/ALTER TABLE radius_ops_devices ALTER COLUMN secret TYPE text/);
+ assert.match(sql,/ALTER TABLE radius_ops_secret_profiles ALTER COLUMN secret TYPE text/);
 });
