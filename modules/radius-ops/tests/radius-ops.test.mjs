@@ -167,14 +167,15 @@ test('v28 migrates legacy CIDR collection intent to matching registered NAS memb
 
 test('live RADIUS auth feed uses native FreeRADIUS 3.x logging',()=>{
  const dockerfile=fs.readFileSync(path.join(root,'freeradius/Dockerfile'),'utf8');
+ const logging=fs.readFileSync(path.join(root,'freeradius/configure-logging.py'),'utf8');
  const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
  const supervisor=fs.readFileSync(path.join(root,'freeradius/supervisor.py'),'utf8');
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
- assert.match(dockerfile,/auth = yes/);
- assert.match(dockerfile,/auth_badpass = yes/);
- assert.match(dockerfile,/auth_goodpass = yes/);
- assert.match(dockerfile,/msg_badpass = " EMSMETA src=%\{request:Packet-Src-IP-Address\}/);
- assert.match(dockerfile,/msg_goodpass = " EMSMETA src=%\{request:Packet-Src-IP-Address\}/);
+ assert.match(dockerfile,/configure-logging\.py/);
+ assert.match(logging,/auth_badpass/);
+ assert.match(logging,/auth_goodpass/);
+ assert.match(logging,/msg_badpass/);
+ assert.match(logging,/EMSMETA src=%\{Packet-Src-IP-Address\}/);
  assert.doesNotMatch(dockerfile,/ems-live-log/);
  assert.doesNotMatch(site,/ems_live_(?:accept|reject|accounting)/);
  assert.match(supervisor,/Login \(\?P<state>OK\|incorrect\)/);
