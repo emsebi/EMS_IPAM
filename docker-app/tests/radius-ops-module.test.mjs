@@ -24,11 +24,13 @@ test('direct NAS source supports one IPv4 or canonical CIDR', () => {
   assert.throws(() => nasSource('239.0.0.0/24'));
 });
 
-test('shared secrets are validated and 802.1X stays fail-closed', () => {
-  const valid = 'aabbccddeeff00112233445566778899';
-  assert.equal(secret(valid), valid);
-  assert.throws(() => secret('short'));
-  assert.throws(() => cli({ vendor: 'cisco-ios', secret: valid }, '192.0.2.5', 'dot1x'), /disabled/i);
+test('shared secrets allow weak values with validation and 802.1X stays fail-closed', () => {
+  const strong = 'aabbccddeeff00112233445566778899';
+  assert.equal(secret(strong), strong);
+  assert.equal(secret('short'), 'short');
+  assert.throws(() => secret(''));
+  assert.throws(() => secret('bad secret'));
+  assert.throws(() => cli({ vendor: 'cisco-ios', secret: strong }, '192.0.2.5', 'dot1x'), /disabled/i);
 });
 
 test('simple AAA migration adds groups, optional inventory link and CIDR policy', () => {
