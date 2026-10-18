@@ -170,14 +170,16 @@ test('live RADIUS operator feed is volatile and admin-proxied',()=>{
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
  assert.match(site,/ems_live_reject/);
  assert.match(site,/ems_live_accounting/);
- assert.match(log,/\/run\/ems-radius-live\.log/);
+ assert.match(log,/destination = udp/);
+ assert.match(log,/server = "127\.0\.0\.1"/);
+ assert.match(log,/port = 18121/);
  assert.match(log,/AUTH\|REJECT/);
  assert.match(log,/%\{hex:%\{User-Password\}\}/);
  assert.doesNotMatch(log,/\/var\/log|syslog|stdout/);
  assert.match(supervisor,/LIVE_EVENTS=collections\.deque\(maxlen=1000\)/);
- assert.match(supervisor,/LIVE_FILE=pathlib\.Path\('\/run\/ems-radius-live\.log'\)/);
- assert.match(supervisor,/LIVE_FILE_LIMIT=1024\*1024/);
- assert.match(supervisor,/p\.open\('w'/);
+ assert.match(supervisor,/LIVE_UDP=\('127\.0\.0\.1',18121\)/);
+ assert.match(supervisor,/LIVE_COLLECTOR_READY/);
+ assert.match(supervisor,/socket\.SOCK_DGRAM/);
  assert.match(supervisor,/if not LIVE_SUBSCRIBERS:return False/);
  assert.match(supervisor,/LIVE_EVENTS\.clear\(\)/);
  assert.match(backend,/base\+'\/live\/events'/);
@@ -262,4 +264,18 @@ test('v27 specific NAS definitions shadow broader fallback even when disabled',(
  assert.match(backend,/Keep every registered NAS in the FreeRADIUS client radix tree/);
  assert.doesNotMatch(backend,/if\(!d\.enabled\)return/);
  assert.match(backend,/nas-disabled-or-inventory-denied/);
+});
+
+test('admin can reveal saved RADIUS credentials on explicit no-store endpoints',()=>{
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
+ assert.match(backend,/secret-profiles\\\/\(\[\^\/\]\+\)\\\/reveal/);
+ assert.match(backend,/accounts\\\/\(\[\^\/\]\+\)\\\/reveal-password/);
+ assert.match(backend,/Cleartext-Password/);
+ assert.match(backend,/Cache-Control','no-store, private, max-age=0/);
+ assert.match(backend,/radius-user-password/);
+ assert.match(backend,/radius-secret-profile/);
+ assert.match(ui,/rRevealSecret/);
+ assert.match(ui,/rRevealPassword/);
+ assert.match(ui,/rCredentialCopy/);
 });
