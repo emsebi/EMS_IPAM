@@ -165,7 +165,7 @@ test('v28 migrates legacy CIDR collection intent to matching registered NAS memb
  assert.match(sql,/ON CONFLICT\(collection_id,device_id\) DO NOTHING/);
 });
 
-test('live RADIUS operator feed uses structured standard linelog on private stdout',()=>{
+test('live RADIUS operator feed uses FreeRADIUS 3.x linelog stdout syntax',()=>{
  const dockerfile=fs.readFileSync(path.join(root,'freeradius/Dockerfile'),'utf8');
  const live=fs.readFileSync(path.join(root,'freeradius/live-log'),'utf8');
  const site=fs.readFileSync(path.join(root,'freeradius/default-site'),'utf8');
@@ -174,7 +174,9 @@ test('live RADIUS operator feed uses structured standard linelog on private stdo
  assert.match(dockerfile,/COPY live-log .*mods-available\/ems-live-log/);
  assert.match(dockerfile,/mods-enabled\/ems-live-log/);
  assert.doesNotMatch(dockerfile,/auth_badpass = yes|msg_badpass/);
- assert.match(live,/destination = stdout/);
+ assert.match(live,/filename = \/dev\/stdout/);
+ assert.match(live,/permissions = 0002/);
+ assert.doesNotMatch(live,/destination = stdout/);
  assert.match(live,/EMSLIVE\|AUTH\|REJECT/);
  assert.match(live,/%\{hex:%\{User-Name\}\}/);
  assert.match(live,/%\{hex:%\{User-Password\}\}/);
