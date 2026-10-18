@@ -403,7 +403,8 @@ class VolatileLiveMonitorTest(TestCase):
 
 
 
-class LiveFifoTransportTest(TestCase):
+
+class LiveTmpfsFileTransportTest(TestCase):
     def setUp(self):
         with supervisor.LIVE_LOCK:
             supervisor.LIVE_EVENTS.clear()
@@ -415,36 +416,52 @@ class LiveFifoTransportTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
-    def test_fifo_feed_is_volatile_and_decodes_failed_pap(self):
+    def test_regular_file_feed_is_seekable_volatile_and_decodes_failed_pap(self):
         token,_=supervisor.live_start()
         with tempfile.TemporaryDirectory() as d:
-            path=Path(d)/'live.fifo'
-            supervisor.setup_live_pipe(path)
+            path=Path(d)/'live.log'
+            supervisor.setup_live_file(path)
+            self.assertTrue(path.is_file())
             old_stop=supervisor.STOP
             supervisor.STOP=False
-            thread=Thread(target=supervisor.live_pipe_reader,args=(path,),daemon=True)
+            thread=Thread(target=supervisor.live_file_reader,args=(path,),daemon=True)
             thread.start()
             try:
-                hx=lambda s:s.encode().hex()
+                hx=lambda text:text.encode().hex()
                 line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
                                hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
                                hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
-                with open(path,'w',encoding='ascii',buffering=1) as out:
-                    out.write(line+'\n')
-                for _ in range(20):
+                with open(path,'a',encoding='ascii') as out:
+                    out.write(line+'\n');out.flush()
+                data=None
+                for _ in range(30):
                     data=supervisor.live_snapshot(token,0)
-                    if data and data['items']:
-                        break
-                    time.sleep(.02)
+                    if data and data['items']:break
+                    time.sleep(.03)
                 self.assertTrue(data['items'])
+                self.assertEqual(data['items'][0]['username'],'ali')
                 self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
             finally:
                 supervisor.STOP=True
-                # Wake blocking read so the daemon test thread can leave.
-                try:
-                    with open(path,'w',encoding='ascii',buffering=1) as out: out.write('\n')
-                except OSError:
-                    pass
                 thread.join(1)
                 supervisor.STOP=old_stop
                 supervisor.live_stop(token)
+
+    def test_no_subscriber_discards_volatile_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'live.log'
+            supervisor.setup_live_file(path)
+            path.write_text('discard-me\n')
+            old_stop=supervisor.STOP
+            supervisor.STOP=False
+            thread=Thread(target=supervisor.live_file_reader,args=(path,),daemon=True)
+            thread.start()
+            try:
+                for _ in range(30):
+                    if path.stat().st_size==0:break
+                    time.sleep(.03)
+                self.assertEqual(path.stat().st_size,0)
+            finally:
+                supervisor.STOP=True
+                thread.join(1)
+                supervisor.STOP=old_stop
