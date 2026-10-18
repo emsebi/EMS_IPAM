@@ -376,14 +376,18 @@ class VolatileLiveMonitorTest(TestCase):
 
     def test_freeradius_line_decodes_failed_pap_value_without_persistence(self):
         hx=lambda s:s.encode().hex()
-        line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
-                       hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
-                       hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
+        line='|'.join(['AUTH','REJECT','0x'+hx('ali'),'0x'+hx('WrongPass!'),'127.0.0.1',
+                       '127.0.0.1','0x'+hx('QAZVIN-RTR'),'0x'+hx('10.0.0.5'),'',
+                       '1','0x'+hx('ether1'),'PAP','0x'+hx('pap failed')])
         event=supervisor.parse_live_line(line)
         self.assertEqual(event['username'],'ali')
         self.assertEqual(event['attemptedPassword'],'WrongPass!')
         self.assertEqual(event['nasIdentifier'],'QAZVIN-RTR')
         self.assertEqual(event['callingStationId'],'10.0.0.5')
+
+    def test_hex_decoder_accepts_freeradius_0x_prefix(self):
+        self.assertEqual(supervisor._hex_text('0x616c69'),'ali')
+        self.assertEqual(supervisor._hex_text('616c69'),'ali')
 
     def test_http_live_session_is_short_lived_and_no_store(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),supervisor.Health)
@@ -424,9 +428,9 @@ class NativeAuthLogParserTest(TestCase):
     def test_native_badpass_suffix_decodes_user_password_and_source(self):
         hx=lambda text:text.encode().hex()
         msg=('Login incorrect: [ali/WrongPass!] (from client ems_test port 0) '
-             'EMSLIVE|REJECT|'+hx('ali')+'|'+hx('WrongPass!')+'|'+hx('127.0.0.1')+
-             '|'+hx('127.0.0.1')+'|'+hx('QAZVIN-RTR')+'|'+hx('10.0.0.5')+
-             '||'+hx('1')+'|'+hx('ether1')+'|'+hx('PAP')+'|'+hx('pap failed'))
+             'EMSLIVE|REJECT|0x'+hx('ali')+'|0x'+hx('WrongPass!')+'|127.0.0.1'+
+             '|127.0.0.1|0x'+hx('QAZVIN-RTR')+'|0x'+hx('10.0.0.5')+
+             '||1|0x'+hx('ether1')+'|PAP|0x'+hx('pap failed'))
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['result'],'REJECT')
         self.assertEqual(event['username'],'ali')
@@ -452,9 +456,9 @@ class NativeAuthLogParserTest(TestCase):
     def test_service_reader_keeps_badpass_only_in_live_memory(self):
         token,_=supervisor.live_start()
         hx=lambda text:text.encode().hex()
-        line=('Login incorrect: [ali/WrongPass!] EMSLIVE|REJECT|'+hx('ali')+'|'+
-              hx('WrongPass!')+'|'+hx('127.0.0.1')+'|'+hx('127.0.0.1')+
-              '||||||'+hx('PAP')+'|'+hx('pap failed')+'\n')
+        line=('Login incorrect: [ali/WrongPass!] EMSLIVE|REJECT|0x'+hx('ali')+'|0x'+
+              hx('WrongPass!')+'|127.0.0.1|127.0.0.1'+
+              '||||||PAP|0x'+hx('pap failed')+'\n')
         old_ready=supervisor.LIVE_COLLECTOR_READY
         try:
             supervisor.service_output_reader(iter([line]))
