@@ -160,15 +160,18 @@ def main():
             suffix = f' (last error type: {last_error})' if last_error else ''
             raise AssertionError(f'Timeout: {label}{suffix}')
 
-        def nas_udp(source, claimed, username, password, shared_secret, expected):
+        def nas_udp(source, claimed, username, password, shared_secret, expected,
+                    nas_identifier='', calling_station_id='', framed_ip=''):
             # The socket is bound to the *actual* NAS source, not merely the
             # NAS-IP-Address attribute. All traffic remains in the disposable
             # radius_ops container on the 127/8 loopback interface.
-            r = dc('exec', '-T', 'radius_ops', 'python3',
-                   '/opt/ems-radius/udp_probe.py',
-                   '--source', source, '--claimed', claimed,
-                   '--username', username, '--password', password,
-                   '--secret', shared_secret, timeout=30, check=False)
+            args=['exec','-T','radius_ops','python3','/opt/ems-radius/udp_probe.py',
+                  '--source',source,'--claimed',claimed,'--username',username,
+                  '--password',password,'--secret',shared_secret]
+            if nas_identifier: args += ['--nas-identifier',nas_identifier]
+            if calling_station_id: args += ['--calling-station-id',calling_station_id]
+            if framed_ip: args += ['--framed-ip',framed_ip]
+            r = dc(*args, timeout=30, check=False)
             return r.returncode == 0 and r.stdout.strip() == expected
 
         radtest_diag = {}
@@ -211,8 +214,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '10', f'Expected ten versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-010')
+            assert count == '11', f'Expected eleven versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-011')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -348,7 +351,11 @@ def main():
             live = api('/api/radius-ops/live/start', 'POST', {})
             live_token = live['token']
             bad_password = 'definitely-wrong-password'
-            assert radtest('testadminA',bad_password,secret_a,'Access-Reject')
+            assert nas_udp('127.0.0.1','127.0.0.1','testadminA',bad_password,
+                           secret_a,'Access-Reject',
+                           nas_identifier='LAB-NAS-A',
+                           calling_station_id='127.0.0.44',
+                           framed_ip='127.0.0.44')
             live_event = None
             end = time.monotonic() + 10
             while time.monotonic() < end:
@@ -367,7 +374,11 @@ def main():
             assert live_event, 'Live log must capture the rejected authentication'
             assert live_event.get('attemptedPassword') == bad_password
             assert live_event.get('sourceIp') == '127.0.0.1'
-            print('PASS UDP Access-Reject and volatile Live Log username/password/source capture')
+            assert live_event.get('nasIdentifier') == 'LAB-NAS-A'
+            assert live_event.get('callingStationId') == '127.0.0.44'
+            assert live_event.get('framedIpAddress') == '127.0.0.44'
+            assert live_event.get('deviceLabel') == 'Lab NAS A'
+            print('PASS live log captures NAS name/identity/source, client IP, username and PAP password')
             assert radtest('testadminB',password_b,secret_a,'Access-Reject')
             print('PASS cross-company credentials rejected by the real RADIUS listener')
             # Real UDP packets from NAS B (127.0.0.2), including a spoofed
@@ -437,7 +448,7 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '10'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '11'
             print('PASS persistent data and migration ledger after restart')
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
