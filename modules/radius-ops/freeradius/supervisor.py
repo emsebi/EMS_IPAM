@@ -2,9 +2,9 @@
 """FreeRADIUS SQL NAS watcher. Does not log secrets or expose Docker socket."""
 import collections,json,os,pathlib,re,secrets,signal,socket,subprocess,threading,time
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-STOP=False;RUNNING=False;RUNNING_SINCE=0.0;CHILD=None;DB_READY=False
+STOP=False;RUNNING=False;RUNNING_SINCE=0.0;CHILD=None;DB_READY=False;CONFIG_READY=False
 LIVE_LOCK=threading.Lock();LIVE_EVENTS=collections.deque(maxlen=1000);LIVE_SUBSCRIBERS={};LIVE_SEQ=0
-LIVE_FILE=pathlib.Path('/run/ems-radius-live.log');LIVE_FILE_LIMIT=1024*1024
+LIVE_UDP=('127.0.0.1',18121);LIVE_COLLECTOR_READY=False
 SERVICE_ERRORS=collections.deque(maxlen=40);LAST_AUTH_AT=0.0;LAST_EVENT_AT=0.0
 
 def stop(*_):
@@ -111,44 +111,43 @@ def parse_live_line(line):
   'reason':_hex_text(reason_hex),
  }
 
-def setup_live_file(path=LIVE_FILE):
- p=pathlib.Path(path)
+def live_udp_listener(address=LIVE_UDP):
+ global LIVE_COLLECTOR_READY
+ sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+ sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,262144)
  try:
-  if p.exists() and not p.is_file():p.unlink()
- except OSError:pass
- fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
- os.close(fd);p.chmod(0o600)
- return p
-
-def live_file_reader(path=LIVE_FILE):
- # rlm_linelog needs a regular seekable file. /run is tmpfs in Compose, so
- # this never becomes persistent application data. The reader bounds RAM.
- p=pathlib.Path(path);offset=0
- while not STOP:
-  try:
-   size=p.stat().st_size
-   if size<offset:offset=0
-   if size>offset:
-    with p.open('r',encoding='ascii',errors='replace') as src:
-     src.seek(offset)
-     for raw in src:
-      event=parse_live_line(raw)
-      if event:live_add(event)
-     offset=src.tell()
-   with LIVE_LOCK:
-    _live_prune();watching=bool(LIVE_SUBSCRIBERS)
-   if (not watching and size>0) or size>LIVE_FILE_LIMIT:
-    with p.open('w',encoding='ascii'):pass
-    offset=0
-   time.sleep(.08)
-  except (OSError,ValueError):
-   time.sleep(.25)
+  sock.bind(address);sock.settimeout(.5);LIVE_COLLECTOR_READY=True
+  while not STOP:
+   try:data,_=sock.recvfrom(65535)
+   except socket.timeout:continue
+   except OSError:
+    if STOP:break
+    continue
+   for raw in data.splitlines():
+    event=parse_live_line(raw.decode('ascii','replace'))
+    if event:live_add(event)
+ finally:
+  LIVE_COLLECTOR_READY=False
+  try:sock.close()
+  except OSError:pass
 
 def _safe_service_status(msg):
  low=msg.lower()
  if any(word in low for word in ('user-password','cleartext-password','shared secret','password =','secret =')):return
  if any(word in low for word in ('error','failed','warning','ready','listening')):
   SERVICE_ERRORS.append(msg[:500])
+
+def freeradius_config_check():
+ global CONFIG_READY
+ try:
+  r=subprocess.run(['/usr/sbin/freeradius','-XC'],stdout=subprocess.PIPE,
+                   stderr=subprocess.STDOUT,text=True,timeout=20)
+  for line in (r.stdout or '').splitlines():_safe_service_status(line)
+  CONFIG_READY=(r.returncode==0)
+ except (OSError,subprocess.TimeoutExpired):
+  CONFIG_READY=False
+  SERVICE_ERRORS.append('FreeRADIUS configuration check could not run')
+ return CONFIG_READY
 
 def service_output_reader(pipe):
  # Normal daemon output is also volatile.  It is streamed only while an
@@ -179,18 +178,15 @@ class Health(BaseHTTPRequestHandler):
   alive=RUNNING and CHILD is not None and CHILD.poll() is None
   auth_ready=udp_listeners_ready(ports=(1812,),pid=getattr(CHILD,'pid',None)) if alive else False
   acct_ready=udp_listeners_ready(ports=(1813,),pid=getattr(CHILD,'pid',None)) if alive else False
-  healthy=DB_READY and alive and (time.monotonic()-RUNNING_SINCE)>=2.0 and auth_ready and acct_ready
+  healthy=DB_READY and CONFIG_READY and alive and (time.monotonic()-RUNNING_SINCE)>=2.0 and auth_ready and acct_ready
   if self.path=='/health':
    self._json(200 if healthy else 503,{'running':healthy,'eap':False,'liveVolatile':True});return
   if self.path=='/diagnostics':
-   try:live_bytes=LIVE_FILE.stat().st_size
-   except OSError:live_bytes=0
    with LIVE_LOCK:
     _live_prune();subs=len(LIVE_SUBSCRIBERS);buffered=len(LIVE_EVENTS)
-   self._json(200,{'ok':True,'running':healthy,'databaseReady':DB_READY,'processAlive':alive,
-    'auth1812Ready':auth_ready,'accounting1813Ready':acct_ready,
-    'liveCollectorReady':LIVE_FILE.exists() and LIVE_FILE.is_file(),
-    'liveSubscribers':subs,'liveBufferedEvents':buffered,'liveBytes':live_bytes,
+   self._json(200,{'ok':True,'running':healthy,'databaseReady':DB_READY,'configReady':CONFIG_READY,
+    'processAlive':alive,'auth1812Ready':auth_ready,'accounting1813Ready':acct_ready,
+    'liveCollectorReady':LIVE_COLLECTOR_READY,'liveSubscribers':subs,'liveBufferedEvents':buffered,
     'lastAuthAt':LAST_AUTH_AT or None,'lastEventAt':LAST_EVENT_AT or None,
     'serviceMessages':list(SERVICE_ERRORS)[-12:]});return
   self.send_error(404)
@@ -277,9 +273,8 @@ def fingerprint():
  except (OSError,subprocess.TimeoutExpired):return None
 
 def main():
- global RUNNING,RUNNING_SINCE,CHILD,DB_READY
- setup_live_file()
- threading.Thread(target=live_file_reader,daemon=True).start()
+ global RUNNING,RUNNING_SINCE,CHILD,DB_READY,CONFIG_READY
+ threading.Thread(target=live_udp_listener,daemon=True).start()
  threading.Thread(target=lambda:ThreadingHTTPServer(('0.0.0.0',18120),Health).serve_forever(),daemon=True).start()
  sql_config()
  print('[radius-ops] Waiting for database migrations',flush=True)
@@ -289,6 +284,10 @@ def main():
   baseline=fingerprint()
   DB_READY=baseline is not None
   if baseline is None:
+   CONFIG_READY=False
+   time.sleep(3)
+   continue
+  if not freeradius_config_check():
    time.sleep(3)
    continue
   try:
