@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
-import {mac,aliases,secret,cli,replies,vid,nasSource,accessScope} from '../backend/model.mjs';import {createModule} from '../backend/index.mjs';
+import {mac,aliases,password,secret,cli,replies,vid,nasSource,accessScope} from '../backend/model.mjs';import {createModule} from '../backend/index.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const shared='aabbccddeeff00112233445566778899';
 test('MAC formats, multicast denial and aliases',()=>{assert.equal(mac('aa-bb-cc-dd-ee-f0'),'aa:bb:cc:dd:ee:f0');assert.ok(aliases('aa:bb:cc:dd:ee:f0').includes('aabb.ccdd.eef0'));assert.throws(()=>mac('ff:ff:ff:ff:ff:ff'));});
