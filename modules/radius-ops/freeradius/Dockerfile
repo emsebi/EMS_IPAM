@@ -9,8 +9,43 @@ RUN python3 /opt/ems-radius/sanitize-queries.py \
  && sed -ri 's/^([[:space:]]*)auth = no$/\\1auth = yes/' /etc/freeradius/3.0/radiusd.conf \
  && sed -ri 's/^([[:space:]]*)auth_badpass = no$/\\1auth_badpass = yes/' /etc/freeradius/3.0/radiusd.conf \
  && sed -ri 's/^([[:space:]]*)auth_goodpass = no$/\\1auth_goodpass = yes/' /etc/freeradius/3.0/radiusd.conf \
- && sed -ri 's@^[[:space:]]*#[[:space:]]*msg_goodpass = ""@    msg_goodpass = " EMSMETA src=%{request:Packet-Src-IP-Address};nasip=%{request:NAS-IP-Address};nasid=%{request:NAS-Identifier};calling=%{request:Calling-Station-Id};called=%{request:Called-Station-Id};framed=%{request:Framed-IP-Address};method=%{control:Auth-Type}"@' /etc/freeradius/3.0/radiusd.conf \
- && sed -ri 's@^[[:space:]]*#[[:space:]]*msg_badpass = ""@    msg_badpass = " EMSMETA src=%{request:Packet-Src-IP-Address};nasip=%{request:NAS-IP-Address};nasid=%{request:NAS-Identifier};calling=%{request:Calling-Station-Id};called=%{request:Called-Station-Id};framed=%{request:Framed-IP-Address};method=%{control:Auth-Type}"@' /etc/freeradius/3.0/radiusd.conf
+ && sed -ri 's@^[[:space:]]*#[[:space:]]*msg_goodpass = ""@    msg_goodpass = " EMSMETA src=%{Packet-Src-IP-Address};nasip=%{NAS-IP-Address};nasid=%{NAS-Identifier};calling=%{Calling-Station-Id};called=%{Called-Station-Id};framed=%{Framed-IP-Address};method=%{control:Auth-Type}"@' /etc/freeradius/3.0/radiusd.conf \
+ && sed -ri 's@^[[:space:]]*#[[:space:]]*msg_badpass = ""@    msg_badpass = " EMSMETA src=%{Packet-Src-IP-Address};nasip=%{NAS-IP-Address};nasid=%{NAS-Identifier};calling=%{Calling-Station-Id};called=%{Called-Station-Id};framed=%{Framed-IP-Address};method=%{control:Auth-Type}"@' /etc/freeradius/3.0/radiusd.conf \
+ && grep -Eq '^[[:space:]]*auth = yes
+COPY default-site /etc/freeradius/3.0/sites-enabled/default
+COPY clients.conf /etc/freeradius/3.0/clients.conf
+COPY supervisor.py /opt/ems-radius/supervisor.py
+COPY udp_probe.py /opt/ems-radius/udp_probe.py
+RUN chmod 0644 /etc/freeradius/3.0/sites-enabled/default /etc/freeradius/3.0/clients.conf
+# Drop privileges permanently. Docker Compose drops CAP_CHOWN and every other capability.
+USER freerad
+EXPOSE 1812/udp 1813/udp
+ENTRYPOINT ["python3", "/opt/ems-radius/supervisor.py"]
+ /etc/freeradius/3.0/radiusd.conf \
+ && grep -Eq '^[[:space:]]*auth_badpass = yes
+COPY default-site /etc/freeradius/3.0/sites-enabled/default
+COPY clients.conf /etc/freeradius/3.0/clients.conf
+COPY supervisor.py /opt/ems-radius/supervisor.py
+COPY udp_probe.py /opt/ems-radius/udp_probe.py
+RUN chmod 0644 /etc/freeradius/3.0/sites-enabled/default /etc/freeradius/3.0/clients.conf
+# Drop privileges permanently. Docker Compose drops CAP_CHOWN and every other capability.
+USER freerad
+EXPOSE 1812/udp 1813/udp
+ENTRYPOINT ["python3", "/opt/ems-radius/supervisor.py"]
+ /etc/freeradius/3.0/radiusd.conf \
+ && grep -Eq '^[[:space:]]*auth_goodpass = yes
+COPY default-site /etc/freeradius/3.0/sites-enabled/default
+COPY clients.conf /etc/freeradius/3.0/clients.conf
+COPY supervisor.py /opt/ems-radius/supervisor.py
+COPY udp_probe.py /opt/ems-radius/udp_probe.py
+RUN chmod 0644 /etc/freeradius/3.0/sites-enabled/default /etc/freeradius/3.0/clients.conf
+# Drop privileges permanently. Docker Compose drops CAP_CHOWN and every other capability.
+USER freerad
+EXPOSE 1812/udp 1813/udp
+ENTRYPOINT ["python3", "/opt/ems-radius/supervisor.py"]
+ /etc/freeradius/3.0/radiusd.conf \
+ && grep -Eq '^[[:space:]]*msg_badpass = " EMSMETA src=%\{Packet-Src-IP-Address\}' /etc/freeradius/3.0/radiusd.conf \
+ && grep -Eq '^[[:space:]]*msg_goodpass = " EMSMETA src=%\{Packet-Src-IP-Address\}' /etc/freeradius/3.0/radiusd.conf
 COPY default-site /etc/freeradius/3.0/sites-enabled/default
 COPY clients.conf /etc/freeradius/3.0/clients.conf
 COPY supervisor.py /opt/ems-radius/supervisor.py
