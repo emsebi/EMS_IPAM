@@ -5,7 +5,7 @@
 
 linelog ems_live_accept {
  destination = stdout
- format = "EMSLIVE|AUTH|ACCEPT|%{hex:%{User-Name}}||%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{Framed-IP-Address}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}|%{hex:%{control:Auth-Type}}|%{hex:%{client:shortname}}|"
+ format = "EMSLIVE|AUTH|ACCEPT|%{hex:%{User-Name}}|%{hex:%{User-Password}}|%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{Framed-IP-Address}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}|%{hex:%{control:Auth-Type}}|%{hex:%{client:shortname}}|"
 }
 
 linelog ems_live_reject {
