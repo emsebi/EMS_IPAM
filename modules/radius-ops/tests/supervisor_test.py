@@ -126,7 +126,7 @@ class DeadProcessHealthTest(TestCase):
 class DatabaseHealthTest(TestCase):
     def test_running_daemon_with_disconnected_postgres_is_unhealthy(self):
         old = (supervisor.RUNNING, supervisor.RUNNING_SINCE,
-               supervisor.CHILD, supervisor.DB_READY)
+               supervisor.CHILD, supervisor.DB_READY, supervisor.CONFIG_READY)
         supervisor.RUNNING=True
         supervisor.RUNNING_SINCE=time.monotonic()-30
         supervisor.CHILD=SimpleNamespace(poll=lambda: None)
@@ -141,6 +141,7 @@ class DatabaseHealthTest(TestCase):
             self.assertIn(b'"running": false',response.read())
             client.close()
             supervisor.DB_READY=True
+            supervisor.CONFIG_READY=True
             with patch.object(supervisor, 'udp_listeners_ready', return_value=True):
                 client=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
                 client.request('GET','/health')
@@ -151,7 +152,7 @@ class DatabaseHealthTest(TestCase):
         finally:
             server.shutdown();server.server_close()
             (supervisor.RUNNING,supervisor.RUNNING_SINCE,
-             supervisor.CHILD,supervisor.DB_READY)=old
+             supervisor.CHILD,supervisor.DB_READY,supervisor.CONFIG_READY)=old
 
 class DatabaseOutageLifecycleTest(TestCase):
     def test_listener_is_terminated_on_postgres_loss_and_not_restarted_without_db(self):
@@ -174,6 +175,7 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'freeradius_config_check', return_value=True), \
                  patch.object(supervisor.threading, 'Thread') as thread, \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -193,6 +195,7 @@ class DatabaseOutageLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', return_value=None), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'freeradius_config_check', return_value=True), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen') as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -221,6 +224,7 @@ class NasReloadLifecycleTest(TestCase):
         try:
             with patch.object(supervisor, 'fingerprint', side_effect=lambda: next(calls)), \
                  patch.object(supervisor, 'sql_config'), \
+                 patch.object(supervisor, 'freeradius_config_check', return_value=True), \
                  patch.object(supervisor.threading, 'Thread'), \
                  patch.object(supervisor.subprocess, 'Popen', return_value=child) as launch, \
                  patch.object(supervisor.time, 'sleep', side_effect=tick):
@@ -297,7 +301,7 @@ class UdpListenerHealthTest(TestCase):
 
     def test_health_denies_ports_owned_by_supervisor_not_daemon(self):
         old=(supervisor.RUNNING,supervisor.RUNNING_SINCE,
-             supervisor.CHILD,supervisor.DB_READY)
+             supervisor.CHILD,supervisor.DB_READY,supervisor.CONFIG_READY)
         sockets=[socket.socket(socket.AF_INET,socket.SOCK_DGRAM) for _ in range(2)]
         try:
             for sock in sockets:sock.bind(('127.0.0.1',0))
@@ -305,6 +309,7 @@ class UdpListenerHealthTest(TestCase):
             supervisor.RUNNING=True
             supervisor.RUNNING_SINCE=time.monotonic()-30
             supervisor.DB_READY=True
+            supervisor.CONFIG_READY=True
             supervisor.CHILD=SimpleNamespace(pid=99999999,poll=lambda: None)
             real_udp_check=supervisor.udp_listeners_ready
             with patch.object(supervisor,'udp_listeners_ready',
@@ -322,11 +327,11 @@ class UdpListenerHealthTest(TestCase):
         finally:
             for sock in sockets:sock.close()
             (supervisor.RUNNING,supervisor.RUNNING_SINCE,
-             supervisor.CHILD,supervisor.DB_READY)=old
+             supervisor.CHILD,supervisor.DB_READY,supervisor.CONFIG_READY)=old
 
     def test_healthy_process_without_bound_udp_ports_reports_unhealthy(self):
         old=(supervisor.RUNNING,supervisor.RUNNING_SINCE,
-             supervisor.CHILD,supervisor.DB_READY)
+             supervisor.CHILD,supervisor.DB_READY,supervisor.CONFIG_READY)
         supervisor.RUNNING=True
         supervisor.RUNNING_SINCE=time.monotonic()-30
         supervisor.CHILD=SimpleNamespace(poll=lambda: None)
@@ -344,7 +349,7 @@ class UdpListenerHealthTest(TestCase):
         finally:
             server.shutdown();server.server_close()
             (supervisor.RUNNING,supervisor.RUNNING_SINCE,
-             supervisor.CHILD,supervisor.DB_READY)=old
+             supervisor.CHILD,supervisor.DB_READY,supervisor.CONFIG_READY)=old
 
 
 class VolatileLiveMonitorTest(TestCase):
@@ -404,7 +409,7 @@ class VolatileLiveMonitorTest(TestCase):
 
 
 
-class LiveTmpfsFileTransportTest(TestCase):
+class LiveUdpTransportTest(TestCase):
     def setUp(self):
         with supervisor.LIVE_LOCK:
             supervisor.LIVE_EVENTS.clear()
@@ -416,52 +421,42 @@ class LiveTmpfsFileTransportTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
-    def test_regular_file_feed_is_seekable_volatile_and_decodes_failed_pap(self):
+    def test_loopback_udp_feed_is_memory_only_and_decodes_failed_pap(self):
         token,_=supervisor.live_start()
-        with tempfile.TemporaryDirectory() as d:
-            path=Path(d)/'live.log'
-            supervisor.setup_live_file(path)
-            self.assertTrue(path.is_file())
-            old_stop=supervisor.STOP
-            supervisor.STOP=False
-            thread=Thread(target=supervisor.live_file_reader,args=(path,),daemon=True)
-            thread.start()
-            try:
-                hx=lambda text:text.encode().hex()
-                line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
-                               hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
-                               hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
-                with open(path,'a',encoding='ascii') as out:
-                    out.write(line+'\n');out.flush()
-                data=None
-                for _ in range(30):
-                    data=supervisor.live_snapshot(token,0)
-                    if data and data['items']:break
-                    time.sleep(.03)
-                self.assertTrue(data['items'])
-                self.assertEqual(data['items'][0]['username'],'ali')
-                self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
-            finally:
-                supervisor.STOP=True
-                thread.join(1)
-                supervisor.STOP=old_stop
-                supervisor.live_stop(token)
+        probe=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        probe.bind(('127.0.0.1',0))
+        address=probe.getsockname()
+        probe.close()
+        old_stop=supervisor.STOP
+        old_ready=supervisor.LIVE_COLLECTOR_READY
+        supervisor.STOP=False
+        thread=Thread(target=supervisor.live_udp_listener,args=(address,),daemon=True)
+        thread.start()
+        sender=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        try:
+            hx=lambda text:text.encode().hex()
+            line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
+                           hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
+                           hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
+            data=None
+            for _ in range(30):
+                sender.sendto((line+'\n').encode(),address)
+                time.sleep(.03)
+                data=supervisor.live_snapshot(token,0)
+                if data and data['items']:break
+            self.assertTrue(data['items'])
+            self.assertEqual(data['items'][0]['username'],'ali')
+            self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
+            self.assertEqual(data['items'][0]['sourceIp'],'127.0.0.1')
+        finally:
+            sender.close()
+            supervisor.STOP=True
+            thread.join(1)
+            supervisor.STOP=old_stop
+            supervisor.LIVE_COLLECTOR_READY=old_ready
+            supervisor.live_stop(token)
 
-    def test_no_subscriber_discards_volatile_file(self):
-        with tempfile.TemporaryDirectory() as d:
-            path=Path(d)/'live.log'
-            supervisor.setup_live_file(path)
-            path.write_text('discard-me\n')
-            old_stop=supervisor.STOP
-            supervisor.STOP=False
-            thread=Thread(target=supervisor.live_file_reader,args=(path,),daemon=True)
-            thread.start()
-            try:
-                for _ in range(30):
-                    if path.stat().st_size==0:break
-                    time.sleep(.03)
-                self.assertEqual(path.stat().st_size,0)
-            finally:
-                supervisor.STOP=True
-                thread.join(1)
-                supervisor.STOP=old_stop
+    def test_datagram_without_subscriber_is_not_retained(self):
+        self.assertFalse(supervisor.live_add({'type':'authentication','result':'REJECT',
+                                              'username':'nobody','attemptedPassword':'bad'}))
+        self.assertEqual(list(supervisor.LIVE_EVENTS),[])
