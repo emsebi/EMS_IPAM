@@ -292,3 +292,19 @@ test('admin can reveal saved RADIUS credentials on explicit no-store endpoints',
  assert.match(ui,/rRevealPassword/);
  assert.match(ui,/rCredentialCopy/);
 });
+
+test('safe default NAS and permission groups guide first-time users',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/011-default-operator-groups.sql'),'utf8');
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
+ assert.match(sql,/Default NAS/);
+ assert.match(sql,/Default Read-Only/);
+ assert.match(sql,/cisco_privilege,mikrotik_group/);
+ assert.match(sql,/1,'read'/);
+ assert.match(backend,/DEFAULT_COLLECTION_NAME='Default NAS'/);
+ assert.match(backend,/DEFAULT_PROFILE_NAME='Default Read-Only'/);
+ assert.match(backend,/if\(!selected\.length\)selected=\[await defaultCollectionId/);
+ assert.match(ui,/rManageCollections/);
+ assert.match(ui,/rManageProfiles/);
+ assert.match(ui,/defaultGroup\(/);
+});
