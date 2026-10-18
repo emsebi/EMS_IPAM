@@ -121,5 +121,7 @@
   "radius.simple.diag1813": "UDP 1813 accounting",
   "radius.simple.diagLive": "Live log collector",
   "radius.simple.diagMessages": "Recent service messages",
-  "radius.simple.loading": "Checking RADIUS…"
+  "radius.simple.loading": "Checking RADIUS…",
+  "radius.simple.liveConnected": "Connected",
+  "radius.simple.liveReconnecting": "Reconnecting…"
 }
