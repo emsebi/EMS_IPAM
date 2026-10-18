@@ -131,43 +131,44 @@ def _meta_fields(extra):
  return out
 
 def parse_native_auth_line(msg):
- # Use FreeRADIUS 3.x native auth/auth_badpass output instead of inserting a
- # custom logging module in the authentication path.
- native=re.search(
-  r'Login (?P<state>OK|incorrect)(?: \((?P<reason>.*?)\))?: '
-  r'\[(?P<creds>[^\]]*)\] \(from client (?P<client>\S+) '
-  r'port (?P<port>[^ )]+)(?: cli (?P<calling>[^)]*))?\)(?P<extra>.*)$',
-  msg)
- if native:
-  creds=native.group('creds');username=creds;attempted=''
-  if '/' in creds:
-   username,attempted=creds.split('/',1)
-  if attempted.startswith('<') and attempted.endswith('>'):attempted=''
-  meta=_meta_fields(native.group('extra') or '')
-  reason=native.group('reason') or ''
-  method=meta.get('method','')
-  if not method:
-   hit=re.search(r'\b(pap|chap|mschapv2?|eap)\b',reason,re.I)
-   if hit:method=hit.group(1).upper().replace('MSCHAP','MS-CHAP')
-   elif attempted:method='PAP'
-  return {
-   'type':'authentication',
-   'result':'ACCEPT' if native.group('state')=='OK' else 'REJECT',
-   'username':username,
-   'attemptedPassword':attempted,
-   'passwordAvailable':bool(attempted),
-   'sourceIp':meta.get('src',''),
-   'nasIp':meta.get('nasip',''),
-   'nasIdentifier':meta.get('nasid',''),
-   'callingStationId':meta.get('calling','') or (native.group('calling') or ''),
-   'calledStationId':meta.get('called',''),
-   'framedIpAddress':meta.get('framed',''),
-   'nasPort':native.group('port') or '',
-   'nasPortId':'',
-   'authMethod':method,
-   'clientShortname':native.group('client') or '',
-   'reason':reason,
-  }
+ # Native FreeRADIUS auth lines are intentionally parsed in two stages.  The
+ # timestamp / log prefix may vary between distro builds, while the payload
+ # from "Login ..." onward is stable.
+ pos=msg.find('Login ')
+ if pos>=0:
+  payload=msg[pos:]
+  head=re.match(r'Login (?P<state>OK|incorrect)(?: \((?P<reason>.*?)\))?:\s*\[(?P<creds>[^\]]*)\]\s*(?P<tail>.*)$',payload)
+  if head:
+   creds=head.group('creds');username=creds;attempted=''
+   if '/' in creds:username,attempted=creds.split('/',1)
+   if attempted.startswith('<') and attempted.endswith('>'):attempted=''
+   tail=head.group('tail') or ''
+   origin=re.search(r'\(from client (?P<client>\S+) port (?P<port>[^ )]+)(?: cli (?P<calling>[^)]*))?\)',tail)
+   meta=_meta_fields(tail)
+   reason=head.group('reason') or ''
+   method=meta.get('method','')
+   if not method:
+    hit=re.search(r'\b(pap|chap|mschapv2?|eap)\b',reason,re.I)
+    if hit:method=hit.group(1).upper().replace('MSCHAP','MS-CHAP')
+    elif attempted:method='PAP'
+   return {
+    'type':'authentication',
+    'result':'ACCEPT' if head.group('state')=='OK' else 'REJECT',
+    'username':username,
+    'attemptedPassword':attempted,
+    'passwordAvailable':bool(attempted),
+    'sourceIp':meta.get('src',''),
+    'nasIp':meta.get('nasip',''),
+    'nasIdentifier':meta.get('nasid',''),
+    'callingStationId':meta.get('calling','') or (origin.group('calling') if origin and origin.group('calling') else ''),
+    'calledStationId':meta.get('called',''),
+    'framedIpAddress':meta.get('framed',''),
+    'nasPort':origin.group('port') if origin else '',
+    'nasPortId':'',
+    'authMethod':method,
+    'clientShortname':origin.group('client') if origin else '',
+    'reason':reason,
+   }
  unknown=re.search(r'from unknown client ([0-9A-Fa-f:.]+)',msg)
  if unknown:
   return {'type':'transport','result':'DROP','sourceIp':unknown.group(1),
