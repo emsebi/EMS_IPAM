@@ -134,6 +134,46 @@ jobs:
           echo "::error::EMS-IPAM panel did not become healthy on port 8888."
           exit 1
 
+      - name: One-time local ali authentication probe
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[local-auth-probe]')
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          dbq() {
+            docker exec ems-ipam-db-1 sh -lc 'psql -X -A -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1"' sh "$1"
+          }
+
+          account_count="$(dbq "SELECT count(*) FROM radius_ops_accounts WHERE username='ali' AND enabled")"
+          stored_match="$(dbq "SELECT CASE WHEN EXISTS(
+            SELECT 1 FROM radcheck
+            WHERE username='ali' AND attribute='Cleartext-Password' AND value=chr(49)
+          ) THEN 1 ELSE 0 END")"
+          policy_local="$(dbq "SELECT CASE WHEN radius_ops_identity_allowed('ali','127.0.0.1'::inet) THEN 1 ELSE 0 END")"
+          resolved="$(dbq "SELECT coalesce(collection_name,'')||' -> privilege='||cisco_privilege||', mikrotik='||mikrotik_group
+            FROM radius_ops_resolve_access('ali','127.0.0.1'::inet) LIMIT 1")"
+          secret="$(dbq "SELECT secret FROM nas
+            WHERE '127.0.0.1'::inet <<= nasname::inet
+            ORDER BY masklen(nasname::inet) DESC,id LIMIT 1")"
+
+          reply="NO_LOCAL_CLIENT"
+          if [ -n "$secret" ]; then
+            output="$(timeout 15 docker exec -e EMS_PROBE_SECRET="$secret" ems-ipam-radius_ops-1 sh -lc               'radtest ali 1 127.0.0.1 0 "$EMS_PROBE_SECRET"' 2>&1 || true)"
+            if grep -q '^Received Access-Accept ' <<<"$output"; then
+              reply="ACCESS_ACCEPT"
+            elif grep -q '^Received Access-Reject ' <<<"$output"; then
+              reply="ACCESS_REJECT"
+            else
+              reply="TIMEOUT_OR_NO_RESPONSE"
+            fi
+          fi
+
+          echo "LOCAL_ALI_PROBE account_count=$account_count stored_password_is_1=$stored_match policy_127_0_0_1=$policy_local reply=$reply"
+          if [ -n "$resolved" ]; then
+            echo "LOCAL_ALI_POLICY $resolved"
+          else
+            echo "LOCAL_ALI_POLICY none"
+          fi
+
       - name: Run real Docker PostgreSQL FreeRADIUS smoke
         id: smoke
         continue-on-error: true
