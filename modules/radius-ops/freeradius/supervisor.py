@@ -142,11 +142,26 @@ def freeradius_config_check():
  try:
   r=subprocess.run(['/usr/sbin/freeradius','-XC'],stdout=subprocess.PIPE,
                    stderr=subprocess.STDOUT,text=True,timeout=20)
-  for line in (r.stdout or '').splitlines():_safe_service_status(line)
+  lines=(r.stdout or '').splitlines()
+  for line in lines:_safe_service_status(line)
   CONFIG_READY=(r.returncode==0)
+  if not CONFIG_READY:
+   # Config errors must be diagnosable without SSH. Never print lines which
+   # could contain credentials or shared secrets.
+   safe=[]
+   for line in lines:
+    low=line.lower()
+    if any(word in low for word in ('password','secret','user-password','cleartext')):continue
+    if any(word in low for word in ('error','failed','invalid','unknown','unexpected',
+                                     'including configuration file','errors reading',
+                                     'parse','syntax','rlm_linelog','ems-live-log')):
+     safe.append(line[:700])
+   print('[radius-ops] FreeRADIUS config check failed',flush=True)
+   for line in safe[-24:]:print('[radius-ops] config: '+line,flush=True)
  except (OSError,subprocess.TimeoutExpired):
   CONFIG_READY=False
   SERVICE_ERRORS.append('FreeRADIUS configuration check could not run')
+  print('[radius-ops] FreeRADIUS config check could not run',flush=True)
  return CONFIG_READY
 
 def service_output_reader(pipe):
