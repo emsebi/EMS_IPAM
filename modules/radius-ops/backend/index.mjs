@@ -22,6 +22,16 @@ async function radiusRuntime(path,body){
  }catch(e){if(e?.status)throw e;throw fail('RADIUS live monitor unavailable',503);}
  finally{clearTimeout(timer);}
 }
+async function radiusDiagnostics(){
+ const c=new AbortController(),timer=setTimeout(()=>c.abort(),2500);
+ try{
+  const r=await fetch('http://radius_ops:18120/diagnostics',{signal:c.signal});
+  const data=await r.json().catch(()=>({ok:false}));
+  if(!r.ok)throw fail('RADIUS diagnostics unavailable',503);
+  return data;
+ }catch(e){if(e?.status)throw e;throw fail('RADIUS diagnostics unavailable',503);}
+ finally{clearTimeout(timer);}
+}
 async function enrichLiveEvents(pool,items){
  const candidates=[];
  for(let i=0;i<items.length&&candidates.length<200;i++){
@@ -171,6 +181,11 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
    const reason=!r.nasRegistered?'nas-not-registered':!r.credentialsReady?'identity-not-provisioned':!r.policyAllowed?'tenant-or-inventory-denied':'ready';
    return json(res,200,{ok:true,allowed,reason,nasRegistered:Boolean(r.nasRegistered),credentialsReady:Boolean(r.credentialsReady),policyAllowed:Boolean(r.policyAllowed),scope:'sql-policy-only',udpTested:false});
   }
+  if(m==='GET'&&p===base+'/diagnostics'){res.setHeader('Cache-Control','no-store');const d=await radiusDiagnostics();const counts=(await pool.query(`SELECT
+   (SELECT count(*)::int FROM radius_ops_devices WHERE enabled) AS "enabledNas",
+   (SELECT count(*)::int FROM radius_ops_accounts WHERE enabled) AS "enabledUsers",
+   (SELECT count(*)::int FROM radius_ops_collections WHERE enabled) AS "enabledCollections",
+   (SELECT count(*)::int FROM radius_ops_groups WHERE enabled) AS "enabledProfiles"`)).rows[0];return json(res,200,{ok:true,...d,...counts});}
   if(m==='POST'&&p===base+'/live/start'){res.setHeader('Cache-Control','no-store');const r=await radiusRuntime('/live/start',{});await audit?.(actor,'start','radius-ops-live','live',{detail:{volatile:true}});return json(res,200,r);}
   if(m==='POST'&&p===base+'/live/events'){res.setHeader('Cache-Control','no-store');const b=await readBody(req),token=key(b.token),after=Number(b.after??0);if(!Number.isSafeInteger(after)||after<0)throw fail('Invalid live sequence');const r=await radiusRuntime('/live/events',{token,after});r.items=await enrichLiveEvents(pool,r.items||[]);return json(res,200,r);}
   if(m==='POST'&&p===base+'/live/stop'){res.setHeader('Cache-Control','no-store');const b=await readBody(req),token=key(b.token);const r=await radiusRuntime('/live/stop',{token});await audit?.(actor,'stop','radius-ops-live','live',{detail:{volatile:true}});return json(res,200,r);}
