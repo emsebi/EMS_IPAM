@@ -134,5 +134,8 @@
   "radius.simple.collectionMembershipHint": "This Collection is only a named group of registered NAS clients. Assign NAS membership from RADIUS Clients.",
   "radius.simple.nasCollections": "NAS Collections",
   "radius.simple.nasCollectionsHint": "This NAS may belong to one or more Collections.",
-  "radius.simple.noNasMembers": "No NAS is assigned to this Collection yet"
+  "radius.simple.noNasMembers": "No NAS is assigned to this Collection yet",
+  "radius.simple.defaultLabel": "Default",
+  "radius.simple.manageCollections": "Manage NAS Collections",
+  "radius.simple.manageProfiles": "Manage Permission Profiles"
 }
