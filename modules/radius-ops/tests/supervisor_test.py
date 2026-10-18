@@ -402,7 +402,8 @@ class VolatileLiveMonitorTest(TestCase):
             server.shutdown();server.server_close()
 
 
-class LiveUdpTransportTest(TestCase):
+
+class LiveFifoTransportTest(TestCase):
     def setUp(self):
         with supervisor.LIVE_LOCK:
             supervisor.LIVE_EVENTS.clear()
@@ -414,33 +415,36 @@ class LiveUdpTransportTest(TestCase):
             supervisor.LIVE_EVENTS.clear()
             supervisor.LIVE_SUBSCRIBERS.clear()
 
-    def test_udp_datagram_feed_is_best_effort_and_memory_only(self):
+    def test_fifo_feed_is_volatile_and_decodes_failed_pap(self):
         token,_=supervisor.live_start()
-        server=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        server.bind(('127.0.0.1',0))
-        address=server.getsockname()
-        server.close()
-        old_stop=supervisor.STOP
-        supervisor.STOP=False
-        thread=Thread(target=supervisor.live_udp_listener,args=(address,),daemon=True)
-        thread.start()
-        sender=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        try:
-            hx=lambda s:s.encode().hex()
-            line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
-                           hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
-                           hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
-            for _ in range(10):
-                sender.sendto((line+'\n').encode(),address)
-                time.sleep(.02)
-                data=supervisor.live_snapshot(token,0)
-                if data and data['items']:
-                    break
-            self.assertTrue(data['items'])
-            self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
-        finally:
-            sender.close()
-            supervisor.STOP=True
-            thread.join(1)
-            supervisor.STOP=old_stop
-            supervisor.live_stop(token)
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'live.fifo'
+            supervisor.setup_live_pipe(path)
+            old_stop=supervisor.STOP
+            supervisor.STOP=False
+            thread=Thread(target=supervisor.live_pipe_reader,args=(path,),daemon=True)
+            thread.start()
+            try:
+                hx=lambda s:s.encode().hex()
+                line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
+                               hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),'',
+                               hx('1'),hx('ether1'),hx('PAP'),hx('pap failed')])
+                with open(path,'w',encoding='ascii',buffering=1) as out:
+                    out.write(line+'\n')
+                for _ in range(20):
+                    data=supervisor.live_snapshot(token,0)
+                    if data and data['items']:
+                        break
+                    time.sleep(.02)
+                self.assertTrue(data['items'])
+                self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
+            finally:
+                supervisor.STOP=True
+                # Wake blocking read so the daemon test thread can leave.
+                try:
+                    with open(path,'w',encoding='ascii',buffering=1) as out: out.write('\n')
+                except OSError:
+                    pass
+                thread.join(1)
+                supervisor.STOP=old_stop
+                supervisor.live_stop(token)
