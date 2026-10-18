@@ -121,5 +121,7 @@
   "radius.simple.diag1813": "Accounting UDP 1813",
   "radius.simple.diagLive": "جمع‌آوری Live Log",
   "radius.simple.diagMessages": "پیام‌های اخیر سرویس",
-  "radius.simple.loading": "در حال بررسی RADIUS…"
+  "radius.simple.loading": "در حال بررسی RADIUS…",
+  "radius.simple.liveConnected": "متصل",
+  "radius.simple.liveReconnecting": "در حال اتصال مجدد…"
 }
