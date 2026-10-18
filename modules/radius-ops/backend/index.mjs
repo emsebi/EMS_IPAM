@@ -214,6 +214,34 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
   if(m==='GET'&&p===base+'/groups'){const r=await pool.query(`SELECT g.id,g.company_id AS "companyId",c.name AS "companyName",g.name,g.description,g.cisco_privilege AS "ciscoPrivilege",g.mikrotik_group AS "mikrotikGroup",g.enabled,count(DISTINCT ar.account_id)::int AS members FROM radius_ops_groups g JOIN companies c ON c.id=g.company_id LEFT JOIN radius_ops_access_rules ar ON ar.profile_id=g.id GROUP BY g.id,c.name ORDER BY c.name,g.name`);return json(res,200,{ok:true,items:r.rows});}
   if(m==='GET'&&p===base+'/collections'){const r=await pool.query(`SELECT col.id,col.company_id AS "companyId",c.name AS "companyName",col.name,col.description,col.enabled,COALESCE(json_agg(CASE WHEN masklen(m.nas_source)=32 THEN host(m.nas_source) ELSE m.nas_source::text END ORDER BY masklen(m.nas_source),m.nas_source::text) FILTER(WHERE m.id IS NOT NULL),'[]'::json) AS members,count(DISTINCT ar.account_id)::int AS "assignedUsers" FROM radius_ops_collections col JOIN companies c ON c.id=col.company_id LEFT JOIN radius_ops_collection_members m ON m.collection_id=col.id LEFT JOIN radius_ops_access_rules ar ON ar.collection_id=col.id GROUP BY col.id,c.name ORDER BY c.name,col.name`);return json(res,200,{ok:true,items:r.rows});}
   if(m==='GET'&&p===base+'/accounts'){const r=await pool.query(`SELECT a.id,a.username,a.label,a.enabled,a.company_id AS "companyId",c.name AS "companyName",a.group_id AS "groupId",legacy.name AS "groupName",legacy.cisco_privilege AS "ciscoPrivilege",legacy.mikrotik_group AS "mikrotikGroup",COALESCE(json_agg(json_build_object('collectionId',ar.collection_id,'profileId',ar.profile_id,'collectionName',col.name,'profileName',g.name) ORDER BY col.name) FILTER(WHERE ar.id IS NOT NULL),'[]'::json) AS "accessRules" FROM radius_ops_accounts a JOIN companies c ON c.id=a.company_id LEFT JOIN radius_ops_groups legacy ON legacy.id=a.group_id LEFT JOIN radius_ops_access_rules ar ON ar.account_id=a.id LEFT JOIN radius_ops_collections col ON col.id=ar.collection_id LEFT JOIN radius_ops_groups g ON g.id=ar.profile_id GROUP BY a.id,c.name,legacy.id ORDER BY c.name,a.username`);return json(res,200,{ok:true,items:r.rows});}
+  {
+   const hit=p.match(/^\/api\/radius-ops\/secret-profiles\/([^/]+)\/reveal$/);
+   if(m==='POST'&&hit){
+    const id=uid(hit[1]),row=(await pool.query('SELECT id,name,secret FROM radius_ops_secret_profiles WHERE id=$1',[id])).rows[0];
+    if(!row)throw fail('Secret profile not found',404);
+    res.setHeader('Cache-Control','no-store, private, max-age=0');res.setHeader('Pragma','no-cache');
+    await audit?.(actor,'reveal','radius-secret-profile',id,{detail:{name:row.name}});
+    return json(res,200,{ok:true,id:row.id,name:row.name,value:row.secret});
+   }
+  }
+  {
+   const hit=p.match(/^\/api\/radius-ops\/accounts\/([^/]+)\/reveal-password$/);
+   if(m==='POST'&&hit){
+    const id=uid(hit[1]),row=(await pool.query(`SELECT a.id,a.username,rc.value AS password
+      FROM radius_ops_accounts a
+      LEFT JOIN LATERAL (
+       SELECT value FROM radcheck
+       WHERE username=a.username AND attribute='Cleartext-Password'
+       ORDER BY id DESC LIMIT 1
+      ) rc ON true
+      WHERE a.id=$1`,[id])).rows[0];
+    if(!row)throw fail('RADIUS user not found',404);
+    if(!row.password)throw fail('RADIUS password is unavailable',404);
+    res.setHeader('Cache-Control','no-store, private, max-age=0');res.setHeader('Pragma','no-cache');
+    await audit?.(actor,'reveal','radius-user-password',id,{detail:{username:row.username}});
+    return json(res,200,{ok:true,id:row.id,name:row.username,value:row.password});
+   }
+  }
   if(m==='GET'&&p===base+'/macs'){const r=await pool.query(`SELECT m.id,m.company_id AS "companyId",c.name AS "companyName",m.mac::text,m.label,m.vlan,m.enabled FROM radius_ops_macs m JOIN companies c ON c.id=m.company_id ORDER BY m.label`);return json(res,200,{ok:true,items:r.rows});}
   if(m==='GET'&&p===base+'/events'){const [e,a]=await Promise.all([pool.query(`SELECT p.id,p.username,p.reply,p.authdate AS "at",p.sourceipaddress AS "sourceIp", d.label AS "deviceLabel", c.name AS "companyName" FROM radpostauth p LEFT JOIN radius_ops_devices d ON p.sourceipaddress::inet <<= d.nas_ip LEFT JOIN companies c ON c.id=d.company_id ORDER BY p.id DESC LIMIT 100`),pool.query('SELECT username,nasipaddress,acctstarttime AS "startedAt",acctstoptime AS "stoppedAt" FROM radacct ORDER BY radacctid DESC LIMIT 50')]);return json(res,200,{ok:true,items:e.rows,sessions:a.rows});}
   if(m==='POST'&&p===base+'/config'){const b=await readBody(req),id=uid(b.id),vendor=checkVendor(b.vendor),r=(await pool.query('SELECT d.nas_ip::text AS "nasIp",COALESCE(p.secret,d.secret) AS secret FROM radius_ops_devices d LEFT JOIN radius_ops_secret_profiles p ON p.id=d.secret_profile_id WHERE d.id=$1',[id])).rows[0];if(!r)throw fail('NAS not found',404);return json(res,200,{ok:true,text:cli({...r,vendor},b.radiusIp,b.mode||'admin',b.port||'GigabitEthernet0/1')});}
