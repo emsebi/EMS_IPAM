@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import {
-  fail,name,user,password,secret,ip,nasSource,accessScope,mac,aliases,vid,priv,
+  fail,name,user,password,secret,ip,nasSource,mac,aliases,vid,priv,
   checkVendor,checkAccountVendor,checkGroup,replies,cli,
 } from './model.mjs';
 
@@ -65,21 +65,33 @@ function accessRules(v){
  if(new Set(out.map(r=>r.collectionId)).size!==out.length)throw fail('Duplicate collection access rule');
  return out;
 }
-function collectionMembers(v){
- if(!Array.isArray(v)||v.length>512)throw fail('Invalid collection members');
- const out=[...new Set(v.map(accessScope))];
- if(!out.length)throw fail('At least one NAS scope is required');
- return out;
+function collectionIds(v){
+ if(v===undefined)return undefined;
+ if(!Array.isArray(v)||v.length>256)throw fail('Invalid NAS collection selection');
+ return [...new Set(v.map(uid))];
 }
 async function assertAccessNoConflict(c,accountId=null){
  const params=accountId?[accountId]:[];
  const where=accountId?'WHERE ar.account_id=$1':'';
- const r=await c.query(`SELECT ar.account_id,m.nas_source::text AS scope
-   FROM radius_ops_access_rules ar JOIN radius_ops_collection_members m ON m.collection_id=ar.collection_id
+ const r=await c.query(`SELECT ar.account_id,cd.device_id,d.label,d.nas_ip::text AS nas_ip
+   FROM radius_ops_access_rules ar
+   JOIN radius_ops_collection_devices cd ON cd.collection_id=ar.collection_id
+   JOIN radius_ops_devices d ON d.id=cd.device_id
    ${where}
-   GROUP BY ar.account_id,m.nas_source
+   GROUP BY ar.account_id,cd.device_id,d.label,d.nas_ip
    HAVING count(DISTINCT ar.profile_id)>1 LIMIT 1`,params);
- if(r.rowCount)throw fail(`Conflicting permission profiles for access scope ${r.rows[0].scope}`,409);
+ if(r.rowCount)throw fail(`Conflicting permission profiles for NAS ${r.rows[0].label} (${r.rows[0].nas_ip})`,409);
+}
+async function syncDeviceCollections(c,deviceId,companyId,ids){
+ if(ids===undefined)return;
+ await c.query('DELETE FROM radius_ops_collection_devices WHERE device_id=$1',[deviceId]);
+ for(const collectionId of ids){
+  const ok=(await c.query('SELECT 1 FROM radius_ops_collections WHERE id=$1 AND company_id=$2',[collectionId,companyId])).rowCount;
+  if(!ok)throw fail('NAS collection does not belong to this company',409);
+  await c.query('INSERT INTO radius_ops_collection_devices(id,collection_id,device_id) VALUES($1,$2,$3)',
+    [crypto.randomUUID(),collectionId,deviceId]);
+ }
+ await assertAccessNoConflict(c);
 }
 async function syncAccessRules(c,accountId,companyId,rules){
  if(rules===undefined)return;
@@ -160,10 +172,10 @@ async function macSync(c,m){await macClear(c,m.id);if(!m.enabled)return;for(cons
  await replySync(c,alias,m.vlan===null?[]:replies({vlan:m.vlan}));
 }}
 function fields(b,kind){
- if(kind==='devices')return {label:name(b.label),vendor:b.vendor===undefined?null:checkVendor(b.vendor),nasIp:nasSource(b.nasIp),companyId:b.companyId?key(b.companyId):null,hostId:b.hostId?key(b.hostId):null,enabled:active(b.enabled),secret:b.secret?secret(b.secret):null,secretProfileId:b.secretProfileId?uid(b.secretProfileId):null};
+ if(kind==='devices')return {label:name(b.label),vendor:b.vendor===undefined?null:checkVendor(b.vendor),nasIp:nasSource(b.nasIp),companyId:b.companyId?key(b.companyId):null,hostId:b.hostId?key(b.hostId):null,enabled:active(b.enabled),secret:b.secret?secret(b.secret):null,secretProfileId:b.secretProfileId?uid(b.secretProfileId):null,collectionIds:collectionIds(b.collectionIds)};
  if(kind==='accounts')return {label:name(b.label||b.username),companyId:key(b.companyId),groupId:b.groupId?uid(b.groupId):null,vendor:checkAccountVendor(b.vendor||'generic'),privilege:priv(b.privilege??1),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled),password:b.password?password(b.password):null,accessRules:accessRules(b.accessRules)};
  if(kind==='groups')return {name:name(b.name),description:text(b.description,500),companyId:key(b.companyId),ciscoPrivilege:priv(b.ciscoPrivilege),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled)};
- if(kind==='collections')return {name:name(b.name),description:text(b.description,500),companyId:key(b.companyId),members:collectionMembers(b.members),enabled:active(b.enabled)};
+ if(kind==='collections')return {name:name(b.name),description:text(b.description,500),companyId:key(b.companyId),enabled:active(b.enabled)};
  if(kind==='secret-profiles')return {name:name(b.name),companyId:key(b.companyId),secret:b.secret?secret(b.secret):null,enabled:active(b.enabled)};
  return {label:name(b.label),mac:mac(b.mac),companyId:key(b.companyId),vlan:vid(b.vlan),enabled:active(b.enabled)};
 }
