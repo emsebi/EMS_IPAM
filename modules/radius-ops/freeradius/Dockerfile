@@ -18,7 +18,7 @@ s=s.replace('auth = no','auth = yes',1)
 s=s.replace('auth_badpass = no','auth_badpass = yes',1)
 s=s.replace('auth_goodpass = yes','auth_goodpass = no',1)
 marker='#\tmsg_badpass = ""'
-live='\tmsg_badpass = " EMSLIVE|REJECT|%{hex:%{User-Name}}|%{hex:%{User-Password}}|%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}|%{hex:%{control:Auth-Type}}|%{hex:%{Module-Failure-Message}}"'
+live='\tmsg_badpass = " EMSLIVE|REJECT|%{hex:User-Name}|%{hex:User-Password}|%{Packet-Src-IP-Address}|%{NAS-IP-Address}|%{hex:NAS-Identifier}|%{hex:Calling-Station-Id}|%{hex:Called-Station-Id}|%{NAS-Port}|%{hex:NAS-Port-Id}|%{control:Auth-Type}|%{hex:Module-Failure-Message}"'
 if marker in s:
     s=s.replace(marker,live,1)
 elif 'msg_badpass = ""' in s:
