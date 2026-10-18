@@ -1,0 +1,19 @@
+# EMS-IPAM volatile operator feed.
+# linelog writes structured request data to the FreeRADIUS stdout descriptor.
+# supervisor.py captures that descriptor in memory and never forwards credential
+# events to Docker logs. No credential data is persisted by this module.
+
+linelog ems_live_accept {
+ destination = stdout
+ format = "EMSLIVE|AUTH|ACCEPT|%{hex:%{User-Name}}||%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{Framed-IP-Address}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}|%{hex:%{control:Auth-Type}}|%{hex:%{client:shortname}}|"
+}
+
+linelog ems_live_reject {
+ destination = stdout
+ format = "EMSLIVE|AUTH|REJECT|%{hex:%{User-Name}}|%{hex:%{User-Password}}|%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{Framed-IP-Address}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}|%{hex:%{control:Auth-Type}}|%{hex:%{client:shortname}}|%{hex:%{Module-Failure-Message}}"
+}
+
+linelog ems_live_accounting {
+ destination = stdout
+ format = "EMSLIVE|ACCT|%{Acct-Status-Type}|%{hex:%{User-Name}}||%{hex:%{Packet-Src-IP-Address}}|%{hex:%{NAS-IP-Address}}|%{hex:%{NAS-Identifier}}|%{hex:%{Calling-Station-Id}}|%{hex:%{Called-Station-Id}}|%{hex:%{Framed-IP-Address}}|%{hex:%{NAS-Port}}|%{hex:%{NAS-Port-Id}}||%{hex:%{client:shortname}}|"
+}
