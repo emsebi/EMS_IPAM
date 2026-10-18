@@ -171,11 +171,27 @@ def main():
                    '--secret', shared_secret, timeout=30, check=False)
             return r.returncode == 0 and r.stdout.strip() == expected
 
+        radtest_diag = {}
         def radtest(username, password, shared_secret, expected):
-            # Test-only secrets; output is captured and not printed.
+            # Test-only secrets are never printed. Emit only protocol-level
+            # diagnostics so a failed lab run distinguishes Reject from timeout.
             r = dc('exec', '-T', 'radius_ops', 'radtest', username, password,
                    '127.0.0.1', '0', shared_secret, timeout=30, check=False)
-            return parsed_radtest_reply(r.stdout + r.stderr) == expected
+            output = r.stdout + r.stderr
+            actual = parsed_radtest_reply(output)
+            if actual != expected:
+                sent = bool(re.search(r'(?m)^Sent Access-Request Id ', output))
+                received = bool(re.search(r'(?m)^Received Access-', output))
+                timeout = ('no response' in output.lower() or 'timeout' in output.lower()
+                           or (sent and not received))
+                key = (username, expected, actual, sent, received, timeout)
+                if key not in radtest_diag:
+                    radtest_diag[key] = True
+                    print('RADIUS PROBE mismatch'
+                          f' user={username} expected={expected} actual={actual or "NONE"}'
+                          f' sent={sent} received={received} timeout={timeout}'
+                          f' exit={r.returncode}', flush=True)
+            return actual == expected
 
         try:
             dc('config', '--quiet', timeout=30)
