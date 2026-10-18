@@ -76,8 +76,8 @@
   "radius.simple.collections": "گروه‌های تجهیزات / NAS",
   "radius.simple.addCollection": "افزودن گروه تجهیزات",
   "radius.simple.collectionName": "نام گروه تجهیزات",
-  "radius.simple.collectionMembers": "IP / CIDR های عضو",
-  "radius.simple.collectionMembersHint": "در هر خط یک IP یا CIDR وارد کنید. 0.0.0.0/0 همه NASهای ثبت‌شده را پوشش می‌دهد مگر Rule خاص‌تری تطبیق پیدا کند.",
+  "radius.simple.collectionMembers": "NASهای عضو",
+  "radius.simple.collectionMembersHint": "عضویت از داخل فرم هر NAS تعیین می‌شود؛ اینجا IP/CIDR جداگانه تعریف نمی‌شود.",
   "radius.simple.assignedUsers": "کاربران تخصیص‌یافته",
   "radius.simple.accessRules": "دسترسی به تجهیزات",
   "radius.simple.accessRulesHint": "گروه‌های تجهیزات مجاز را تیک بزنید و برای هر کدام پروفایل دسترسی را انتخاب کنید.",
@@ -130,5 +130,9 @@
   "radius.simple.credentialRevealHint": "این مقدار واقعی Credential است. بعد از استفاده Hide کنید.",
   "radius.simple.hide": "مخفی‌کردن",
   "radius.simple.copied": "کپی شد",
-  "radius.simple.copyFailed": "کپی انجام نشد"
+  "radius.simple.copyFailed": "کپی انجام نشد",
+  "radius.simple.collectionMembershipHint": "این Collection فقط یک گروه اسمی از NASهای ثبت‌شده است. عضویت NASها را از تب RADIUS Clients تعیین کنید.",
+  "radius.simple.nasCollections": "NAS Collectionها",
+  "radius.simple.nasCollectionsHint": "این NAS می‌تواند عضو یک یا چند Collection باشد.",
+  "radius.simple.noNasMembers": "هنوز NASی عضو این Collection نیست"
 }
