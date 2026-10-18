@@ -76,8 +76,8 @@
   "radius.simple.collections": "NAS Collections",
   "radius.simple.addCollection": "Add collection",
   "radius.simple.collectionName": "Collection name",
-  "radius.simple.collectionMembers": "IP / CIDR members",
-  "radius.simple.collectionMembersHint": "One exact IPv4 or CIDR per line. 0.0.0.0/0 covers every registered NAS unless a more specific collection rule matches.",
+  "radius.simple.collectionMembers": "Member NAS",
+  "radius.simple.collectionMembersHint": "Membership is assigned from each NAS form; no separate IP/CIDR scopes are defined here.",
   "radius.simple.assignedUsers": "Assigned users",
   "radius.simple.accessRules": "Device access",
   "radius.simple.accessRulesHint": "Select the NAS collections this user may access, then choose the permission profile for each.",
@@ -130,5 +130,9 @@
   "radius.simple.credentialRevealHint": "This is the real credential value. Hide it again after use.",
   "radius.simple.hide": "Hide",
   "radius.simple.copied": "Copied",
-  "radius.simple.copyFailed": "Copy failed"
+  "radius.simple.copyFailed": "Copy failed",
+  "radius.simple.collectionMembershipHint": "This Collection is only a named group of registered NAS clients. Assign NAS membership from RADIUS Clients.",
+  "radius.simple.nasCollections": "NAS Collections",
+  "radius.simple.nasCollectionsHint": "This NAS may belong to one or more Collections.",
+  "radius.simple.noNasMembers": "No NAS is assigned to this Collection yet"
 }
