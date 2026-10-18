@@ -251,3 +251,15 @@ test('RADIUS diagnostics are available to the admin UI without shell access',()=
  assert.match(backend,/base\+'\/diagnostics'/);
  assert.match(ui,/id="rDiagOpen"/);
 });
+
+test('v27 specific NAS definitions shadow broader fallback even when disabled',()=>{
+ const sql=fs.readFileSync(path.join(root,'migrations/009-specific-nas-deny-shadow.sql'),'utf8');
+ const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
+ assert.match(sql,/CREATE OR REPLACE FUNCTION radius_ops_resolve_nas/);
+ assert.match(sql,/ORDER BY masklen\(d\.nas_ip\) DESC/);
+ assert.match(sql,/WHERE n\.active/);
+ assert.match(sql,/sp\.enabled/);
+ assert.match(backend,/Keep every registered NAS in the FreeRADIUS client radix tree/);
+ assert.doesNotMatch(backend,/if\(!d\.enabled\)return/);
+ assert.match(backend,/nas-disabled-or-inventory-denied/);
+});
