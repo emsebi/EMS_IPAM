@@ -20,11 +20,11 @@ FIXTURE = """log {
 """
 
 class LoggingConfiguratorTest(TestCase):
-    def test_stock_freeradius_3_logging_is_enabled_deterministically(self):
+    def test_stock_freeradius_3_logging_disables_passwords(self):
         out = config.configure_text(FIXTURE)
         self.assertIn("\tauth = yes", out)
-        self.assertIn("\tauth_badpass = yes", out)
-        self.assertIn("\tauth_goodpass = yes", out)
+        self.assertIn("\tauth_badpass = no", out)
+        self.assertIn("\tauth_goodpass = no", out)
         self.assertIn('msg_badpass = " EMSMETA src=%{Packet-Src-IP-Address}', out)
         self.assertIn('msg_goodpass = " EMSMETA src=%{Packet-Src-IP-Address}', out)
         self.assertIn('method=%{control:Auth-Type}"', out)
