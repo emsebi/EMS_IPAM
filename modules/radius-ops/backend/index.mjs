@@ -274,6 +274,7 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
   const kind=match[1],id=match[2]?uid(match[2]):crypto.randomUUID();
   if((m==='POST'&&match[2])||(m!=='POST'&&!match[2]))throw fail('Invalid method/path',404);
   const b=m==='DELETE'?null:await readBody(req),f=b?fields(b,kind):null;
+  const auditDetail={operation:m};
 
   await transaction(pool,async c=>{
    if(kind==='secret-profiles'){
@@ -294,7 +295,18 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
    }else if(kind==='groups'){
     if(m==='POST'){await checkCompany(c,f.companyId);const g=(await c.query('INSERT INTO radius_ops_groups(id,company_id,name,description,cisco_privilege,mikrotik_group,enabled) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[id,f.companyId,f.name,f.description,f.ciscoPrivilege,f.mikrotikGroup,f.enabled])).rows[0];await groupSync(c,g);}
     else{const old=(await c.query('SELECT * FROM radius_ops_groups WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!old)throw fail('RADIUS group not found',404);
-     if(m==='DELETE'){const members=(await c.query('SELECT count(*)::int n FROM radius_ops_accounts WHERE group_id=$1',[id])).rows[0].n;const assigned=(await c.query('SELECT count(*)::int n FROM radius_ops_access_rules WHERE profile_id=$1',[id])).rows[0].n;if(members||assigned)throw fail('Move or delete users using this permission profile first',409);await c.query('DELETE FROM radgroupreply WHERE groupname=$1',[groupRadiusName(id)]);await c.query('DELETE FROM radius_ops_groups WHERE id=$1',[id]);}
+     if(m==='DELETE'){const members=(await c.query('SELECT count(*)::int n FROM radius_ops_accounts WHERE group_id=$1',[id])).rows[0].n;const assigned=(await c.query('SELECT count(*)::int n FROM radius_ops_access_rules WHERE profile_id=$1',[id])).rows[0].n;if(members||assigned){
+      const replacement=(await c.query(`SELECT * FROM radius_ops_groups WHERE company_id=$1 AND id<>$2
+       AND cisco_privilege=$3 AND mikrotik_group=$4 AND enabled=$5
+       ORDER BY (name=$6) DESC,created_at,id LIMIT 1 FOR UPDATE`,
+       [old.company_id,id,old.cisco_privilege,old.mikrotik_group,old.enabled,DEFAULT_PROFILE_NAME])).rows[0];
+      if(!replacement)throw fail('This profile is in use and no profile with identical permissions exists',409);
+      await assertAccessNoConflict(c);
+      await c.query('UPDATE radius_ops_accounts SET group_id=$2 WHERE group_id=$1',[id,replacement.id]);
+      await c.query('UPDATE radius_ops_access_rules SET profile_id=$2 WHERE profile_id=$1',[id,replacement.id]);
+      await groupSync(c,replacement);
+      auditDetail.replacementId=replacement.id;
+     }await c.query('DELETE FROM radgroupreply WHERE groupname=$1',[groupRadiusName(id)]);await c.query('DELETE FROM radius_ops_groups WHERE id=$1',[id]);}
      else{await checkCompany(c,f.companyId);const g=(await c.query('UPDATE radius_ops_groups SET company_id=$2,name=$3,description=$4,cisco_privilege=$5,mikrotik_group=$6,enabled=$7,updated_at=now() WHERE id=$1 RETURNING *',[id,f.companyId,f.name,f.description,f.ciscoPrivilege,f.mikrotikGroup,f.enabled])).rows[0];await groupSync(c,g);}
     }
    }else if(kind==='collections'){
@@ -304,7 +316,26 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
     }else{
      const old=(await c.query('SELECT * FROM radius_ops_collections WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!old)throw fail('NAS collection not found',404);
      if(m==='DELETE'){
-      if((await c.query('SELECT 1 FROM radius_ops_access_rules WHERE collection_id=$1 LIMIT 1',[id])).rowCount)throw fail('Remove user access rules for this collection first',409);
+      if((await c.query('SELECT 1 FROM radius_ops_access_rules WHERE collection_id=$1 LIMIT 1',[id])).rowCount){
+       const replacement=(await c.query(`SELECT col.id FROM radius_ops_collections col
+        WHERE col.company_id=$1 AND col.id<>$2 AND col.enabled=$3
+        AND NOT EXISTS(
+         (SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=$2
+          EXCEPT SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=col.id)
+         UNION ALL
+         (SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=col.id
+          EXCEPT SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=$2))
+        AND NOT EXISTS(SELECT 1 FROM radius_ops_access_rules src
+         JOIN radius_ops_access_rules dst ON dst.account_id=src.account_id AND dst.collection_id=col.id
+         WHERE src.collection_id=$2 AND (src.profile_id<>dst.profile_id OR src.enabled<>dst.enabled))
+        ORDER BY (col.name=$4) DESC,col.created_at,col.id LIMIT 1 FOR UPDATE OF col`,
+        [old.company_id,id,old.enabled,DEFAULT_COLLECTION_NAME])).rows[0];
+       if(!replacement)throw fail('This collection is in use and no collection with identical NAS membership and access rules exists',409);
+       await c.query(`DELETE FROM radius_ops_access_rules src USING radius_ops_access_rules dst
+        WHERE src.collection_id=$1 AND dst.collection_id=$2 AND src.account_id=dst.account_id`,[id,replacement.id]);
+       await c.query('UPDATE radius_ops_access_rules SET collection_id=$2 WHERE collection_id=$1',[id,replacement.id]);
+       auditDetail.replacementId=replacement.id;
+      }
       await c.query('DELETE FROM radius_ops_collections WHERE id=$1',[id]);
      }else{
       await checkCompany(c,f.companyId);
@@ -328,7 +359,7 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
     }
    }
   });
-  await audit?.(actor,m.toLowerCase(),'radius-ops-'+kind,id,{detail:{operation:m}});
+  await audit?.(actor,m.toLowerCase(),'radius-ops-'+kind,id,{detail:auditDetail});
   return json(res,m==='POST'?201:200,{ok:true,id});
  }
 };}
