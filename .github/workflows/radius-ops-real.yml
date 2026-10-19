@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 75
     env:
       EMS_RADIUS_SKIP_BROWSER: "0"
+      EMS_RADIUS_BROWSER_IMAGE: "mcr.microsoft.com/playwright:v1.62.1-noble"
     steps:
       - name: Checkout trusted branch commit
         uses: actions/checkout@v4
@@ -37,20 +38,20 @@ jobs:
           docker compose version
           python3 --version
 
-      - name: Provision Chromium without changing host packages
+      - name: Provision Node without changing host packages
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: docker-app/package-lock.json
 
-      - name: Install browser test dependencies
+      - name: Install browser test package and pull isolated Chromium runtime
         shell: bash
         run: |
           set -euo pipefail
           cd docker-app
           npm ci --ignore-scripts
-          npx playwright install chromium
+          docker pull "$EMS_RADIUS_BROWSER_IMAGE"
 
       - name: Clean stale disposable RADIUS lab resources
         shell: bash
