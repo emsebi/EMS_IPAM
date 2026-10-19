@@ -25,7 +25,8 @@ jobs:
     timeout-minutes: 75
     env:
       EMS_RADIUS_SKIP_BROWSER: "0"
-      EMS_RADIUS_BROWSER_IMAGE: "mcr.microsoft.com/playwright:v1.62.1-noble"
+      EMS_RADIUS_BROWSER_IMAGE: "ghcr.io/browserless/chromium:latest"
+      EMS_RADIUS_BROWSER_HOST: "host.docker.internal"
     steps:
       - name: Checkout trusted branch commit
         uses: actions/checkout@v4
@@ -45,13 +46,24 @@ jobs:
           cache: npm
           cache-dependency-path: docker-app/package-lock.json
 
-      - name: Install browser test package and pull isolated Chromium runtime
+      - name: Start isolated Chromium runtime
         shell: bash
         run: |
           set -euo pipefail
           cd docker-app
           npm ci --ignore-scripts
           docker pull "$EMS_RADIUS_BROWSER_IMAGE"
+          docker rm -f ems-radius-browser >/dev/null 2>&1 || true
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::$token"
+          docker run -d --rm --name ems-radius-browser \
+            --add-host host.docker.internal:host-gateway \
+            -p 127.0.0.1::3000 \
+            -e "TOKEN=$token" \
+            "$EMS_RADIUS_BROWSER_IMAGE" >/dev/null
+          browser_port="$(docker port ems-radius-browser 3000/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -n1)"
+          test -n "$browser_port"
+          echo "EMS_RADIUS_BROWSER_CDP_URL=ws://127.0.0.1:${browser_port}?token=${token}" >> "$GITHUB_ENV"
 
       - name: Clean stale disposable RADIUS lab resources
         shell: bash
@@ -64,3 +76,8 @@ jobs:
       - name: Run real Docker PostgreSQL FreeRADIUS smoke
         shell: bash
         run: python3 scripts/radius-ops-docker-smoke.py
+
+      - name: Stop isolated Chromium runtime
+        if: always()
+        shell: bash
+        run: docker rm -f ems-radius-browser >/dev/null 2>&1 || true
