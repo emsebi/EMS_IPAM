@@ -73,9 +73,10 @@ def distinct_udp_ports(count=2):
             sock.close()
 
 
-def run(command, *, env=None, timeout=180, check=True):
+def run(command, *, env=None, timeout=180, check=True, input_text=None):
     try:
-        r = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(command, env=env, capture_output=True, text=True,
+                           input=input_text, timeout=timeout)
     except subprocess.TimeoutExpired:
         # TimeoutExpired.__str__ includes the entire command, including
         # disposable shared secrets and passwords passed to radtest.
@@ -122,8 +123,9 @@ def main():
         Path(temp, 'backups').chmod(0o777)
         compose = ['docker', 'compose', '-p', project, '-f', str(ROOT/'compose.yml'), '-f', str(FRAGMENT)]
 
-        def dc(*args, timeout=180, check=True):
-            return run(compose + list(args), env=env, timeout=timeout, check=check)
+        def dc(*args, timeout=180, check=True, input_text=None):
+            return run(compose + list(args), env=env, timeout=timeout, check=check,
+                       input_text=input_text)
 
         def sql(query):
             return dc('exec', '-T', 'db', 'psql', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1',
@@ -195,6 +197,42 @@ def main():
                           f' sent={sent} received={received} timeout={timeout}'
                           f' exit={r.returncode}', flush=True)
             return actual == expected
+
+        def radtest_reply_attributes(username, password, shared_secret, expected):
+            """Require an authenticated Access-Accept carrying exact wire attributes."""
+            r = dc('exec', '-T', 'radius_ops', 'radtest', username, password,
+                   '127.0.0.1', '0', shared_secret, timeout=30, check=False)
+            output = r.stdout + r.stderr
+            if parsed_radtest_reply(output) != 'Access-Accept':
+                return False
+            for attribute, value in expected.items():
+                pattern = rf'(?m)^\s*{re.escape(attribute)}\s*=\s*"?{re.escape(value)}"?\s*$'
+                if not re.search(pattern, output):
+                    return False
+            return True
+
+        def accounting(username, shared_secret, session_id, status, session_time=0):
+            """Send one real UDP accounting packet and authenticate its response."""
+            attributes = [
+                f'User-Name = "{username}"',
+                f'Acct-Status-Type = {status}',
+                f'Acct-Session-Id = "{session_id}"',
+                'NAS-IP-Address = 127.0.0.1',
+                'NAS-Port-Id = "lab-console-1"',
+                'Service-Type = Login-User',
+            ]
+            if session_time:
+                attributes.append(f'Acct-Session-Time = {session_time}')
+            r = dc('exec', '-T', 'radius_ops', 'radclient', '-x',
+                   '127.0.0.1:1813', 'acct', shared_secret,
+                   timeout=30, check=False, input_text='\n'.join(attributes) + '\n')
+            output = r.stdout + r.stderr
+            requests = re.findall(r'(?m)^Sent Accounting-Request Id ([0-9]{1,3})\b', output)
+            replies = re.findall(
+                r'(?m)^Received Accounting-Response Id ([0-9]{1,3}) '
+                r'from 127\.0\.0\.1:1813(?:\s|$)', output)
+            return (r.returncode == 0 and len(replies) == 1 and requests
+                    and all(request_id == replies[0] for request_id in requests))
 
         try:
             dc('config', '--quiet', timeout=30)
@@ -311,26 +349,25 @@ def main():
                 'companyId':'lab-company-a','mac':'02:aa:bb:cc:dd:ee',
                 'label':'Test station','vlan':30,'enabled':True})
             print('PASS authenticated NAS/Group/User/MAB API CRUD')
-            # Browser coverage is optional for the first real-runtime pass;
-            # the dedicated browser job can enable it after RADIUS is healthy.
+            # The persistent deployment may skip browser provisioning, while the
+            # disposable Real Lab workflow must exercise this against the live API.
             if os.environ.get('EMS_RADIUS_SKIP_BROWSER') == '1':
                 print('SKIP real-backend Chromium (EMS_RADIUS_SKIP_BROWSER=1)')
             else:
-                from playwright.sync_api import sync_playwright
-                with sync_playwright() as browser_tools:
-                    browser = browser_tools.chromium.launch(headless=True)
-                    for width, height in ((1440, 900), (390, 844)):
-                        context = browser.new_context(viewport={'width': width, 'height': height})
-                        context.add_cookies([{'name': cookie.name, 'value': cookie.value, 'url': base}
-                                             for cookie in jar])
-                        page = context.new_page()
-                        page.goto(base + '/module/radius', wait_until='domcontentloaded')
-                        page.get_by_role('button', name='Clients / NAS').wait_for(timeout=15000)
-                        assert 'Lab NAS A' in page.locator('main').inner_text()
-                        assert 'Lab NAS B Range' in page.locator('main').inner_text()
-                        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 5')
-                        context.close()
-                    browser.close()
+                cookie_path = Path(temp, 'browser-cookies.json')
+                cookie_path.write_text(json.dumps([
+                    {'name': cookie.name, 'value': cookie.value, 'url': base}
+                    for cookie in jar
+                ]), encoding='utf-8')
+                cookie_path.chmod(0o600)
+                browser_env = env.copy()
+                browser_env.update({
+                    'EMS_RADIUS_BASE_URL': base,
+                    'EMS_RADIUS_COOKIE_FILE': str(cookie_path),
+                })
+                run(['node', 'docker-app/tests/radius-real-backend.mjs'],
+                    env=browser_env, timeout=90)
+                cookie_path.unlink(missing_ok=True)
                 print('PASS real-backend Chromium desktop/mobile simple RADIUS UI')
             dc('up', '-d', '--wait', 'radius_ops', timeout=300)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'FreeRADIUS daemon stable')
@@ -361,6 +398,24 @@ def main():
 
             wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'),
                  'UDP Access-Accept from registered NAS', seconds=35)
+            assert radtest_reply_attributes(
+                'testadminA', password_a, secret_a,
+                {'Cisco-AVPair': 'shell:priv-lvl=15', 'Mikrotik-Group': 'full'})
+            print('PASS Cisco privilege and MikroTik group attributes on UDP Access-Accept')
+            accounting_session = 'ems-lab-' + secrets.token_hex(8)
+            assert accounting('testadminA', secret_a, accounting_session, 'Start')
+            wait(lambda: sql(
+                "SELECT count(*) FROM radacct WHERE acctsessionid='"
+                + accounting_session
+                + "' AND username='testadminA' AND nasipaddress='127.0.0.1' "
+                  "AND acctstarttime IS NOT NULL") == '1',
+                 'UDP 1813 Accounting-Start persisted', seconds=20)
+            assert accounting('testadminA', secret_a, accounting_session, 'Stop', 30)
+            wait(lambda: sql(
+                "SELECT count(*) FROM radacct WHERE acctsessionid='"
+                + accounting_session
+                + "' AND acctstoptime IS NOT NULL AND acctsessiontime=30") == '1',
+                 'UDP 1813 Accounting-Stop persisted', seconds=20)
             assert not radtest('testadminA',password_a,fallback_secret,'Access-Accept'), 'Specific /32 secret must override /0 fallback'
             assert nas_udp('127.20.0.2','127.20.0.2','testadminA',password_a,fallback_secret,'Access-Accept')
             print('PASS longest-prefix NAS secret selection (/32 overrides /0 fallback)')
