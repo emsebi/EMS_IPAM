@@ -73,16 +73,26 @@ def live_stop(token):
   LIVE_SUBSCRIBERS.pop(token,None);_live_prune()
   return True
 
+# Defense in depth: never retain password/raw fields even for an internal caller.
+LIVE_PUBLIC_FIELDS=('username','sourceIp','nasIp','nasIdentifier','callingStationId',
+'calledStationId','framedIpAddress','nasPort','nasPortId','authMethod','clientShortname')
 def live_add(event):
  global LIVE_SEQ,LAST_AUTH_AT,LAST_EVENT_AT
+ if not isinstance(event,dict) or event.get('type') not in ('authentication','accounting','transport','service'):return False
  now=time.time();LAST_EVENT_AT=now
  if event.get('type')=='authentication':LAST_AUTH_AT=now
+ safe={'type':event['type'],'result':event.get('result') if event.get('result') in ('ACCEPT','REJECT','DROP','START','STOP','INTERIM','INFO') else 'INFO'}
+ for key in LIVE_PUBLIC_FIELDS:
+  value=event.get(key)
+  if isinstance(value,str):safe[key]=value[:160]
+ if safe['type']=='authentication' and safe['result']=='REJECT':safe['reason']='authentication rejected'
+ elif safe['type']=='transport' and event.get('reason') in ('unknown RADIUS client','shared secret mismatch'):
+  safe['reason']=event['reason']
  with LIVE_LOCK:
   _live_prune()
   if not LIVE_SUBSCRIBERS:return False
   LIVE_SEQ+=1
-  item={'seq':LIVE_SEQ,'at':now,**event}
-  LIVE_EVENTS.append(item)
+  LIVE_EVENTS.append({'seq':LIVE_SEQ,'at':now,**safe})
   return True
 
 def _hex_text(value):
@@ -100,13 +110,11 @@ def parse_live_line(line):
   method_hex,client_hex,reason_hex)=parts
  if kind not in ('AUTH','ACCT'):return None
  method=_hex_text(method_hex)
- attempted=_hex_text(password_hex) if kind=='AUTH' else ''
+ # password_hex is intentionally discarded without decoding.
  return {
   'type':'authentication' if kind=='AUTH' else 'accounting',
   'result':result,
   'username':_hex_text(user_hex),
-  'attemptedPassword':attempted,
-  'passwordAvailable':bool(attempted),
   'sourceIp':_hex_text(source_hex),
   'nasIp':_hex_text(nas_ip_hex),
   'nasIdentifier':_hex_text(nas_id_hex),
@@ -117,7 +125,7 @@ def parse_live_line(line):
   'nasPortId':_hex_text(nas_port_id_hex),
   'authMethod':method,
   'clientShortname':_hex_text(client_hex),
-  'reason':_hex_text(reason_hex),
+  'reason':'authentication rejected' if kind=='AUTH' and result=='REJECT' else '',
  }
 
 def _meta_fields(extra):
@@ -139,9 +147,8 @@ def parse_native_auth_line(msg):
   payload=msg[pos:]
   head=re.match(r'Login (?P<state>OK|incorrect)(?: \((?P<reason>.*?)\))?:\s*\[(?P<creds>[^\]]*)\]\s*(?P<tail>.*)$',payload)
   if head:
-   creds=head.group('creds');username=creds;attempted=''
-   if '/' in creds:username,attempted=creds.split('/',1)
-   if attempted.startswith('<') and attempted.endswith('>'):attempted=''
+   creds=head.group('creds')
+   username=creds.split('/',1)[0]  # Never retain the attempted password.
    tail=head.group('tail') or ''
    origin=re.search(r'\(from client (?P<client>\S+) port (?P<port>[^ )]+)(?: cli (?P<calling>[^)]*))?\)',tail)
    meta=_meta_fields(tail)
@@ -150,13 +157,10 @@ def parse_native_auth_line(msg):
    if not method:
     hit=re.search(r'\b(pap|chap|mschapv2?|eap)\b',reason,re.I)
     if hit:method=hit.group(1).upper().replace('MSCHAP','MS-CHAP')
-    elif attempted:method='PAP'
    return {
     'type':'authentication',
     'result':'ACCEPT' if head.group('state')=='OK' else 'REJECT',
     'username':username,
-    'attemptedPassword':attempted,
-    'passwordAvailable':bool(attempted),
     'sourceIp':meta.get('src',''),
     'nasIp':meta.get('nasip',''),
     'nasIdentifier':meta.get('nasid',''),
@@ -167,23 +171,24 @@ def parse_native_auth_line(msg):
     'nasPortId':'',
     'authMethod':method,
     'clientShortname':origin.group('client') if origin else '',
-    'reason':reason,
+    'reason':'authentication rejected' if head.group('state')=='incorrect' else '',
    }
  unknown=re.search(r'from unknown client ([0-9A-Fa-f:.]+)',msg)
  if unknown:
   return {'type':'transport','result':'DROP','sourceIp':unknown.group(1),
-          'reason':'unknown RADIUS client','message':msg}
+          'reason':'unknown RADIUS client'}
  if 'Shared secret is incorrect' in msg or 'invalid Request Authenticator' in msg:
   src=re.search(r'(?:packet from|from) ([0-9A-Fa-f:.]+)',msg,re.I)
   return {'type':'transport','result':'DROP','sourceIp':src.group(1) if src else '',
-          'reason':'shared secret mismatch','message':msg}
+          'reason':'shared secret mismatch'}
  return None
 
 def _safe_service_status(msg):
+ # No arbitrary daemon line reaches the diagnostics API, even if it omits
+ # the literal words "password" or "secret".
  low=msg.lower()
- if any(word in low for word in ('user-password','cleartext-password','shared secret','password =','secret =')):return
- if any(word in low for word in ('error','failed','warning','ready','listening')):
-  SERVICE_ERRORS.append(msg[:500])
+ if any(word in low for word in ('error','failed','warning')):
+  SERVICE_ERRORS.append('FreeRADIUS reported a warning or error')
 
 def freeradius_config_check():
  global CONFIG_READY
@@ -194,18 +199,8 @@ def freeradius_config_check():
   for line in lines:_safe_service_status(line)
   CONFIG_READY=(r.returncode==0)
   if not CONFIG_READY:
-   # Config errors must be diagnosable without SSH. Never print lines which
-   # could contain credentials or shared secrets.
-   safe=[]
-   for line in lines:
-    low=line.lower()
-    if any(word in low for word in ('password','secret','user-password','cleartext')):continue
-    if any(word in low for word in ('error','failed','invalid','unknown','unexpected',
-                                     'including configuration file','errors reading',
-                                     'parse','syntax','rlm_linelog','ems-live-log')):
-     safe.append(line[:700])
-   print('[radius-ops] FreeRADIUS config check failed',flush=True)
-   for line in safe[-24:]:print('[radius-ops] config: '+line,flush=True)
+   # Raw -XC output can contain secrets, paths and SQL config values.
+   print('[radius-ops] FreeRADIUS config check failed; inspect locally',flush=True)
  except (OSError,subprocess.TimeoutExpired):
   CONFIG_READY=False
   SERVICE_ERRORS.append('FreeRADIUS configuration check could not run')
@@ -214,8 +209,7 @@ def freeradius_config_check():
 
 def service_output_reader(pipe):
  global LIVE_COLLECTOR_READY
- # Child stdout is held by the supervisor and never forwarded to Docker logs.
- # Native auth_badpass lines are parsed into the in-memory live stream only.
+ # Child stdout is held by the supervisor; no raw line enters the API.
  LIVE_COLLECTOR_READY=True
  try:
   for line in pipe:
@@ -224,7 +218,8 @@ def service_output_reader(pipe):
    _safe_service_status(msg)
    event=parse_native_auth_line(msg)
    if event:live_add(event)
-   elif 'Login incorrect' not in msg:live_add({'type':'service','result':'INFO','message':msg})
+   elif any(word in msg.lower() for word in ('ready','listening')):
+    live_add({'type':'service','result':'INFO'})
  finally:
   LIVE_COLLECTOR_READY=False
   try:pipe.close()
