@@ -275,18 +275,15 @@ test('v27 specific NAS definitions shadow broader fallback even when disabled',(
  assert.match(backend,/nas-disabled-or-inventory-denied/);
 });
 
-test('admin can reveal saved RADIUS credentials on explicit no-store endpoints',()=>{
- const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
- const ui=fs.readFileSync(path.join(root,'../radius/public/index.mjs'),'utf8');
- assert.match(backend,/secret-profiles\\\/\(\[\^\/\]\+\)\\\/reveal/);
- assert.match(backend,/accounts\\\/\(\[\^\/\]\+\)\\\/reveal-password/);
- assert.match(backend,/Cleartext-Password/);
- assert.match(backend,/Cache-Control','no-store, private, max-age=0/);
- assert.match(backend,/radius-user-password/);
- assert.match(backend,/radius-secret-profile/);
- assert.match(ui,/rRevealSecret/);
- assert.match(ui,/rRevealPassword/);
- assert.match(ui,/rCredentialCopy/);
+test('stored credentials cannot be revealed even by an admin',async()=>{
+ let queried=false;
+ const h=createModule({pool:{query(){queried=true;throw Error('Unexpected credential query');}},
+  requireModuleAccess:async()=>{},requireAdmin:()=>{}});
+ for(const route of ['secret-profiles/00000000-0000-4000-8000-000000000001/reveal',
+                     'accounts/00000000-0000-4000-8000-000000000001/reveal-password']){
+  await assert.rejects(h.handle({method:'POST'},{},new URL('http://localhost/api/radius-ops/'+route),{role:'admin'}),{status:403});
+ }
+ assert.equal(queried,false);
 });
 
 test('safe default NAS and permission groups guide first-time users',()=>{
