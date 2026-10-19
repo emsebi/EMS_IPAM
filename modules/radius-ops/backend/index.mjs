@@ -3,6 +3,7 @@ import {
   fail,name,user,password,secret,ip,nasSource,mac,aliases,vid,priv,
   checkVendor,checkAccountVendor,checkGroup,replies,cli,
 } from './model.mjs';
+import {safeLiveEvent, safeLiveDiagnostics} from './safe-live.mjs';
 
 const base='/api/radius-ops';
 const idre=/^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
@@ -30,11 +31,13 @@ async function radiusDiagnostics(){
   const r=await fetch('http://radius_ops:18120/diagnostics',{signal:c.signal});
   const data=await r.json().catch(()=>({ok:false}));
   if(!r.ok)throw fail('RADIUS diagnostics unavailable',503);
-  return data;
+  return safeLiveDiagnostics(data);
  }catch(e){if(e?.status)throw e;throw fail('RADIUS diagnostics unavailable',503);}
  finally{clearTimeout(timer);}
 }
 async function enrichLiveEvents(pool,items){
+ // Defense in depth: drop all unknown/raw fields before SQL enrichment and API.
+ items=(Array.isArray(items)?items:[]).slice(0,200).map(safeLiveEvent).filter(Boolean);
  const candidates=[];
  for(let i=0;i<items.length&&candidates.length<200;i++){
   const e=items[i];
