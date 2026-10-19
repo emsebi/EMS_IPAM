@@ -5,7 +5,9 @@ const baseURL=process.env.EMS_RADIUS_BASE_URL;
 const cookieFile=process.env.EMS_RADIUS_COOKIE_FILE;
 if(!baseURL || !cookieFile) throw new Error('Missing real-backend browser inputs');
 const cookies=JSON.parse(fs.readFileSync(cookieFile,'utf8'));
-const browser=await chromium.launch({headless:true});
+const browser=process.env.EMS_RADIUS_BROWSER_CDP_URL
+ ? await chromium.connectOverCDP(process.env.EMS_RADIUS_BROWSER_CDP_URL)
+ : await chromium.launch({headless:true});
 try{
  for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
   const context=await browser.newContext({viewport});
