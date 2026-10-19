@@ -6,7 +6,7 @@ function validateNetwork(value) {
   if (typeof value!=="string") throw fail("NAS IP/CIDR is required");
   const v=value.trim(); const [ip,bits,...extra]=v.split("/");
   const family=isIP(ip);
-  if (!family || extra.length || (bits!==undefined && (!/^\\d+$/.test(bits) || +bits>(family===4?32:128)))) throw fail("Invalid NAS IP/CIDR");
+  if (!family || extra.length || (bits!==undefined && (!/^\d+$/.test(bits) || +bits>(family===4?32:128)))) throw fail("Invalid NAS IP/CIDR");
   return v;
 }
 function encryptionKey() {
@@ -40,7 +40,7 @@ export function createModule(ctx) {
         await audit(user,"create","radius_nas",id,{detail:{name,network,vendor}});
         return json(res,201,{ok:true,id});
       }
-      const m=path.match(/^\\/api\\/radius\\/nas\\/([0-9a-f-]{36})$/i);
+      const m=path.match(/^\/api\/radius\/nas\/([0-9a-f-]{36})$/i);
       if(m && req.method==="PUT") {
         const b=await readBody(req),name=String(b.name??"").trim().slice(0,120),network=validateNetwork(b.network),vendor=b.vendor;
         if(!name || !["cisco","mikrotik"].includes(vendor)) throw fail("Invalid name/vendor");
