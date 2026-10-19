@@ -370,11 +370,12 @@ class VolatileLiveMonitorTest(TestCase):
         self.assertEqual(seq,0)
         self.assertTrue(supervisor.live_add({'type':'authentication','result':'REJECT','attemptedPassword':'bad'}))
         data=supervisor.live_snapshot(token,0)
-        self.assertEqual(data['items'][0]['attemptedPassword'],'bad')
+        self.assertNotIn('attemptedPassword',data['items'][0])
+        self.assertNotIn('bad',str(data['items'][0]))
         supervisor.live_stop(token)
         self.assertEqual(list(supervisor.LIVE_EVENTS),[])
 
-    def test_freeradius_line_decodes_failed_pap_value_without_persistence(self):
+    def test_freeradius_line_does_not_decode_failed_pap_value(self):
         hx=lambda text:text.encode().hex()
         line='|'.join(['AUTH','REJECT',hx('ali'),hx('WrongPass!'),hx('127.0.0.1'),
                        hx('127.0.0.1'),hx('QAZVIN-RTR'),hx('10.0.0.5'),hx('router'),
@@ -382,7 +383,8 @@ class VolatileLiveMonitorTest(TestCase):
                        hx('pap failed')])
         event=supervisor.parse_live_line(line)
         self.assertEqual(event['username'],'ali')
-        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertNotIn('attemptedPassword',event)
+        self.assertNotIn('WrongPass!',str(event))
         self.assertEqual(event['sourceIp'],'127.0.0.1')
         self.assertEqual(event['nasIdentifier'],'QAZVIN-RTR')
         self.assertEqual(event['callingStationId'],'10.0.0.5')
@@ -402,12 +404,12 @@ class VolatileLiveMonitorTest(TestCase):
             response=conn.getresponse();self.assertEqual(response.status,200)
             self.assertEqual(response.getheader('Cache-Control'),'no-store')
             token=json.loads(response.read())['token'];conn.close()
-            supervisor.live_add({'type':'service','message':'ready'})
+            supervisor.live_add({'type':'service','message':'ready','result':'INFO'})
             conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
             body=json.dumps({'token':token,'after':0})
             conn.request('POST','/live/events',body=body,headers={'Content-Type':'application/json'})
             response=conn.getresponse();payload=json.loads(response.read())
-            self.assertEqual(payload['items'][0]['message'],'ready');conn.close()
+            self.assertNotIn('message',payload['items'][0]);conn.close()
             conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=2)
             conn.request('POST','/live/stop',body=json.dumps({'token':token}),headers={'Content-Type':'application/json'})
             self.assertEqual(conn.getresponse().status,200);conn.close()
@@ -435,7 +437,8 @@ class NativeAuthLogParserTest(TestCase):
              'EMSMETA src=10.1.1.240;nasip=;nasid=;calling=;called=;framed=;method=PAP')
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['username'],'ali')
-        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertNotIn('attemptedPassword',event)
+        self.assertNotIn('WrongPass!',str(event))
         self.assertEqual(event['sourceIp'],'10.1.1.240')
         self.assertEqual(event['clientShortname'],'ems_test')
 
@@ -448,7 +451,7 @@ class NativeAuthLogParserTest(TestCase):
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['result'],'REJECT')
         self.assertEqual(event['username'],'ali')
-        self.assertEqual(event['attemptedPassword'],'WrongPass!')
+        self.assertNotIn('attemptedPassword',event)
         self.assertEqual(event['sourceIp'],'10.1.1.240')
         self.assertEqual(event['nasIdentifier'],'EMS-VM')
         self.assertEqual(event['callingStationId'],'10.1.1.161')
@@ -464,7 +467,7 @@ class NativeAuthLogParserTest(TestCase):
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['result'],'ACCEPT')
         self.assertEqual(event['username'],'ali')
-        self.assertEqual(event['attemptedPassword'],'GoodPass')
+        self.assertNotIn('attemptedPassword',event)
         self.assertEqual(event['sourceIp'],'10.1.1.240')
 
     def test_no_user_password_placeholder_is_not_presented_as_password(self):
@@ -473,8 +476,8 @@ class NativeAuthLogParserTest(TestCase):
              'nasip=10.1.1.240;nasid=EMS-VM;calling=;called=;framed=;method=CHAP')
         event=supervisor.parse_native_auth_line(msg)
         self.assertEqual(event['username'],'ali')
-        self.assertEqual(event['attemptedPassword'],'')
-        self.assertFalse(event['passwordAvailable'])
+        self.assertNotIn('attemptedPassword',event)
+        self.assertNotIn('passwordAvailable',event)
         self.assertEqual(event['authMethod'],'CHAP')
 
     def test_unknown_client_transport_error_exposes_source(self):
@@ -484,7 +487,7 @@ class NativeAuthLogParserTest(TestCase):
         self.assertEqual(event['result'],'DROP')
         self.assertEqual(event['sourceIp'],'192.0.2.9')
 
-    def test_service_reader_keeps_native_password_only_in_live_memory(self):
+    def test_service_reader_never_exposes_native_password(self):
         token,_=supervisor.live_start()
         line=('Auth: (10) Login incorrect: [ali/WrongPass!] '
               '(from client ems_test port 0 cli 10.0.0.5) '
@@ -495,7 +498,8 @@ class NativeAuthLogParserTest(TestCase):
             supervisor.service_output_reader(iter([line]))
             data=supervisor.live_snapshot(token,0)
             self.assertTrue(data['items'])
-            self.assertEqual(data['items'][0]['attemptedPassword'],'WrongPass!')
+            self.assertNotIn('attemptedPassword',data['items'][0])
+            self.assertNotIn('WrongPass!',str(data['items'][0]))
             self.assertEqual(data['items'][0]['username'],'ali')
         finally:
             supervisor.LIVE_COLLECTOR_READY=old_ready
