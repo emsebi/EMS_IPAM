@@ -19,7 +19,9 @@ try{
   const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   stage='navigate';
-  await page.goto(baseURL+'/module/radius',{waitUntil:'domcontentloaded'});
+  // The EMS panel is a hash-routed SPA. A pathname such as /module/radius
+  // serves the shell but leaves the app on its default company page.
+  await page.goto(baseURL+'/#/module/radius',{waitUntil:'domcontentloaded'});
   stage='wait-for-radius-ui';
   await page.locator('.r-tabs button[data-tab="clients"]').waitFor({timeout:15000});
   stage='verify-live-data';
