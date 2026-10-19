@@ -20,10 +20,12 @@ def configure_text(text: str) -> str:
 
     sub_once(r"^(\s*)auth\s*=\s*no\s*$",
              lambda m: f"{m.group(1)}auth = yes", "auth")
-    sub_once(r"^(\s*)auth_badpass\s*=\s*no\s*$",
-             lambda m: f"{m.group(1)}auth_badpass = yes", "auth_badpass")
-    sub_once(r"^(\s*)auth_goodpass\s*=\s*no\s*$",
-             lambda m: f"{m.group(1)}auth_goodpass = yes", "auth_goodpass")
+    # Native authentication logs must never contain attempted credentials.
+    # Accept both stock and previously overlaid values for safe upgrades.
+    sub_once(r"^(\s*)auth_badpass\s*=\s*(?:yes|no)\s*$",
+             lambda m: f"{m.group(1)}auth_badpass = no", "auth_badpass")
+    sub_once(r"^(\s*)auth_goodpass\s*=\s*(?:yes|no)\s*$",
+             lambda m: f"{m.group(1)}auth_goodpass = no", "auth_goodpass")
     sub_once(r'^(\s*)#?\s*msg_badpass\s*=\s*""\s*$',
              lambda m: f'{m.group(1)}msg_badpass = "{META}"', "msg_badpass")
     sub_once(r'^(\s*)#?\s*msg_goodpass\s*=\s*""\s*$',
@@ -31,8 +33,8 @@ def configure_text(text: str) -> str:
 
     required = (
         r"^\s*auth\s*=\s*yes\s*$",
-        r"^\s*auth_badpass\s*=\s*yes\s*$",
-        r"^\s*auth_goodpass\s*=\s*yes\s*$",
+        r"^\s*auth_badpass\s*=\s*no\s*$",
+        r"^\s*auth_goodpass\s*=\s*no\s*$",
         r'^\s*msg_badpass\s*=\s*" EMSMETA src=%\{Packet-Src-IP-Address\}',
         r'^\s*msg_goodpass\s*=\s*" EMSMETA src=%\{Packet-Src-IP-Address\}',
     )
