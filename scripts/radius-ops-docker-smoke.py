@@ -372,13 +372,15 @@ def main():
                 time.sleep(.25)
             api('/api/radius-ops/live/stop', 'POST', {'token':live_token})
             assert live_event, 'Live log must capture the rejected authentication'
-            assert live_event.get('attemptedPassword') == bad_password
+            assert 'attemptedPassword' not in live_event
+            assert 'passwordAvailable' not in live_event
+            assert bad_password not in json.dumps(snap)
             assert live_event.get('sourceIp') == '127.0.0.1'
             assert live_event.get('nasIdentifier') == 'LAB-NAS-A'
             assert live_event.get('callingStationId') == '127.0.0.44'
             assert live_event.get('framedIpAddress') == '127.0.0.44'
             assert live_event.get('deviceLabel') == 'Lab NAS A'
-            print('PASS live log captures NAS name/identity/source, client IP, username and PAP password')
+            print('PASS live log captures NAS metadata without attempted passwords')
             assert radtest('testadminB',password_b,secret_a,'Access-Reject')
             print('PASS cross-company credentials rejected by the real RADIUS listener')
             # Real UDP packets from NAS B (127.0.0.2), including a spoofed
