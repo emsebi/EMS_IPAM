@@ -207,9 +207,8 @@ try {
   await page.locator('#rSecretForm [type=submit]').click();
   await page.locator('.r-secret-list').getByText('Browser Shared Secret', { exact: true }).waitFor();
   const secretRow = page.locator('.r-secret-list tbody tr').filter({ hasText: 'Browser Shared Secret' });
-  await secretRow.locator('.rRevealSecret').click();
-  await page.locator('.r-credential-value code').getByText('shortsec', { exact: true }).waitFor();
-  await page.locator('#rCredentialHide').click();
+  assert.equal(await secretRow.locator('.rRevealSecret').count(), 0);
+  assert.equal(await page.locator('.r-credential-value').count(), 0);
   await page.locator('#rSecretClose').click();
 
   await page.locator('#rAdd').click();
@@ -259,9 +258,10 @@ try {
   assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
   const userRow = page.locator('.r-list tbody tr').filter({ hasText: 'browseradmin' });
-  await userRow.locator('.rRevealPassword').click();
-  await page.locator('.r-credential-value code').getByText('1234', { exact: true }).waitFor();
-  await page.locator('#rCredentialHide').click();
+  assert.equal(await userRow.locator('.rRevealPassword').count(), 0);
+  assert.equal(await page.locator('.r-credential-value').count(), 0);
+  await api(`/api/radius-ops/accounts/${browserUser.id}/reveal-password`, 'POST', {}, 403);
+  await api(`/api/radius-ops/secret-profiles/${browserNas.secretProfileId}/reveal`, 'POST', {}, 403);
 
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('#rOpenConfig').click();
@@ -272,7 +272,8 @@ try {
   await page.locator('#rConfigText').getByText(/aaa new-model/).waitFor();
   const configText = await page.locator('#rConfigText').textContent();
   assert.match(configText, /radius server EMS-RADIUS/);
-  assert.match(configText, /1234|shortsec/);
+  assert.match(configText, /SET_SHARED_SECRET_HERE/);
+  assert.equal(configText.includes('shortsec'), false);
   assert.equal(configText.includes('1234'), false);
   check('RADIUS simple client/group/user flow persists and manual config is generated');
 
