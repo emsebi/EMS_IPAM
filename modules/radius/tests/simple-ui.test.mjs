@@ -20,8 +20,8 @@ test('client form uses direct IP/CIDR and a shared secret without vendor couplin
  assert.match(ui,/vendor:d\.get\('vendor'\),radiusIp/);
  assert.match(en['radius.simple.sourceHint'],/CIDR|network/i);assert.ok(fa['radius.simple.sourceHint']);
 });
-test('group and user flow is explicit with Cisco help and MikroTik defaults/custom',()=>{
- assert.match(ui,/name=\"ciscoPrivilege\"/);assert.match(ui,/class=\"r-help\"/);assert.match(ui,/name=\"mikrotikPreset\"/);assert.match(ui,/value=\"read\"/);assert.match(ui,/value=\"write\"/);assert.match(ui,/value=\"full\"/);assert.match(ui,/value=\"custom\"/);assert.match(ui,/name=\"mikrotikCustom\"/);assert.match(ui,/name=\"groupId\"/);assert.match(ui,/name=\"password\"/);
+test('group and user flow is explicit with Cisco help, MikroTik defaults and collection/profile rules',()=>{
+ assert.match(ui,/name=\"ciscoPrivilege\"/);assert.match(ui,/class=\"r-help\"/);assert.match(ui,/name=\"mikrotikPreset\"/);assert.match(ui,/value=\"read\"/);assert.match(ui,/value=\"write\"/);assert.match(ui,/value=\"full\"/);assert.match(ui,/value=\"custom\"/);assert.match(ui,/name=\"mikrotikCustom\"/);assert.match(ui,/class=\"rRuleCheck\"/);assert.match(ui,/class=\"rRuleProfile\"/);assert.match(ui,/name=\"password\"/);
  assert.match(en['radius.simple.ciscoHelp2to14'],/Custom intermediate levels/);assert.match(fa['radius.simple.ciscoHelp2to14'],/2 تا 14/);
 });
 test('English catalog is complete in Persian catalog',()=>{
