@@ -372,8 +372,17 @@ def main():
                 cdp_url = os.environ.get('EMS_RADIUS_BROWSER_CDP_URL', '').strip()
                 if cdp_url:
                     browser_env['EMS_RADIUS_BROWSER_CDP_URL'] = cdp_url
-                run(['node', 'docker-app/tests/radius-real-backend.mjs'],
-                    env=browser_env, timeout=120)
+                browser_result = run(
+                    ['node', 'docker-app/tests/radius-real-backend.mjs'],
+                    env=browser_env, timeout=120, check=False)
+                if browser_result.returncode:
+                    output = browser_result.stdout + browser_result.stderr
+                    for line in output.splitlines():
+                        if re.fullmatch(
+                                r'BROWSER_CHECK_FAILED stage=[A-Za-z0-9_.-]+ '
+                                r'type=[A-Za-z0-9_.-]+', line):
+                            print(line, file=sys.stderr, flush=True)
+                    raise RuntimeError('Real-backend browser verification failed')
                 cookie_path.unlink(missing_ok=True)
                 print('PASS real-backend Chromium desktop/mobile simple RADIUS UI')
             dc('up', '-d', '--wait', 'radius_ops', timeout=300)
