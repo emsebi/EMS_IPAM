@@ -31,6 +31,7 @@ jobs:
         run: |
           npm test
           node --test ../modules/radius-ops/tests/*.test.mjs
+          node --test ../modules/radius/tests/*.test.mjs
       - name: Compile and test RADIUS supervisor
         working-directory: .
         run: |
