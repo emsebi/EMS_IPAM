@@ -354,31 +354,26 @@ def main():
             if os.environ.get('EMS_RADIUS_SKIP_BROWSER') == '1':
                 print('SKIP real-backend Chromium (EMS_RADIUS_SKIP_BROWSER=1)')
             else:
+                browser_host = os.environ.get('EMS_RADIUS_BROWSER_HOST', '127.0.0.1')
+                if not re.fullmatch(r'[A-Za-z0-9.-]+', browser_host):
+                    raise ValueError('Invalid disposable browser host')
+                browser_base = f'http://{browser_host}:{env["EMS_HTTP_PORT"]}'
                 cookie_path = Path(temp, 'browser-cookies.json')
                 cookie_path.write_text(json.dumps([
-                    {'name': cookie.name, 'value': cookie.value, 'url': base}
+                    {'name': cookie.name, 'value': cookie.value, 'url': browser_base}
                     for cookie in jar
                 ]), encoding='utf-8')
                 cookie_path.chmod(0o600)
                 browser_env = env.copy()
                 browser_env.update({
-                    'EMS_RADIUS_BASE_URL': base,
+                    'EMS_RADIUS_BASE_URL': browser_base,
                     'EMS_RADIUS_COOKIE_FILE': str(cookie_path),
                 })
-                browser_image = os.environ.get('EMS_RADIUS_BROWSER_IMAGE', '').strip()
-                if browser_image:
-                    run([
-                        'docker', 'run', '--rm', '--network', 'host',
-                        '-e', f'EMS_RADIUS_BASE_URL={base}',
-                        '-e', 'EMS_RADIUS_COOKIE_FILE=/run/ems-radius-cookies.json',
-                        '-v', f'{ROOT}:/work:ro',
-                        '-v', f'{cookie_path}:/run/ems-radius-cookies.json:ro',
-                        '-w', '/work/docker-app', browser_image,
-                        'node', 'tests/radius-real-backend.mjs',
-                    ], env=browser_env, timeout=120)
-                else:
-                    run(['node', 'docker-app/tests/radius-real-backend.mjs'],
-                        env=browser_env, timeout=90)
+                cdp_url = os.environ.get('EMS_RADIUS_BROWSER_CDP_URL', '').strip()
+                if cdp_url:
+                    browser_env['EMS_RADIUS_BROWSER_CDP_URL'] = cdp_url
+                run(['node', 'docker-app/tests/radius-real-backend.mjs'],
+                    env=browser_env, timeout=120)
                 cookie_path.unlink(missing_ok=True)
                 print('PASS real-backend Chromium desktop/mobile simple RADIUS UI')
             dc('up', '-d', '--wait', 'radius_ops', timeout=300)
