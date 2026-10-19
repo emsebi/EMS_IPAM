@@ -21,7 +21,7 @@ try{
   stage='navigate';
   await page.goto(baseURL+'/module/radius',{waitUntil:'domcontentloaded'});
   stage='wait-for-radius-ui';
-  await page.getByRole('button',{name:'Clients / NAS'}).waitFor({timeout:15000});
+  await page.locator('.r-tabs button[data-tab="clients"]').waitFor({timeout:15000});
   stage='verify-live-data';
   const text=await page.locator('main').innerText();
   if(!text.includes('Lab NAS A') || !text.includes('Lab NAS B Range'))
