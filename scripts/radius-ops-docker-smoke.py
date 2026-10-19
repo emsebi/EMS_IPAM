@@ -365,8 +365,20 @@ def main():
                     'EMS_RADIUS_BASE_URL': base,
                     'EMS_RADIUS_COOKIE_FILE': str(cookie_path),
                 })
-                run(['node', 'docker-app/tests/radius-real-backend.mjs'],
-                    env=browser_env, timeout=90)
+                browser_image = os.environ.get('EMS_RADIUS_BROWSER_IMAGE', '').strip()
+                if browser_image:
+                    run([
+                        'docker', 'run', '--rm', '--network', 'host',
+                        '-e', f'EMS_RADIUS_BASE_URL={base}',
+                        '-e', 'EMS_RADIUS_COOKIE_FILE=/run/ems-radius-cookies.json',
+                        '-v', f'{ROOT}:/work:ro',
+                        '-v', f'{cookie_path}:/run/ems-radius-cookies.json:ro',
+                        '-w', '/work/docker-app', browser_image,
+                        'node', 'tests/radius-real-backend.mjs',
+                    ], env=browser_env, timeout=120)
+                else:
+                    run(['node', 'docker-app/tests/radius-real-backend.mjs'],
+                        env=browser_env, timeout=90)
                 cookie_path.unlink(missing_ok=True)
                 print('PASS real-backend Chromium desktop/mobile simple RADIUS UI')
             dc('up', '-d', '--wait', 'radius_ops', timeout=300)
