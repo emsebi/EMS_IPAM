@@ -24,7 +24,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
     timeout-minutes: 75
     env:
-      EMS_RADIUS_SKIP_BROWSER: "1"
+      EMS_RADIUS_SKIP_BROWSER: "0"
     steps:
       - name: Checkout trusted branch commit
         uses: actions/checkout@v4
@@ -36,6 +36,21 @@ jobs:
           docker info >/dev/null
           docker compose version
           python3 --version
+
+      - name: Provision Chromium without changing host packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+
+      - name: Install browser test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd docker-app
+          npm ci --ignore-scripts
+          npx playwright install chromium
 
       - name: Clean stale disposable RADIUS lab resources
         shell: bash
