@@ -277,6 +277,22 @@ def main():
                 'groupId':group_b,'password':password_b,'enabled':True})
             accounts = api('/api/radius-ops/accounts')['items']
             assert all('password' not in item for item in accounts)
+            account_a = next(x['id'] for x in accounts if x['username'] == 'testadminA')
+            profile_a = next(x['secretProfileId'] for x in api('/api/radius-ops/devices')['items'] if x['id'] == nas_a)
+            for route in (f'/api/radius-ops/accounts/{account_a}/reveal-password',
+                          f'/api/radius-ops/secret-profiles/{profile_a}/reveal'):
+                try:
+                    api(route, 'POST', {})
+                except urllib.error.HTTPError as error:
+                    assert error.code == 403
+                else:
+                    raise AssertionError('Stored credential reveal must be denied')
+            for vendor in ('cisco-ios', 'cisco-legacy', 'mikrotik'):
+                config = api('/api/radius-ops/config', 'POST',
+                             {'id':nas_a,'vendor':vendor,'radiusIp':'127.0.0.1'})
+                assert 'SET_SHARED_SECRET_HERE' in config['text']
+                assert secret_a not in json.dumps(config)
+            print('PASS stored credentials cannot be revealed or copied into NAS configs')
             group_name_a = 'emsgrp_' + group_a.replace('-', '')
             group_name_b = 'emsgrp_' + group_b.replace('-', '')
             assert sql(f"SELECT count(*) FROM radgroupreply WHERE groupname='{group_name_a}' AND attribute='Cisco-AVPair' AND value='shell:priv-lvl=15'") == '1'
