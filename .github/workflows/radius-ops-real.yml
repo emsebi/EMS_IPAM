@@ -9,6 +9,7 @@ on:
       - "modules/radius/**"
       - "modules/radius-ops/**"
       - "scripts/radius-ops-docker-smoke.py"
+      - "docker-app/tests/radius-real-backend.mjs"
       - ".github/workflows/radius-ops-real.yml"
 
 permissions:
