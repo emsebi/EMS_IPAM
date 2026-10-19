@@ -53,6 +53,7 @@ test('SQL policy precheck returns allow and deny without receiving a password',a
  const calls=[];let sent;
  const pool={async query(query,params){calls.push({query,params});return {rows:[{
    nasRegistered:params[1]==='192.0.2.10',
+   nasActive:params[1]==='192.0.2.10',
    credentialsReady:params[0]==='admin1',
    policyAllowed:params[0]==='admin1'&&params[1]==='192.0.2.10',
  }]};}};
@@ -160,7 +161,7 @@ test('v28 active collection model groups registered NAS objects, not raw CIDRs',
 
 test('v28 migrates legacy CIDR collection intent to matching registered NAS membership',()=>{
  const sql=fs.readFileSync(path.join(root,'migrations/010-nas-collection-membership.sql'),'utf8');
- assert.match(sql,/JOIN radius_ops_collection_members m/);
+ assert.match(sql,/FROM radius_ops_collection_members m/);
  assert.match(sql,/d\.nas_ip && m\.nas_source/);
  assert.match(sql,/ON CONFLICT\(collection_id,device_id\) DO NOTHING/);
 });
@@ -195,7 +196,7 @@ test('operator UI exposes one volatile Live RADIUS Logs console',()=>{
  assert.match(ui,/api\('\/live\/start'/);
  assert.match(ui,/api\('\/live\/events'/);
  assert.match(ui,/liveItems\.length>1000/);
- assert.match(ui,/attemptedPassword/);
+ assert.doesNotMatch(ui,/e\.attemptedPassword/);
  assert.match(ui,/nas-name=/);
  assert.match(ui,/nas-identity=/);
  assert.match(ui,/nas-source=/);
