@@ -89,6 +89,8 @@ def utility(p,title,text,link='$(link-login-only)',button='بازگشت به و�
     page=head(title+' | '+p['brand'])
     if redirect:
         page=page.replace('</head>','<meta http-equiv="refresh" content="0;url='+link+'"></head>')
+    if redirect:
+        page='$(if http-status == 302)Found$(endif)\n$(if http-header == "Location")'+link+'$(endif)\n'+page
     return page+'<body><main class="utility">'+logo(p)+'<h1>'+title+'</h1><p>'+text+'</p><a class="button" href="'+link+'">'+button+icon('arrow')+'</a></main></body></html>'
 def pages(p):
     return {

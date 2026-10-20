@@ -38,7 +38,14 @@ jobs:
         run: |
           set -eu
           BUILD_ROOT="$HOME/.cache/hotspot-template-20261020"
-          python3 -m venv "$BUILD_ROOT/venv"
+          python3 -m venv --without-pip "$BUILD_ROOT/venv"
+          python3 - <<'PY'
+          from pathlib import Path
+          import urllib.request
+          path=Path.home()/'.cache'/'hotspot-template-20261020'/'get-pip.py'
+          urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py',path)
+          PY
+          "$BUILD_ROOT/venv/bin/python" "$BUILD_ROOT/get-pip.py" --quiet --disable-pip-version-check
           "$BUILD_ROOT/venv/bin/python" -m pip install --disable-pip-version-check --quiet pyzipper==0.4.0 playwright
           "$BUILD_ROOT/venv/bin/python" -m playwright install chromium
       - name: Build and verify private portal
