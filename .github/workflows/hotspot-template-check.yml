@@ -1,27 +1,58 @@
-name: Hotspot template build tools
+name: Private hotspot template packaging
 on:
   push:
     branches: ["work/hotspot-template-build-20261020"]
-    paths: [".github/workflows/hotspot-template-check.yml"]
+    paths: [".github/workflows/hotspot-template-check.yml", "portal-builder/**"]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: hotspot-template-package-20261020
+  cancel-in-progress: false
 jobs:
-  check-tools:
+  package:
     runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
-    timeout-minutes: 3
+    timeout-minutes: 20
     steps:
-      - name: Verify isolated packaging tools
+      - uses: actions/checkout@v4
+      - name: Prepare private build workspace
         shell: bash
         run: |
           set -eu
           python3 - <<'PY'
-          import io, json, shutil, sys, zipfile
-          data = io.BytesIO()
-          with zipfile.ZipFile(data, 'w', zipfile.ZIP_DEFLATED) as archive:
-              archive.writestr('check.txt', 'hotspot template build check')
-          data.seek(0)
-          with zipfile.ZipFile(data) as archive:
-              assert archive.read('check.txt') == b'hotspot template build check'
-          print(json.dumps({'python': sys.version.split()[0], 'zip_roundtrip': 'ok', 'node_available': bool(shutil.which('node')), 'openssl_available': bool(shutil.which('openssl'))}))
+          from pathlib import Path
+          import subprocess, json
+          root=Path.home()/'.cache'/'hotspot-template-20261020'
+          root.mkdir(parents=True, exist_ok=True, mode=0o700)
+          root.chmod(0o700)
+          key=root/'private.pem'
+          if not key.exists():
+              subprocess.run(['openssl','genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:4096','-out',str(key)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+              key.chmod(0o600)
+          modulus=subprocess.check_output(['openssl','rsa','-in',str(key),'-noout','-modulus'],stderr=subprocess.DEVNULL).decode().strip().split('=')[1]
+          print('PUBLIC_BUILD_KEY='+json.dumps({'n':modulus,'e':65537}))
           PY
+      - name: Install isolated packaging dependencies
+        if: hashFiles('portal-builder/payload.json') != ''
+        shell: bash
+        run: |
+          set -eu
+          BUILD_ROOT="$HOME/.cache/hotspot-template-20261020"
+          python3 -m venv "$BUILD_ROOT/venv"
+          "$BUILD_ROOT/venv/bin/python" -m pip install --disable-pip-version-check --quiet pyzipper==0.4.0 playwright
+          "$BUILD_ROOT/venv/bin/python" -m playwright install chromium
+      - name: Build and verify private portal
+        if: hashFiles('portal-builder/payload.json') != ''
+        shell: bash
+        run: |
+          set -eu
+          BUILD_ROOT="$HOME/.cache/hotspot-template-20261020"
+          "$BUILD_ROOT/venv/bin/python" portal-builder/build.py
+      - name: Upload encrypted package only
+        if: hashFiles('portal-builder/payload.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotspot-template-private
+          path: portal-builder/output/hotspot-template.zip
+          if-no-files-found: error
+          retention-days: 30
