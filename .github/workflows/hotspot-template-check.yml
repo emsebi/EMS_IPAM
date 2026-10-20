@@ -49,6 +49,7 @@ jobs:
           BUILD_ROOT="$HOME/.cache/hotspot-template-20261020"
           "$BUILD_ROOT/venv/bin/python" portal-builder/build.py
       - name: Upload encrypted package only
+        id: archive
         if: hashFiles('portal-builder/payload.json') != ''
         uses: actions/upload-artifact@v4
         with:
@@ -56,3 +57,7 @@ jobs:
           path: portal-builder/output/hotspot-template.zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Package download link
+        if: steps.archive.outputs.artifact-url != ''
+        run: echo "${{ steps.archive.outputs.artifact-url }}"
