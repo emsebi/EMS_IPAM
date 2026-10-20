@@ -1,0 +1,27 @@
+name: Hotspot template build tools
+on:
+  push:
+    branches: ["work/hotspot-template-build-20261020"]
+    paths: [".github/workflows/hotspot-template-check.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-tools:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 3
+    steps:
+      - name: Verify isolated packaging tools
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import io, json, shutil, sys, zipfile
+          data = io.BytesIO()
+          with zipfile.ZipFile(data, 'w', zipfile.ZIP_DEFLATED) as archive:
+              archive.writestr('check.txt', 'hotspot template build check')
+          data.seek(0)
+          with zipfile.ZipFile(data) as archive:
+              assert archive.read('check.txt') == b'hotspot template build check'
+          print(json.dumps({'python': sys.version.split()[0], 'zip_roundtrip': 'ok', 'node_available': bool(shutil.which('node')), 'openssl_available': bool(shutil.which('openssl'))}))
+          PY
