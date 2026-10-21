@@ -307,7 +307,15 @@ def main():
             assert not any(f["name"] in ("IR-IP_EMS-download.rsc", "IR-IP_EMS-download.bytes") for f in api.call("/file/print"))
             passed("temporary download cleaned after failure")
 
-            time.sleep(3)
+            # v6 persists large static-list updates asynchronously; give the
+            # configuration database time to settle before a deliberate reboot.
+            print("Pre-reboot persistence diagnostics:", json.dumps({
+                "version": args.version,
+                "resource": api.call("/system/resource/print")[0],
+                "managed": len([r for r in rows() if r.get("list") == "IR-IP_EMS" and r.get("comment") == "EMS:IR:DATA"]),
+                "marker": [r.get("comment") for r in rows() if r.get("list") == "IR-IP_EMS" and r.get("address") == "1.1.2.7"]
+            }), flush=True)
+            time.sleep(45)
             try:
                 api.call("/system/reboot")
             except (EOFError, OSError):
@@ -315,6 +323,12 @@ def main():
             api.close()
             time.sleep(5)
             api = wait_api(api_port, proc)
+            print("Post-reboot persistence diagnostics:", json.dumps({
+                "version": args.version,
+                "resource": api.call("/system/resource/print")[0],
+                "counts": {name: len([r for r in rows() if r.get("list") == name]) for name in ("IR-IP_EMS", "IR-IP_EMS__stage", "EMS-UNRELATED")},
+                "example": rows()[:3]
+            }), flush=True)
             verify_count(count)
             passed("data and metadata survive reboot")
             report = {"version": args.version, "cases": cases, "passed": len(cases), "tested_at": dt.datetime.now(g.UTC).isoformat()}
