@@ -33,6 +33,7 @@ jobs:
       - name: Test generator and Persian calendar
         run: python3 -m unittest discover -s tools/iran-ip/tests -v
       - name: Restore official CHR images
+        id: chr-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: .cache/chr/
@@ -70,7 +71,7 @@ jobs:
           path: feeds/iran/
           retention-days: 7
       - name: Cache official CHR images
-        if: always()
+        if: ${{ always() && steps.chr-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: .cache/chr/

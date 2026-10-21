@@ -77,8 +77,8 @@
         :local currentByPrefix [:toarray ""];
         :foreach item in=[/ip firewall address-list find where list=$listName and comment=$dataTag] do={
             :local addr [:tostr [/ip firewall address-list get $item address]];
-            :if ([:find $addr "/"] = nil) do={ :set addr ($addr . "/32"); }
-            :if ([:typeof ($currentByPrefix->$addr)] != "nil") do={ :error "EMS IR: duplicate managed prefix"; }
+            :if ([:typeof [:find $addr "/"]] != "num") do={ :set addr ($addr . "/32"); }
+            :if ([:len [:tostr ($currentByPrefix->$addr)]] > 0) do={ :error "EMS IR: duplicate managed prefix"; }
             :set ($currentByPrefix->$addr) $item;
             :if (($wanted->$addr) != true) do={ :set obsoleteIds ($obsoleteIds, $item); }
         }
@@ -86,7 +86,7 @@
         :set problem "adding new prefixes failed";
         :foreach prefix in=$prefixes do={
             :local existing ($currentByPrefix->$prefix);
-            :if ([:typeof $existing] = "nil") do={
+            :if ([:len [:tostr $existing]] = 0) do={
                 :local newId [/ip firewall address-list add list=$listName address=$prefix comment=$dataTag];
                 :set addedIds ($addedIds, $newId);
             } else={
