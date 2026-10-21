@@ -134,7 +134,7 @@ def make_tls(root):
         subprocess.run(["openssl", *args], cwd=root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "2", "-subj", "/CN=EMS Isolated Test CA")
     run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=ems-test.example.com")
-    (root / "server.ext").write_text("subjectAltName=DNS:ems-test.example.com\n")
+    (root / "server.ext").write_text("subjectAltName=DNS:ems-test.example.com,IP:10.0.2.2\n")
     run("x509", "-req", "-in", "server.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial", "-out", "server.pem", "-days", "2", "-extfile", "server.ext")
 
 
@@ -246,11 +246,8 @@ def main():
 
             (root / f"IR-IP_EMS-v{major}.rsc").write_text(text)
             (root / f"IR-IP_EMS-v{major}.bytes").write_text(str(len(text.encode())))
-            if major == 6:
-                # v6 Fetch uses its configured DNS server directly; the test name is local.
-                api.call("/ip/dns/set", servers="127.0.0.1", allow_remote_requests="yes")
             updater = (args.feed_dir / "update.rsc").read_text().replace(
-                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://ems-test.example.com:{https_port}/IR-IP_EMS-v")
+                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://10.0.2.2:{https_port}/IR-IP_EMS-v")
             api.run(updater, allow_error=True)
             assert active() == before
             passed("untrusted HTTPS endpoint rejected with old list preserved")
@@ -260,7 +257,7 @@ def main():
             certs = api.call("/certificate/print")
             testca = next(c for c in certs if c.get("common-name") == "EMS Isolated Test CA")
             api.call("/certificate/set", **{".id": testca[".id"]}, trusted="yes")
-            api.call("/tool/fetch", url=f"https://ems-test.example.com:{https_port}/IR-IP_EMS-v{major}.bytes", check_certificate="yes", dst_path="test-tls-probe.txt")
+            api.call("/tool/fetch", url=f"https://10.0.2.2:{https_port}/IR-IP_EMS-v{major}.bytes", check_certificate="yes", dst_path="test-tls-probe.txt")
             passed("test server certificate and DNS verified after importing isolated test CA")
             api.run(updater)
             verify_count(count)
