@@ -68,7 +68,7 @@
         /ip firewall address-list remove [find where list=$stageName];
         :local wanted [:toarray ""];
         :foreach prefix in=$prefixes do={
-            /ip firewall address-list add list=$stageName address=$prefix disabled=yes timeout=1h comment="EMS:IR:STAGE";
+            /ip firewall address-list add list=$stageName address=$prefix timeout=1h comment="EMS:IR:STAGE";
             :set ($wanted->$prefix) true;
         }
         :if ([:len [/ip firewall address-list find where list=$stageName]] != $expected) do={ :error "EMS IR: staging count mismatch"; }

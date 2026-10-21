@@ -34,8 +34,9 @@ class ApiError(RuntimeError):
 class API:
     def __init__(self, port):
         self.sock = socket.create_connection(("127.0.0.1", port), timeout=3)
-        self.sock.settimeout(180)
+        self.sock.settimeout(3)
         self.call("/login", name="admin", password="")
+        self.sock.settimeout(180)
 
     def read(self, count):
         result = b""
@@ -163,8 +164,13 @@ def main():
         root = Path(directory)
         url = f"https://download.mikrotik.com/routeros/{args.version}/chr-{args.version}.img.zip"
         print(f"Downloading official CHR {args.version}", flush=True)
-        archive = root / "chr.zip"
-        urllib.request.urlretrieve(url, archive)
+        cache = HERE.parents[1] / ".cache/chr"
+        cache.mkdir(parents=True, exist_ok=True)
+        archive = cache / f"chr-{args.version}.img.zip"
+        if not archive.exists():
+            temporary = archive.with_suffix(".part")
+            urllib.request.urlretrieve(url, temporary)
+            temporary.replace(archive)
         with zipfile.ZipFile(archive) as z:
             image_name = next(n for n in z.namelist() if n.endswith(".img"))
             image = root / "chr.img"
@@ -174,10 +180,10 @@ def main():
         http = start_server(root, 18080)
         https = start_server(root, 18443, root / "server.pem", root / "server.key")
         qemu_log = (root / "qemu.log").open("w")
-        accel = ["-enable-kvm", "-cpu", "host"] if os.access("/dev/kvm", os.R_OK | os.W_OK) else ["-accel", "tcg,thread=multi", "-cpu", "max"]
-        command = ["qemu-system-x86_64", "-m", "512", "-smp", "2", *accel,
-                   "-drive", f"file={image},format=raw,if=virtio", "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:18728-:8728",
-                   "-device", "virtio-net-pci,netdev=n0", "-display", "none", "-monitor", "none",
+        accel = ["-enable-kvm", "-cpu", "host"] if os.access("/dev/kvm", os.R_OK | os.W_OK) else ["-accel", "tcg", "-cpu", "qemu64"]
+        command = ["qemu-system-x86_64", "-m", "1024", "-smp", "1", *accel,
+                   "-drive", f"file={image},format=raw,if=ide", "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:18728-:8728",
+                   "-device", "virtio-net-pci,netdev=n0", "-display", "none", "-monitor", f"unix:{root / 'monitor.sock'},server,nowait",
                    "-serial", f"file:{root / 'serial.log'}", "-rtc", "base=utc"]
         proc = subprocess.Popen(command, stdout=qemu_log, stderr=qemu_log)
         api = None
@@ -305,6 +311,11 @@ def main():
             (args.feed_dir / f"test-routeros-{major}.json").write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report), flush=True)
         except Exception:
+            with contextlib.suppress(Exception):
+                with socket.socket(socket.AF_UNIX) as monitor:
+                    monitor.connect(str(root / "monitor.sock"))
+                    monitor.sendall(f"screendump {args.feed_dir.resolve() / ('failure-v' + str(major) + '.ppm')}\n".encode())
+                    time.sleep(1)
             if api:
                 with contextlib.suppress(Exception):
                     logs = api.call("/log/print")[-20:]

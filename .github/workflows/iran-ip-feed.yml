@@ -32,6 +32,11 @@ jobs:
           persist-credentials: false
       - name: Test generator and Persian calendar
         run: python3 -m unittest discover -s tools/iran-ip/tests -v
+      - name: Restore official CHR images
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .cache/chr/
+          key: official-chr-6.49.23-7.23.8
       - name: Capture verified public GitHub CA
         run: python3 tools/iran-ip/prepare_ca.py
       - name: Fetch RIPE and generate candidates
@@ -59,6 +64,12 @@ jobs:
           name: iran-ip-candidate
           path: feeds/iran/
           retention-days: 7
+      - name: Cache official CHR images
+        if: always()
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .cache/chr/
+          key: official-chr-6.49.23-7.23.8
       - name: Publish only successfully tested files
         env:
           GH_TOKEN: ${{ github.token }}
