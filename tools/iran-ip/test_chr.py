@@ -113,6 +113,8 @@ class API:
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
+                      ".bytes": "text/plain", ".rsc": "text/plain"}
     def log_message(self, fmt, *args):
         pass
 
@@ -131,8 +133,8 @@ def make_tls(root):
     def run(*args):
         subprocess.run(["openssl", *args], cwd=root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "2", "-subj", "/CN=EMS Isolated Test CA")
-    run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=ems-test.invalid")
-    (root / "server.ext").write_text("subjectAltName=DNS:ems-test.invalid\n")
+    run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=ems-test.example.com")
+    (root / "server.ext").write_text("subjectAltName=DNS:ems-test.example.com\n")
     run("x509", "-req", "-in", "server.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial", "-out", "server.pem", "-days", "2", "-extfile", "server.ext")
 
 
@@ -196,7 +198,7 @@ def main():
             date = now.strftime("%b/%d/%Y").lower() if major == 6 else now.strftime("%Y-%m-%d")
             api.call("/system/clock/set", date=date, time=now.strftime("%H:%M:%S"), time_zone_name="Etc/UTC")
             api.call("/ip/dns/set", servers="10.0.2.3")
-            api.call("/ip/dns/static/add", name="ems-test.invalid", address="10.0.2.2")
+            api.call("/ip/dns/static/add", name="ems-test.example.com", address="10.0.2.2")
             passed("official CHR boot and API")
 
             def rows():
@@ -237,6 +239,33 @@ def main():
             verify_count(count)
             passed(f"full RIPE import ({count} prefixes), static data and disabled Jalali marker")
             before = active()
+            # Test the real installer and its actual public GitHub CA, then HTTPS on Raw.
+            import_text((args.feed_dir / "install-update.rsc").read_text(), name="installer.rsc")
+            api.call("/tool/fetch", url="https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/README.md", check_certificate="yes", dst_path="github-probe.txt")
+            passed("installer imports public CA; verified HTTPS download from GitHub Raw")
+
+            (root / f"IR-IP_EMS-v{major}.rsc").write_text(text)
+            (root / f"IR-IP_EMS-v{major}.bytes").write_text(str(len(text.encode())))
+            if major == 6:
+                # v6 Fetch uses its configured DNS server directly; the test name is local.
+                api.call("/ip/dns/set", servers="127.0.0.1", allow_remote_requests="yes")
+            updater = (args.feed_dir / "update.rsc").read_text().replace(
+                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://ems-test.example.com:{https_port}/IR-IP_EMS-v")
+            api.run(updater, allow_error=True)
+            assert active() == before
+            passed("untrusted HTTPS endpoint rejected with old list preserved")
+            # Import a test-only CA into the isolated VM; never include it in deliverables.
+            api.call("/tool/fetch", url=f"http://10.0.2.2:{http_port}/ca.pem", dst_path="test-ca.pem")
+            api.call("/certificate/import", file_name="test-ca.pem", passphrase="")
+            certs = api.call("/certificate/print")
+            testca = next(c for c in certs if c.get("common-name") == "EMS Isolated Test CA")
+            api.call("/certificate/set", **{".id": testca[".id"]}, trusted="yes")
+            api.call("/tool/fetch", url=f"https://ems-test.example.com:{https_port}/IR-IP_EMS-v{major}.bytes", check_certificate="yes", dst_path="test-tls-probe.txt")
+            passed("test server certificate and DNS verified after importing isolated test CA")
+            api.run(updater)
+            verify_count(count)
+            passed("complete updater fetches size and RSC, verifies TLS, imports and cleans temporary files")
+
             import_text(text)
             assert active() == before
             passed("repeat import is idempotent; active row IDs preserved")
@@ -270,35 +299,12 @@ def main():
             assert active() == before
             passed("wrong RouterOS major rejected")
 
-            # Test the real installer and its actual public GitHub CA, then HTTPS on Raw.
-            import_text((args.feed_dir / "install-update.rsc").read_text(), name="installer.rsc")
-            api.call("/tool/fetch", url="https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/README.md", check_certificate="yes", dst_path="github-probe.txt")
-            passed("installer imports public CA; verified HTTPS download from GitHub Raw")
-
-            (root / f"IR-IP_EMS-v{major}.rsc").write_text(candidate)
-            (root / f"IR-IP_EMS-v{major}.bytes").write_text(str(len(candidate.encode())))
-            updater = (args.feed_dir / "update.rsc").read_text().replace(
-                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://ems-test.invalid:{https_port}/IR-IP_EMS-v")
-            api.run(updater, allow_error=True)
-            assert active() == before
-            passed("untrusted HTTPS endpoint rejected with old list preserved")
-            # Import a test-only CA into the isolated VM; never include it in deliverables.
-            api.call("/tool/fetch", url=f"http://10.0.2.2:{http_port}/ca.pem", dst_path="test-ca.pem")
-            api.call("/certificate/import", file_name="test-ca.pem", passphrase="")
-            certs = api.call("/certificate/print")
-            testca = next(c for c in certs if c.get("common-name") == "EMS Isolated Test CA")
-            api.call("/certificate/set", **{".id": testca[".id"]}, trusted="yes")
-            api.call("/tool/fetch", url=f"https://ems-test.invalid:{https_port}/IR-IP_EMS-v{major}.bytes", check_certificate="yes", dst_path="test-tls-probe.txt")
-            passed("test server certificate and DNS verified after importing isolated test CA")
-            api.run(updater)
-            verify_count(count)
-            passed("complete updater fetches size and RSC, verifies TLS, imports and cleans temporary files")
             before = active()
             (root / f"IR-IP_EMS-v{major}.rsc").write_text(candidate[:100])
             api.run(updater, allow_error=True)
             assert active() == before
             passed("truncated download rejected without advancing metadata")
-            assert not any(f["name"] == "IR-IP_EMS-download.rsc" for f in api.call("/file/print"))
+            assert not any(f["name"] in ("IR-IP_EMS-download.rsc", "IR-IP_EMS-download.bytes") for f in api.call("/file/print"))
             passed("temporary download cleaned after failure")
 
             time.sleep(3)

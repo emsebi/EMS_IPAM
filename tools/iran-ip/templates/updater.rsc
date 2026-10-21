@@ -6,6 +6,7 @@
     :if ([:len [/system script job find where script="IR-IP_EMS-update"]] > 1) do={ :error "EMS IR: duplicate update job"; }
     :set emsIRFetchBusy true;
     :local fileName "IR-IP_EMS-download.rsc";
+    :local sizeName "IR-IP_EMS-download.bytes";
     :local success false;
     :local problem "initialization failed";
     :do {
@@ -19,10 +20,12 @@
                     :set problem "temporary file cleanup failed";
                     :local oldFiles [/file find where name=$fileName];
                     :if ([:len $oldFiles] > 0) do={ /file remove $oldFiles; }
+                    :local oldSize [/file find where name=$sizeName];
+                    :if ([:len $oldSize] > 0) do={ /file remove $oldSize; }
                     :set problem "HTTPS size download failed; check connectivity, CA and router clock";
-                    :local info [/tool fetch url=($base . $major . ".bytes") check-certificate=yes output=user as-value];
+                    /tool fetch url=($base . $major . ".bytes") check-certificate=yes dst-path=$sizeName;
                     :set problem "invalid size manifest";
-                    :local expectedSize [:tonum ($info->"data")];
+                    :local expectedSize [:tonum [/file get [/file find where name=$sizeName] contents]];
                     :if (([:typeof $expectedSize] != "num") || ($expectedSize < 10000) || ($expectedSize > 1000000)) do={ :error "EMS IR: invalid size manifest"; }
                     :set problem "HTTPS RSC download failed";
                     /tool fetch url=($base . $major . ".rsc") check-certificate=yes dst-path=$fileName;
@@ -39,6 +42,7 @@
         }
     } on-error={ :log error "EMS IR: updater failed before download"; }
     :do { /file remove [find where name=$fileName]; } on-error={}
+    :do { /file remove [find where name=$sizeName]; } on-error={}
     :set emsIRFetchBusy false;
     :if (!$success) do={ :error "EMS IR: update failed; inspect Log. Successful-update date was not advanced."; }
 }
