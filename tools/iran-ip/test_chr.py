@@ -185,7 +185,7 @@ def main():
         qemu_log = (root / "qemu.log").open("w")
         accel = ["-enable-kvm", "-cpu", "host"] if os.access("/dev/kvm", os.R_OK | os.W_OK) else ["-accel", "tcg", "-cpu", "qemu64"]
         command = ["qemu-system-x86_64", "-m", "1024", "-smp", "1", *accel,
-                   "-drive", f"file={image},format=raw,if=ide", "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{api_port}-:8728",
+                   "-drive", f"file={image},format=raw,if={'virtio' if major == 6 else 'ide'}", "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{api_port}-:8728",
                    "-device", "virtio-net-pci,netdev=n0", "-display", "none", "-monitor", f"unix:{root / 'monitor.sock'},server,nowait",
                    "-serial", f"file:{root / 'serial.log'}", "-rtc", "base=utc"]
         proc = subprocess.Popen(command, stdout=qemu_log, stderr=qemu_log)
@@ -199,6 +199,21 @@ def main():
             api.call("/system/clock/set", date=date, time=now.strftime("%H:%M:%S"), time_zone_name="Etc/UTC")
             api.call("/ip/dns/set", servers="10.0.2.3")
             api.call("/ip/dns/static/add", name="ems-test.example.com", address="10.0.2.2")
+            # Verify that the disposable CHR disk itself survives a reboot.
+            # A broken virtual disk must not be mistaken for a feed problem.
+            api.call("/ip/firewall/address-list/add", list="EMS-UNRELATED", address="192.0.2.55", comment="must survive")
+            try:
+                api.call("/system/reboot")
+            except (EOFError, OSError):
+                pass
+            api.close()
+            time.sleep(5)
+            api = wait_api(api_port, proc)
+            sentinel = [r for r in api.call("/ip/firewall/address-list/print")
+                        if r.get("list") == "EMS-UNRELATED" and r.get("address") == "192.0.2.55"]
+            if len(sentinel) != 1:
+                raise RuntimeError(f"CHR {args.version} virtual disk failed baseline persistence test")
+            passed("virtual-disk baseline config survives reboot")
             passed("official CHR boot and API")
 
             def rows():
@@ -221,7 +236,6 @@ def main():
                 assert not any(x.get("list") == "IR-IP_EMS__stage" for x in r)
                 assert any(x.get("list") == "EMS-UNRELATED" and x["address"] == "192.0.2.55" for x in r)
 
-            api.call("/ip/firewall/address-list/add", list="EMS-UNRELATED", address="192.0.2.55", comment="must survive")
             text = (args.feed_dir / f"IR-IP_EMS-v{major}.rsc").read_text()
             manifest = json.loads((args.feed_dir / "manifest.json").read_text())
             count = manifest["prefix_count"]
