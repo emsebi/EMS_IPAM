@@ -1,0 +1,70 @@
+name: Iran IP feed
+
+on:
+  schedule:
+    - cron: '47 0 * * *'
+  workflow_dispatch:
+    inputs:
+      accept_large_change:
+        description: 'Allow a reviewed RIPE coverage change larger than the safety limit'
+        type: boolean
+        default: false
+  push:
+    branches: [main, work/iran-ip-feed]
+    paths:
+      - 'tools/iran-ip/**'
+      - '.github/workflows/iran-ip-feed.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: iran-ip-feed-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-test-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test generator and Persian calendar
+        run: python3 -m unittest discover -s tools/iran-ip/tests -v
+      - name: Capture verified public GitHub CA
+        run: python3 tools/iran-ip/prepare_ca.py
+      - name: Fetch RIPE and generate candidates
+        env:
+          ACCEPT_LARGE_CHANGE: ${{ inputs.accept_large_change || false }}
+        run: |
+          args=()
+          if [ "$ACCEPT_LARGE_CHANGE" = true ]; then args+=(--accept-large-change); fi
+          python3 tools/iran-ip/generate.py --require-ca "${args[@]}"
+      - name: Install isolated CHR test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
+      - name: Test RouterOS 6.49.23
+        run: python3 -u tools/iran-ip/test_chr.py --version 6.49.23
+      - name: Test RouterOS 7.23.8
+        run: python3 -u tools/iran-ip/test_chr.py --version 7.23.8
+      - name: Retain candidate and test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: iran-ip-candidate
+          path: feeds/iran/
+          retention-days: 7
+      - name: Publish only successfully tested files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- feeds/iran/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Update validated Iran IPv4 feed'
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:$TARGET_BRANCH"
