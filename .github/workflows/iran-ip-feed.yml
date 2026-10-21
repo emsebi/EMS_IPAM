@@ -52,11 +52,16 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
-      - name: Test RouterOS 6.49.23
-        run: python3 -u tools/iran-ip/test_chr.py --version 6.49.23
-      - name: Test RouterOS 7.23.8
-        if: ${{ !cancelled() && steps.generate.outcome == 'success' && steps.qemu.outcome == 'success' }}
-        run: python3 -u tools/iran-ip/test_chr.py --version 7.23.8
+      - name: Test RouterOS 6.49.23 and 7.23.8
+        run: |
+          python3 -u tools/iran-ip/test_chr.py --version 6.49.23 &
+          pid6=$!
+          python3 -u tools/iran-ip/test_chr.py --version 7.23.8 &
+          pid7=$!
+          result=0
+          wait "$pid6" || result=1
+          wait "$pid7" || result=1
+          exit "$result"
       - name: Retain candidate and test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

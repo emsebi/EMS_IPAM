@@ -53,8 +53,8 @@
         }
         :foreach item in=[/ip firewall address-list find where list=$listName] do={
             :local tag [/ip firewall address-list get $item comment];
-            :local addr [/ip firewall address-list get $item address];
-            :if (($tag != $dataTag) && !(($addr = 1.1.2.7) && ([:pick $tag 0 [:len $metaPrefix]] = $metaPrefix))) do={
+            :local addr [:tostr [/ip firewall address-list get $item address]];
+            :if (($tag != $dataTag) && !(($addr = "1.1.2.7") && ([:pick $tag 0 [:len $metaPrefix]] = $metaPrefix))) do={
                 :set problem "foreign entries in IR-IP_EMS; move custom entries to a separate list";
                 :error $problem;
             }
@@ -74,24 +74,25 @@
         :if ([:len [/ip firewall address-list find where list=$stageName]] != $expected) do={ :error "EMS IR: staging count mismatch"; }
         :set problem "withdrawal comparison failed";
         :local obsoleteIds [:toarray ""];
+        :local currentByPrefix [:toarray ""];
         :foreach item in=[/ip firewall address-list find where list=$listName and comment=$dataTag] do={
             :local addr [:tostr [/ip firewall address-list get $item address]];
             :if ([:find $addr "/"] = nil) do={ :set addr ($addr . "/32"); }
+            :if ([:typeof ($currentByPrefix->$addr)] != "nil") do={ :error "EMS IR: duplicate managed prefix"; }
+            :set ($currentByPrefix->$addr) $item;
             :if (($wanted->$addr) != true) do={ :set obsoleteIds ($obsoleteIds, $item); }
         }
         # The complete candidate has been parsed and staged before touching live entries.
         :set problem "adding new prefixes failed";
         :foreach prefix in=$prefixes do={
-            :local existing [/ip firewall address-list find where list=$listName and address=$prefix and comment=$dataTag];
-            :if ([:len $existing] = 0) do={
+            :local existing ($currentByPrefix->$prefix);
+            :if ([:typeof $existing] = "nil") do={
                 :local newId [/ip firewall address-list add list=$listName address=$prefix comment=$dataTag];
                 :set addedIds ($addedIds, $newId);
             } else={
-                :foreach item in=$existing do={
-                    :if ([/ip firewall address-list get $item disabled]) do={
-                        :set enabledIds ($enabledIds, $item);
-                        /ip firewall address-list set $item disabled=no;
-                    }
+                :if ([/ip firewall address-list get $existing disabled]) do={
+                    :set enabledIds ($enabledIds, $existing);
+                    /ip firewall address-list set $existing disabled=no;
                 }
             }
         }

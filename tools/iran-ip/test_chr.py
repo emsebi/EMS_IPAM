@@ -36,7 +36,7 @@ class API:
         self.sock = socket.create_connection(("127.0.0.1", port), timeout=3)
         self.sock.settimeout(3)
         self.call("/login", name="admin", password="")
-        self.sock.settimeout(180)
+        self.sock.settimeout(600)
 
     def read(self, count):
         result = b""
@@ -156,6 +156,7 @@ def main():
     parser.add_argument("--feed-dir", type=Path, default=HERE.parents[1] / "feeds/iran")
     args = parser.parse_args()
     major = int(args.version.split(".")[0])
+    http_port, https_port, api_port = 18080 + major, 18443 + major, 18728 + major
     cases = []
     def passed(name):
         cases.append(name)
@@ -177,18 +178,18 @@ def main():
             image.write_bytes(z.read(image_name))
         subprocess.run(["qemu-img", "resize", "-f", "raw", str(image), "256M"], check=True, stdout=subprocess.DEVNULL)
         make_tls(root)
-        http = start_server(root, 18080)
-        https = start_server(root, 18443, root / "server.pem", root / "server.key")
+        http = start_server(root, http_port)
+        https = start_server(root, https_port, root / "server.pem", root / "server.key")
         qemu_log = (root / "qemu.log").open("w")
         accel = ["-enable-kvm", "-cpu", "host"] if os.access("/dev/kvm", os.R_OK | os.W_OK) else ["-accel", "tcg", "-cpu", "qemu64"]
         command = ["qemu-system-x86_64", "-m", "1024", "-smp", "1", *accel,
-                   "-drive", f"file={image},format=raw,if=ide", "-netdev", "user,id=n0,hostfwd=tcp:127.0.0.1:18728-:8728",
+                   "-drive", f"file={image},format=raw,if=ide", "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{api_port}-:8728",
                    "-device", "virtio-net-pci,netdev=n0", "-display", "none", "-monitor", f"unix:{root / 'monitor.sock'},server,nowait",
                    "-serial", f"file:{root / 'serial.log'}", "-rtc", "base=utc"]
         proc = subprocess.Popen(command, stdout=qemu_log, stderr=qemu_log)
         api = None
         try:
-            api = wait_api(18728, proc)
+            api = wait_api(api_port, proc)
             resource = api.call("/system/resource/print")[0]
             assert resource["version"].startswith(str(major) + "."), resource
             now = dt.datetime.now(g.UTC).replace(microsecond=0)
@@ -204,7 +205,7 @@ def main():
                         for r in rows() if r.get("list") == "IR-IP_EMS"}
             def import_text(text, name="candidate.rsc", allow_error=False):
                 (root / name).write_text(text)
-                api.call("/tool/fetch", url=f"http://10.0.2.2:18080/{name}", dst_path=name)
+                api.call("/tool/fetch", url=f"http://10.0.2.2:{http_port}/{name}", dst_path=name)
                 api.run(f'/import file-name="{name}";', allow_error)
             def verify_count(expected):
                 r = rows()
@@ -276,12 +277,12 @@ def main():
             (root / f"IR-IP_EMS-v{major}.rsc").write_text(candidate)
             (root / f"IR-IP_EMS-v{major}.bytes").write_text(str(len(candidate.encode())))
             updater = (args.feed_dir / "update.rsc").read_text().replace(
-                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", "https://10.0.2.2:18443/IR-IP_EMS-v")
+                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://10.0.2.2:{https_port}/IR-IP_EMS-v")
             api.run(updater, allow_error=True)
             assert active() == before
             passed("untrusted HTTPS endpoint rejected with old list preserved")
             # Import a test-only CA into the isolated VM; never include it in deliverables.
-            api.call("/tool/fetch", url="http://10.0.2.2:18080/ca.pem", dst_path="test-ca.pem")
+            api.call("/tool/fetch", url=f"http://10.0.2.2:{http_port}/ca.pem", dst_path="test-ca.pem")
             api.call("/certificate/import", file_name="test-ca.pem", passphrase="")
             certs = api.call("/certificate/print")
             testca = next(c for c in certs if c.get("common-name") == "EMS Isolated Test CA")
@@ -304,7 +305,7 @@ def main():
                 pass
             api.close()
             time.sleep(5)
-            api = wait_api(18728, proc)
+            api = wait_api(api_port, proc)
             verify_count(count)
             passed("data and metadata survive reboot")
             report = {"version": args.version, "cases": cases, "passed": len(cases), "tested_at": dt.datetime.now(g.UTC).isoformat()}
