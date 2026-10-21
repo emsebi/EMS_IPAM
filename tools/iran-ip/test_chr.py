@@ -215,7 +215,17 @@ def main():
             text = (args.feed_dir / f"IR-IP_EMS-v{major}.rsc").read_text()
             manifest = json.loads((args.feed_dir / "manifest.json").read_text())
             count = manifest["prefix_count"]
-            import_text(text)
+            try:
+                import_text(text)
+            except ApiError:
+                # In this disposable VM only, replay without the catch to expose
+                # RouterOS 6's original error (v6 cannot bind an on-error value).
+                start = text.index("    } on-error={\n")
+                end = text.index("    :do { /ip firewall address-list remove [find where list=$stageName]; }")
+                diagnostic = (text[:start] + "    }\n" + text[end:]).replace("    :do {\n", "    {\n", 1)
+                print("Initial import failed; replaying uncaught in isolated test VM", flush=True)
+                import_text(diagnostic, name="diagnostic.rsc")
+                raise
             verify_count(count)
             passed(f"full RIPE import ({count} prefixes), static data and disabled Jalali marker")
             before = active()

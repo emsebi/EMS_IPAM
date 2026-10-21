@@ -148,7 +148,7 @@ def render_feed(networks, source_time, published, major: int):
         "COUNT": str(len(values)),
         "NOT_BEFORE": (published - dt.timedelta(days=1)).strftime("%Y%m%d"),
         "NOT_AFTER": min(published + dt.timedelta(days=7), source_time + MAX_SOURCE_AGE).strftime("%Y%m%d"),
-        "PREFIXES": "\n".join(f'"{value}";' for value in values),
+        "PREFIXES": ";\n".join(f'"{value}"' for value in values),
     }
     output = (HERE / "templates/feed.rsc").read_text()
     for key, value in replacements.items():

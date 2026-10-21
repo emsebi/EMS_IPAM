@@ -59,10 +59,12 @@
                 :error $problem;
             }
         }
+        :set problem "prefix array validation failed";
         :local prefixes {
 @PREFIXES@
         };
         :if ([:len $prefixes] != $expected) do={ :error "EMS IR: incomplete prefix array"; }
+        :set problem "candidate staging failed";
         /ip firewall address-list remove [find where list=$stageName];
         :local wanted [:toarray ""];
         :foreach prefix in=$prefixes do={
@@ -70,6 +72,7 @@
             :set ($wanted->$prefix) true;
         }
         :if ([:len [/ip firewall address-list find where list=$stageName]] != $expected) do={ :error "EMS IR: staging count mismatch"; }
+        :set problem "withdrawal comparison failed";
         :local obsoleteIds [:toarray ""];
         :foreach item in=[/ip firewall address-list find where list=$listName and comment=$dataTag] do={
             :local addr [:tostr [/ip firewall address-list get $item address]];
@@ -77,6 +80,7 @@
             :if (($wanted->$addr) != true) do={ :set obsoleteIds ($obsoleteIds, $item); }
         }
         # The complete candidate has been parsed and staged before touching live entries.
+        :set problem "adding new prefixes failed";
         :foreach prefix in=$prefixes do={
             :local existing [/ip firewall address-list find where list=$listName and address=$prefix and comment=$dataTag];
             :if ([:len $existing] = 0) do={
@@ -92,11 +96,13 @@
             }
         }
         # Delete withdrawn prefixes only after every new prefix is in the live list.
+        :set problem "removing withdrawn prefixes failed";
         :foreach item in=$obsoleteIds do={
             :local addr [/ip firewall address-list get $item address];
             :set removedAddresses ($removedAddresses, [:tostr $addr]);
             /ip firewall address-list remove $item;
         }
+        :set problem "live count or metadata update failed";
         :if ([:len [/ip firewall address-list find where list=$listName and comment=$dataTag and disabled=no]] != $expected) do={ :error "EMS IR: live count mismatch"; }
         :if ([:len $metaIds] = 0) do={
             /ip firewall address-list add list=$listName address=1.1.2.7 disabled=yes comment=$metadata;

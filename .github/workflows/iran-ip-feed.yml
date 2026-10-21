@@ -35,6 +35,7 @@ jobs:
       - name: Capture verified public GitHub CA
         run: python3 tools/iran-ip/prepare_ca.py
       - name: Fetch RIPE and generate candidates
+        id: generate
         env:
           ACCEPT_LARGE_CHANGE: ${{ inputs.accept_large_change || false }}
         run: |
@@ -42,12 +43,14 @@ jobs:
           if [ "$ACCEPT_LARGE_CHANGE" = true ]; then args+=(--accept-large-change); fi
           python3 tools/iran-ip/generate.py --require-ca "${args[@]}"
       - name: Install isolated CHR test dependencies
+        id: qemu
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
       - name: Test RouterOS 6.49.23
         run: python3 -u tools/iran-ip/test_chr.py --version 6.49.23
       - name: Test RouterOS 7.23.8
+        if: ${{ !cancelled() && steps.generate.outcome == 'success' && steps.qemu.outcome == 'success' }}
         run: python3 -u tools/iran-ip/test_chr.py --version 7.23.8
       - name: Retain candidate and test evidence
         if: always()
