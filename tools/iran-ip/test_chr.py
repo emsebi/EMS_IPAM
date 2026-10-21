@@ -131,8 +131,8 @@ def make_tls(root):
     def run(*args):
         subprocess.run(["openssl", *args], cwd=root, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     run("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "2", "-subj", "/CN=EMS Isolated Test CA")
-    run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=10.0.2.2")
-    (root / "server.ext").write_text("subjectAltName=IP:10.0.2.2\n")
+    run("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=ems-test.invalid")
+    (root / "server.ext").write_text("subjectAltName=DNS:ems-test.invalid\n")
     run("x509", "-req", "-in", "server.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial", "-out", "server.pem", "-days", "2", "-extfile", "server.ext")
 
 
@@ -196,6 +196,7 @@ def main():
             date = now.strftime("%b/%d/%Y").lower() if major == 6 else now.strftime("%Y-%m-%d")
             api.call("/system/clock/set", date=date, time=now.strftime("%H:%M:%S"), time_zone_name="Etc/UTC")
             api.call("/ip/dns/set", servers="10.0.2.3")
+            api.call("/ip/dns/static/add", name="ems-test.invalid", address="10.0.2.2")
             passed("official CHR boot and API")
 
             def rows():
@@ -277,7 +278,7 @@ def main():
             (root / f"IR-IP_EMS-v{major}.rsc").write_text(candidate)
             (root / f"IR-IP_EMS-v{major}.bytes").write_text(str(len(candidate.encode())))
             updater = (args.feed_dir / "update.rsc").read_text().replace(
-                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://10.0.2.2:{https_port}/IR-IP_EMS-v")
+                "https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/feeds/iran/IR-IP_EMS-v", f"https://ems-test.invalid:{https_port}/IR-IP_EMS-v")
             api.run(updater, allow_error=True)
             assert active() == before
             passed("untrusted HTTPS endpoint rejected with old list preserved")
@@ -287,6 +288,8 @@ def main():
             certs = api.call("/certificate/print")
             testca = next(c for c in certs if c.get("common-name") == "EMS Isolated Test CA")
             api.call("/certificate/set", **{".id": testca[".id"]}, trusted="yes")
+            api.call("/tool/fetch", url=f"https://ems-test.invalid:{https_port}/IR-IP_EMS-v{major}.bytes", check_certificate="yes", dst_path="test-tls-probe.txt")
+            passed("test server certificate and DNS verified after importing isolated test CA")
             api.run(updater)
             verify_count(count)
             passed("complete updater fetches size and RSC, verifies TLS, imports and cleans temporary files")
