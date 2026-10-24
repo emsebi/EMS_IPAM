@@ -135,6 +135,5 @@ If EMS_IPAM helps your work, you can support its continued development. Donation
 |:---:|:---:|
 | <img src="docker-app/public/donations/usdt-trc20.png" width="212" alt="USDT on TRON (TRC20) donation QR"> | <img src="docker-app/public/donations/bitcoin.png" width="212" alt="Bitcoin donation QR"> |
 
-شبکهٔ پرداخت باید با شبکهٔ بالا مطابقت داشته باشد. آدرس اول برای **USDT روی TRON (TRC20)** منتشر شده است. QR تتر شامل شناسهٔ توکن است؛ اگر کیف پول شما آن را نشناخت، USDT روی TRON را انتخاب و آدرس دریافت را کپی کنید.
 
 Use the exact network shown above. The USDT QR includes its token identifier; if your wallet cannot open it, select USDT on TRON and paste the receiving address.
