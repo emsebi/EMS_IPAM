@@ -358,5 +358,13 @@
   "networkAccess.column.actions": "Actions",
   "networkAccess.empty": "No records found.",
   "common.previous": "Previous",
-  "common.next": "Next"
+  "common.next": "Next",
+  "donation.title": "Support EMS_IPAM",
+  "donation.description": "If EMS_IPAM helps your work, you can support its continued development. Donations are optional.",
+  "donation.address": "Receiving address",
+  "donation.copy": "Copy address",
+  "donation.open": "Open wallet",
+  "donation.networkNote": "Use the exact network shown on each card. USDT is accepted on TRON (TRC20).",
+  "donation.copied": "Address copied.",
+  "donation.copyManually": "Address selected. Copy it manually using your device’s copy command."
 }

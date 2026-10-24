@@ -358,5 +358,13 @@
   "networkAccess.column.actions": "عملیات",
   "networkAccess.empty": "موردی ثبت نشده است.",
   "common.previous": "قبلی",
-  "common.next": "بعدی"
+  "common.next": "بعدی",
+  "donation.title": "حمایت از توسعه EMS_IPAM",
+  "donation.description": "اگر EMS_IPAM در کار شما مفید است، می‌توانید از ادامهٔ توسعهٔ آن حمایت کنید. حمایت مالی کاملاً اختیاری است.",
+  "donation.address": "آدرس دریافت",
+  "donation.copy": "کپی آدرس",
+  "donation.open": "باز کردن کیف پول",
+  "donation.networkNote": "شبکهٔ پرداخت باید با شبکهٔ درج‌شده مطابقت داشته باشد. دریافت تتر روی شبکهٔ TRON (TRC20) است.",
+  "donation.copied": "آدرس کپی شد.",
+  "donation.copyManually": "آدرس انتخاب شد؛ آن را با گزینهٔ کپی دستگاه خود کپی کنید."
 }

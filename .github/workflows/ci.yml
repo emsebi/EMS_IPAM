@@ -32,6 +32,7 @@ jobs:
           npm test
           node --test ../modules/radius-ops/tests/*.test.mjs
           node --test ../modules/radius/tests/*.test.mjs
+          node --test ../modules/network-map/tests/*.test.mjs
       - name: Compile and test RADIUS supervisor
         working-directory: .
         run: |
@@ -59,3 +60,12 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run browser integration
         run: npm run test:browser
+      - name: Save browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ems-ipam-browser-results
+          path: |
+            docs/test-results/*.png
+            docs/test-results/browser-result.json
+          retention-days: 14

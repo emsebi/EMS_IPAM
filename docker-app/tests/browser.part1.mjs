@@ -277,6 +277,11 @@ try {
   assert.equal(configText.includes('1234'), false);
   check('RADIUS simple client/group/user flow persists and manual config is generated');
 
+  await page.locator('#rConfigClose').click();
+  await page.locator('.r-tabs button[data-tab="clients"]').click();
+  await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
+  await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
+
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();
   await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/reports$/);
@@ -287,6 +292,7 @@ try {
   assert.equal(reportSummary.summary.radiusPolicies, 0);
   assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
   check('Reports module summarizes optional modules and shows redacted audit activity');
+  await page.screenshot({ path: path.join(outputDir, 'reports.png'), fullPage: true });
 
   await page.locator('#settingsButton').click();
   await page.locator('#settingsDialog').waitFor();
@@ -305,6 +311,52 @@ try {
   await page.locator('#settingsDialog [data-close]').first().click();
   assert.equal(await page.locator('#personnelButton').count(), 0);
   check('Settings opens; device shortcuts navigate to Inventory and Device Types; Personnel remains standalone');
+
+  const donations = [
+    { id: 'donationUsdt', address: 'TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH', uri: 'tron:TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH?req-asset=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t' },
+    { id: 'donationBtc', address: 'bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0', uri: 'bitcoin:bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0' },
+  ];
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.locator('#userMenuButton').click();
+  await page.locator('#aboutButton').click();
+  await page.locator('#donationTitle').getByText('حمایت از توسعه EMS_IPAM', { exact: true }).waitFor();
+  for (const item of donations) {
+    assert.equal(await page.locator(`#${item.id}`).inputValue(), item.address);
+    assert.equal(await page.locator(`#${item.id}`).getAttribute('dir'), 'ltr');
+    assert.equal(await page.locator(`#${item.id}`).evaluate(input => input.readOnly), true);
+    const card = page.locator('.donation-card').filter({ has: page.locator(`#${item.id}`) });
+    assert.equal(await card.locator('a').getAttribute('href'), item.uri);
+    await card.locator('img').evaluate(async img => { await img.decode(); });
+    await card.locator('[data-copy-donation]').click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), item.address);
+    await page.locator('#donationCopyStatus').getByText('آدرس کپی شد.', { exact: true }).waitFor();
+  }
+  await page.locator('.donation-section').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(outputDir, 'about-support.png'), fullPage: true });
+  for (const width of [390, 600, 1440]) {
+    await page.setViewportSize({ width, height: 980 });
+    const dimensions = await page.locator('#aboutDialog .modal-body').evaluate(el => ({ content: el.scrollWidth, view: el.clientWidth }));
+    assert.ok(dimensions.content <= dimensions.view + 1, `Donation content overflows at ${width}`);
+  }
+  await page.locator('#aboutDialog [data-close]').click();
+  await page.locator('#languageSelect').selectOption('en');
+  await page.locator('#userMenuButton').click();
+  await page.locator('#aboutButton').click();
+  await page.locator('#donationTitle').getByText('Support EMS_IPAM', { exact: true }).waitFor();
+  await page.locator('.donation-section').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(outputDir, 'about-support-en.png'), fullPage: true });
+  // Exercise the LAN HTTP path with Clipboard API absent; no wallet is opened.
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
+  await page.locator('[data-copy-donation="donationUsdt"]').click();
+  await page.locator('#donationCopyStatus').getByText('Address copied.', { exact: true }).waitFor();
+  assert.equal(await page.locator('#donationUsdt').evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd)), donations[0].address);
+  // A denied legacy copy must offer manual selection instead of claiming success.
+  await page.evaluate(() => { document.execCommand = () => false; });
+  await page.locator('[data-copy-donation="donationBtc"]').click();
+  await page.locator('#donationCopyStatus').getByText('Address selected. Copy it manually using your device’s copy command.', { exact: true }).waitFor();
+  assert.equal(await page.locator('#donationBtc').evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd)), donations[1].address);
+  await page.locator('#aboutDialog [data-close]').click();
+  check('Donation addresses, wallet links, bundled QRs, copy/fallback, English/Persian labels and responsive About dialog');
 
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });

@@ -186,3 +186,22 @@ html[data-content-direction="rtl"] .sidebar .navbtn,html[data-content-direction=
 .client-step b[dir="ltr"] { display: inline-block; white-space: nowrap; }
 .client-shell a.btn, .client-launch-help a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .client-launch-help { direction: rtl; }
+
+/* Optional project support; self-hosted images and selectable public addresses. */
+.about-dialog{width:min(840px,calc(100vw - 28px))}
+.donation-section{margin-top:28px;padding-top:22px;border-top:1px solid var(--line)}
+.donation-section h3{margin:0 0 8px;font-size:18px}
+.donation-description,.donation-network-note{color:var(--muted);line-height:1.8}
+.donation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}
+.donation-card{min-width:0;padding:18px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.donation-card h4{margin:0;font-size:18px}
+.donation-symbol{font-size:11px;font-weight:700;color:var(--muted);margin-inline-start:6px}
+.donation-network{margin:7px 0 14px;color:var(--muted);font-size:12px}
+.donation-card img{display:block;max-width:100%;height:auto;margin:0 auto 15px;border-radius:8px;background:white;image-rendering:pixelated}
+.donation-address-label{display:block;margin-bottom:7px;font-size:12px;color:var(--muted)}
+.donation-address{width:100%;min-width:0;border:1px solid var(--line);border-radius:8px;padding:10px 8px;text-align:left;color:var(--ink);background:var(--soft);font-size:11px;unicode-bidi:isolate}
+.donation-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.donation-actions .btn{font-size:12px}
+.donation-network-note{font-size:12px;margin-bottom:0}
+.donation-copy-status{min-height:1.5em;color:var(--blue);font-size:12px}
+@media(max-width:600px){.donation-grid{grid-template-columns:1fr}.about-content{padding:20px 16px}.donation-card{padding:16px 12px}}

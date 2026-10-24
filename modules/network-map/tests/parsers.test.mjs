@@ -32,3 +32,18 @@ test("topology deduplicates repeated neighbors without losing parallel links", (
   assert.equal(topology.nodes.length, 2);
   assert.equal(topology.links.length, 2);
 });
+
+test("LLDP keeps local ports and chassis identifiers within their own neighbor records", () => {
+  const text = `Local Intf: Gi1/0/2
+Chassis id: 00:11:22:33:44:55
+Port id: Gi0/24
+System Name: access-02
+Local Interface: Gi1/0/3
+Chassis id: 00:11:22:33:44:66
+Port id: Gi0/23`;
+  const neighbors = parseLldpNeighborsDetail(text);
+  assert.deepEqual(neighbors.map(({ localPort, remotePort, deviceId }) => ({ localPort, remotePort, deviceId })), [
+    { localPort: 'Gi1/0/2', remotePort: 'Gi0/24', deviceId: 'access-02' },
+    { localPort: 'Gi1/0/3', remotePort: 'Gi0/23', deviceId: '00:11:22:33:44:66' },
+  ]);
+});

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.2">
+  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.3">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -361,6 +361,36 @@
       <p>این پروژه Open Source برای مدیریت IP، شعب، تجهیزات و توسعه ماژول‌های شبکه در سازمان‌ها، دیتاسنترها و سرویس‌دهندگان طراحی شده است.</p><p class="about-note">پیش از استقرار Production، اصالت نسخه را با Repository رسمی پروژه بررسی کنید. و یک یادآوری از ابراهیم مامانی: اگر شبکه قرار است پیچیده باشد، حداقل مستنداتش نباید پیچیده بماند.</p>
       <dl><div><dt>طراحی پروژه</dt><dd>ابراهیم مامانی / Ebrahim Mamani</dd></div><div><dt>نسخه</dt><dd id="aboutVersion" class="ltr mono"></dd></div><div><dt>Repository رسمی</dt><dd class="ltr mono">github.com/emsebi/EMS_IPAM</dd></div></dl>
       <div class="about-actions"><a class="btn primary github-star" href="https://github.com/emsebi/EMS_IPAM" target="_blank" rel="noopener noreferrer">مشاهده پروژه و ثبت Star در GitHub</a><a class="btn" href="/client.html" target="_blank" rel="noopener">دانلود کلاینت اتصال ویندوز</a></div>
+      <section class="donation-section" aria-labelledby="donationTitle">
+        <h3 id="donationTitle" data-i18n="donation.title">Support EMS_IPAM</h3>
+        <p class="donation-description" data-i18n="donation.description">If EMS_IPAM helps your work, you can support its continued development. Donations are optional.</p>
+        <div class="donation-grid">
+          <article class="donation-card">
+            <h4 dir="ltr">Tether <span class="donation-symbol">USDT</span></h4>
+            <p class="donation-network" dir="ltr">TRON · TRC20</p>
+            <img src="/donations/usdt-trc20.png" width="212" height="212" alt="USDT on TRON (TRC20) donation QR code">
+            <label class="donation-address-label" for="donationUsdt" data-i18n="donation.address">Receiving address</label>
+            <input id="donationUsdt" class="donation-address mono" dir="ltr" readonly spellcheck="false" autocomplete="off" value="TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH">
+            <div class="donation-actions">
+              <button type="button" class="btn" data-copy-donation="donationUsdt" data-i18n="donation.copy">Copy address</button>
+              <a class="btn" href="tron:TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH?req-asset=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" data-i18n="donation.open">Open wallet</a>
+            </div>
+          </article>
+          <article class="donation-card">
+            <h4 dir="ltr">Bitcoin <span class="donation-symbol">BTC</span></h4>
+            <p class="donation-network" dir="ltr">Bitcoin</p>
+            <img src="/donations/bitcoin.png" width="212" height="212" alt="Bitcoin donation QR code">
+            <label class="donation-address-label" for="donationBtc" data-i18n="donation.address">Receiving address</label>
+            <input id="donationBtc" class="donation-address mono" dir="ltr" readonly spellcheck="false" autocomplete="off" value="bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0">
+            <div class="donation-actions">
+              <button type="button" class="btn" data-copy-donation="donationBtc" data-i18n="donation.copy">Copy address</button>
+              <a class="btn" href="bitcoin:bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0" data-i18n="donation.open">Open wallet</a>
+            </div>
+          </article>
+        </div>
+        <p class="donation-network-note" data-i18n="donation.networkNote">Use the exact network shown on each card. USDT is accepted on TRON (TRC20).</p>
+        <p id="donationCopyStatus" class="donation-copy-status" role="status" aria-live="polite"></p>
+      </section>
     </div>
   </dialog>
 
@@ -414,6 +444,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.0-rc.2"></script>
+  <script type="module" src="/app.js?v=1.7.0-rc.3"></script>
 </body>
 </html>

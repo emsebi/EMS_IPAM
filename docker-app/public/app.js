@@ -1,5 +1,5 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.2";
-import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.0-rc.2";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.3";
+import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.0-rc.3";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -71,7 +71,7 @@ const sourceTextNodes = new WeakMap();
 const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
   try {
-    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.2", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.3", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
     state.languages = Array.isArray(items)
       ? items.filter((item) => /^[a-z0-9_-]+$/i.test(String(item?.id || "")) && item?.label)
@@ -93,9 +93,9 @@ async function readLanguageFile(path) {
 }
 async function loadLanguagePack(lang) {
   const [english, localized, legacy] = await Promise.all([
-    readLanguageFile("/i18n/en.json?v=1.7.0-rc.2"),
-    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.2`),
-    readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.2"),
+    readLanguageFile("/i18n/en.json?v=1.7.0-rc.3"),
+    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.3`),
+    readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.3"),
   ]);
   translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
   translateKey = createKeyTranslator({ english, translations: localized, language: lang });
@@ -1835,8 +1835,30 @@ async function openTrashDialog() {
 
 function openAboutDialog() {
   $("aboutVersion").textContent = state.bootstrap?.version || "";
+  $("donationCopyStatus").textContent = "";
   $("aboutDialog").showModal();
 }
+
+// The panel may be served over LAN HTTP, where Clipboard API is unavailable.
+document.querySelectorAll("[data-copy-donation]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const input = $(button.dataset.copyDonation);
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(input.value);
+        copied = true;
+      }
+    } catch { /* Fall back to copying the selected address on HTTP/denied permission. */ }
+    if (!copied) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+      try { copied = document.execCommand("copy"); } catch { /* Keep manual selection available. */ }
+    }
+    $("donationCopyStatus").textContent = t(copied ? "donation.copied" : "donation.copyManually");
+  });
+});
 
 function openMikrotikScriptDialog() {
   $("mikrotikScriptForm").reset();
