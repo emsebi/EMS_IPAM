@@ -36,7 +36,9 @@ try {
     args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-zygote'],
   });
   const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 980 } });
-  await context.addInitScript(() => localStorage.setItem('ems-language', 'fa'));
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('ems-language')) localStorage.setItem('ems-language', 'fa');
+  });
   page = await context.newPage();
   page.setDefaultTimeout(12000);
   const errors = [];
@@ -332,19 +334,22 @@ try {
     await page.locator('#donationCopyStatus').getByText('آدرس کپی شد.', { exact: true }).waitFor();
   }
   await page.locator('.donation-section').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(outputDir, 'about-support.png'), fullPage: true });
+  await page.screenshot({ path: path.join(outputDir, 'about-support.png') });
   for (const width of [390, 600, 1440]) {
     await page.setViewportSize({ width, height: 980 });
     const dimensions = await page.locator('#aboutDialog .modal-body').evaluate(el => ({ content: el.scrollWidth, view: el.clientWidth }));
     assert.ok(dimensions.content <= dimensions.view + 1, `Donation content overflows at ${width}`);
   }
   await page.locator('#aboutDialog [data-close]').click();
-  await page.locator('#languageSelect').selectOption('en');
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.locator('#languageSelect').selectOption('en'),
+  ]);
   await page.locator('#userMenuButton').click();
   await page.locator('#aboutButton').click();
   await page.locator('#donationTitle').getByText('Support EMS_IPAM', { exact: true }).waitFor();
   await page.locator('.donation-section').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(outputDir, 'about-support-en.png'), fullPage: true });
+  await page.screenshot({ path: path.join(outputDir, 'about-support-en.png') });
   // Exercise the LAN HTTP path with Clipboard API absent; no wallet is opened.
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
   await page.locator('[data-copy-donation="donationUsdt"]').click();
