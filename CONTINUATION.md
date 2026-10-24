@@ -1,3 +1,9 @@
+# Current checkpoint — v1.7.0-rc.3
+
+See [release checkpoint](docs/releases/v1.7.0-rc.3.md) for current scope, checks and remaining work. This supersedes the historical Part 1 status below. Continue from the published checkpoint; preserve separate in-progress module branches.
+
+---
+
 # EMS_IPAM continuation checkpoint
 
 Version: 1.7.0-rc.2 — Part 1 — 2026-10-06

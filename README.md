@@ -1,6 +1,8 @@
-# EMS_IPAM — Part 1 / v1.7.0-rc.2
+# EMS_IPAM — v1.7.0-rc.3
 
-پنل مدیریت شبکه؛ **Core + IPAM + Radio** در این تحویل آمادهٔ تست است. بخش‌های RADIUS، کشف خودکار توپولوژی و اعمال دسترسی MAC در مراحل جدا تحویل می‌شوند.
+پنل مدیریت شبکه با **Core + IPAM، فهرست تجهیزات، Radio و RADIUS Device Access**، رابط فارسی و انگلیسی و کلاینت اتصال ویندوز. این نسخه RC است؛ کشف کامل خودکار شبکه، MAC Trace و اعمال 802.1X هنوز تکمیل نشده‌اند.
+
+[تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
 
 ## دانلود و نصب با یک دستور
 
@@ -10,7 +12,7 @@
 sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get install -y ca-certificates curl; }; EMS_SETUP=$(mktemp); trap "rm -f \"$EMS_SETUP\"" EXIT; curl -fsSL --retry 3 https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh -o "$EMS_SETUP"; bash "$EMS_SETUP"'
 ```
 
-**این دستور کد منتشرشدهٔ شاخه main را دریافت می‌کند. اگر این بسته را از گفتگو گرفته‌اید، ابتدا تغییرات را در مخزن منتشر کنید؛ تا آن زمان از روش نصب دستی ZIP زیر استفاده کنید.**
+این دستور آخرین کد منتشرشدهٔ شاخهٔ `main` را دریافت می‌کند.
 
 **نصب تازه: گزینه 1. ارتقای نصب موجود: گزینه 2.** پس از ساخت سرویس‌ها، آدرس پنل چاپ می‌شود؛ پورت پیش‌فرض 8080 است. نصب‌کننده نام مدیر و رمزها را می‌پرسد. Portainer اختیاری است و پیش‌فرض نصب نمی‌شود.
 
@@ -60,17 +62,27 @@ ZIP را استخراج و `Install.cmd` را با کاربر خودتان اج�
 | IP Manager → Device Types | افزودن، ویرایش، حذف نوع آزاد و تعداد استفاده؛ مستقل از Settings |
 | IP Manager → Radios | انتخاب AP و نمایش فقط Stationهای همان AP؛ Ping دستی |
 | 802.1X / MAC | دو تب رکوردهای MAC موجود در IPAM و پرسنل؛ فعلاً بدون اعمال سیاست RADIUS |
+| RADIUS Device Access | ثبت NAS، مجموعهٔ تجهیزات، پروفایل دسترسی، کاربران، قالب کانفیگ و لاگ‌های عملیاتی |
+| گزارش‌ها | خلاصهٔ عملیاتی ماژول‌ها و رخدادهای مدیریتی |
+| نقشه شبکه | نقشهٔ دستی و زیرساخت ذخیرهٔ Snapshot؛ پارسر آفلاین LLDP/CDP، بدون کشف زندهٔ کامل |
 | مدیریت پنل | کاربران، دسترسی‌ها، تنظیمات، بکاپ و مهاجرت ثبت‌شدهٔ دیتابیس |
 | اتصال ویندوز | کلاینت 0.8.0 برای WinBox، RDP، SSH، Telnet و VNC |
 
 به‌روزرسانی MAC از سوئیچ‌ها در مراحل بعد فقط با درخواست دستی کاربر انجام می‌شود؛ تایمر یا خواندن خودکار هنگام بازکردن صفحه نداریم.
 
-## اصلاحات این تحویل
+## تغییرات نسخهٔ فعلی
+
+- یکپارچه‌سازی آخرین کد ثبت‌شدهٔ ماژول‌های RADIUS و گزارش‌ها و اصلاحات رابط فارسی/انگلیسی.
+- بخش حمایت مالی داخل «دربارهٔ برنامه» با QR محلی، آدرس قابل انتخاب و کپی روی HTTPS و HTTP داخلی.
+- معرفی دقیق شبکه‌ها: USDT روی TRON (TRC20) و BTC روی Bitcoin.
+- تصاویر اجرای فعلی برنامه با داده‌های آزمایشی.
+
+## کلاینت اتصال و نصب
 
 - لانچر مشخص `EMS-IPAM-Client.exe` داخل ZIP است و هنگام نصب در ویندوز ثبت می‌شود؛ پورت 8291 فقط IP به WinBox می‌دهد، پورت سفارشی `IP:PORT`.
 - نصب مجدد مسیر انتخاب‌شدهٔ ابزارها را حفظ می‌کند. خطای اتصال پیام دارد و `Check.cmd` وضعیت ثبت پروتکل را نشان می‌دهد.
 - پنل پس از MIK، آدرس مقصد، تلاش دوباره و راهنمای اصلاح برنامهٔ مرورگر را نمایش می‌دهد.
-- فقط ZIP کلاینت 0.8.0 در دانلودهای پنل باقی مانده است؛ هفت نسخهٔ قدیمی حذف شده‌اند.
+- لینک دانلود اصلی پنل به کلاینت 0.8.0 اشاره می‌کند.
 - نصب یک‌دست با مخزن رسمی Docker؛ اجرای نصب‌کننده از فایل یا ورودی استاندارد پشتیبانی می‌شود.
 
 ## تصاویر اجرای واقعی پنل
@@ -87,16 +99,42 @@ ZIP را استخراج و `Install.cmd` را با کاربر خودتان اج�
 
 ![دانلود و راه‌اندازی کلاینت ویندوز](docs/test-results/client-guide.png)
 
+![RADIUS؛ مدیریت تجهیزات و دسترسی](docs/test-results/radius.png)
+
+![گزارش‌های عملیاتی](docs/test-results/reports.png)
+
+![دربارهٔ برنامه و حمایت مالی](docs/test-results/about-support.png)
+
 طرح قدیمی [Subnet](docs/screenshots/subnet-overview-concept.png) صرفاً مرجع مفهومی است.
 
 ## نصب، تست و ادامه پروژه
 
 - [شروع نصب و تست](START-HERE-FA.md)
 - [راهنمای کلاینت و اصلاح WinBox](docs/WINDOWS-CLIENT-FA.md)
-- [گزارش تست و محدودیت‌ها](docs/TEST-REPORT-FA.md)
+- [گزارش تست و محدودیت‌های این نقطهٔ ذخیره](docs/TEST-REPORT-FA.md)
 - [نقشهٔ راه پنج‌مرحله‌ای](docs/ROADMAP-FA.md)
 - [نقطهٔ ادامه کار](CONTINUATION.md) و [قرارداد ماژول‌ها](docs/MODULE-SDK-FA.md)
 
-تست پنل با سرور واقعی و دیتابیس موقت PGlite انجام می‌شود. Docker/PostgreSQL واقعی و WinBox روی ویندوز در محیط ساخت اجرا نشده‌اند؛ اسکریپت‌های پذیرش داخل بسته‌اند. نسخه RC است و نتیجهٔ تست دستگاه واقعی باید جدا ثبت شود.
+تست رابط پنل با HTTP واقعی و دیتابیس موقت PGlite انجام می‌شود. جزئیات بررسی‌های این نسخه و نتیجهٔ اجرای قبلی Docker/PostgreSQL/FreeRADIUS در [گزارش انتشار](docs/releases/v1.7.0-rc.3.md) آمده است. نتیجهٔ تست هر دستگاه واقعی باید جدا ثبت شود.
 
 طراح پروژه: Ebrahim Mamani / ابراهیم مامانی
+
+<a id="support-ems-ipam"></a>
+## حمایت از توسعه / Support EMS_IPAM
+
+اگر EMS_IPAM در کار شما مفید است، می‌توانید از ادامهٔ توسعهٔ آن حمایت کنید. حمایت مالی کاملاً اختیاری است.
+
+If EMS_IPAM helps your work, you can support its continued development. Donations are optional.
+
+| Asset / ارز | Network / شبکه | Receiving address / آدرس دریافت |
+|---|---|---|
+| **Tether (USDT)** | **TRON — TRC20** | `TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH` |
+| **Bitcoin (BTC)** | **Bitcoin** | `bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0` |
+
+| USDT · TRON (TRC20) | BTC · Bitcoin |
+|:---:|:---:|
+| <img src="docker-app/public/donations/usdt-trc20.png" width="212" alt="USDT on TRON (TRC20) donation QR"> | <img src="docker-app/public/donations/bitcoin.png" width="212" alt="Bitcoin donation QR"> |
+
+شبکهٔ پرداخت باید با شبکهٔ بالا مطابقت داشته باشد. آدرس اول برای **USDT روی TRON (TRC20)** منتشر شده است. QR تتر شامل شناسهٔ توکن است؛ اگر کیف پول شما آن را نشناخت، USDT روی TRON را انتخاب و آدرس دریافت را کپی کنید.
+
+Use the exact network shown above. The USDT QR includes its token identifier; if your wallet cannot open it, select USDT on TRON and paste the receiving address.

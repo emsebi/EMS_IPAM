@@ -1,0 +1,27 @@
+{
+  "id": "radius",
+  "name": "RADIUS / AAA",
+  "version": "1.0.0-lab",
+  "description": "Simple operational RADIUS/AAA management backed by the isolated radius-ops service; legacy preview APIs remain available for compatibility.",
+  "enabled": true,
+  "permissions": [
+    "radius.read",
+    "radius.write",
+    "radius.preview"
+  ],
+  "roles": [
+    "admin"
+  ],
+  "navigation": {
+    "label": "RADIUS / AAA",
+    "icon": "◎",
+    "order": 50,
+    "panel": true,
+    "labels": {
+      "en": "RADIUS / AAA",
+      "fa": "RADIUS / AAA"
+    }
+  },
+  "apiVersion": 1,
+  "backend": "backend/index.mjs"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "radius-ops",
+  "name": "RADIUS Operations",
+  "version": "1.0.0-lab",
+  "apiVersion": 1,
+  "enabled": true,
+  "roles": [
+    "admin"
+  ],
+  "permissions": [
+    "radius-ops.read",
+    "radius-ops.write"
+  ],
+  "navigation": null,
+  "backend": "backend/index.mjs"
+}

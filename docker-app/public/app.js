@@ -1,4 +1,5 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.2";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.3";
+import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.0-rc.3";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -43,6 +44,8 @@ const state = {
   language: localStorage.getItem("ems-language") || "en",
   languages: [],
   routeBusy: false,
+  currentModuleId: null,
+  currentModuleRouteParts: [],
   hostReturnView: null,
   personnelReturnToSettings: false,
   usersReturnToSettings: false,
@@ -62,41 +65,77 @@ ipamMenu.querySelectorAll(".navbtn").forEach((button) => button.addEventListener
 const savedTheme = localStorage.getItem("ems-theme") || "light";
 document.documentElement.dataset.theme = savedTheme;
 
-let LANGUAGE_PACK = {};
-let LANGUAGE_ENTRIES = [];
+let translateValue = (value) => String(value ?? "");
+let translateKey = (key, params = {}) => String(key ?? "");
+const sourceTextNodes = new WeakMap();
+const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
-  const supported = new Set(["en", "fa"]);
   try {
-    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.2", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.3", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
-    state.languages = Array.isArray(items) ? items.filter((item) => supported.has(item?.id) && item?.label) : [];
-    if (state.languages.length !== supported.size) throw new Error("Language catalog must contain English and Persian only.");
+    state.languages = Array.isArray(items)
+      ? items.filter((item) => /^[a-z0-9_-]+$/i.test(String(item?.id || "")) && item?.label)
+      : [];
+    if (!state.languages.some((item) => item.id === "en")) throw new Error("Language catalog must contain English.");
   } catch {
     state.languages = [{ id: "en", label: "English", dir: "ltr" }, { id: "fa", label: "فارسی", dir: "rtl" }];
   }
   if (!state.languages.some((item) => item.id === state.language)) {
-    state.language = state.languages[0].id;
+    state.language = state.languages.find((item) => item.id === "en")?.id || state.languages[0].id;
     localStorage.setItem("ems-language", state.language);
   }
 }
-async function loadLanguagePack(lang) {
+async function readLanguageFile(path) {
   try {
-    const response = await fetch(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.2`, { cache: "no-store" });
-    LANGUAGE_PACK = response.ok ? await response.json() : {};
-  } catch { LANGUAGE_PACK = {}; }
-  LANGUAGE_ENTRIES = Object.entries(LANGUAGE_PACK).sort((a,b)=>b[0].length-a[0].length);
+    const response = await fetch(path, { cache: "no-store" });
+    return response.ok ? await response.json() : {};
+  } catch { return {}; }
 }
-function translateValue(value) {
-  let output = String(value ?? "");
-  for (const [source,target] of LANGUAGE_ENTRIES) if (source && output.includes(source)) output = output.split(source).join(target);
-  return output;
+async function loadLanguagePack(lang) {
+  const [english, localized, legacy] = await Promise.all([
+    readLanguageFile("/i18n/en.json?v=1.7.0-rc.3"),
+    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.3`),
+    readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.3"),
+  ]);
+  translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
+  translateKey = createKeyTranslator({ english, translations: localized, language: lang });
+}
+function t(key, params = {}) {
+  return translateKey(key, params);
 }
 function translateTree(root = document) {
+  const marked = [];
+  if (root?.nodeType === 1 && root.matches?.("[data-i18n]")) marked.push(root);
+  root.querySelectorAll?.("[data-i18n]").forEach((node) => marked.push(node));
+  for (const node of marked) node.textContent = t(node.dataset.i18n);
+
+  const placeholderNodes = [];
+  if (root?.nodeType === 1 && root.matches?.("[data-i18n-placeholder]")) placeholderNodes.push(root);
+  root.querySelectorAll?.("[data-i18n-placeholder]").forEach((node) => placeholderNodes.push(node));
+  for (const node of placeholderNodes) node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  for (const node of nodes) { const raw=node.nodeValue; if (!raw?.trim()) continue; node.nodeValue=translateValue(raw); }
-  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el)=>{
-    for (const attr of ["placeholder","title","aria-label"]) if (el.hasAttribute(attr)) el.setAttribute(attr,translateValue(el.getAttribute(attr)));
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!node.nodeValue?.trim() || node.parentElement?.closest("script,style,textarea,[contenteditable]")) continue;
+    const previous = sourceTextNodes.get(node);
+    const original = previous && previous.output === node.nodeValue ? previous.original : node.nodeValue;
+    const output = translateValue(original);
+    sourceTextNodes.set(node, { original, output });
+    if (node.nodeValue !== output) node.nodeValue = output;
+  }
+  root.querySelectorAll?.("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((el) => {
+    const saved = sourceAttributes.get(el) || {};
+    for (const attr of ["placeholder", "title", "aria-label"]) {
+      if (!el.hasAttribute(attr)) continue;
+      const current = el.getAttribute(attr);
+      const previous = saved[attr];
+      const original = previous && previous.output === current ? previous.original : current;
+      const output = translateValue(original);
+      saved[attr] = { original, output };
+      if (current !== output) el.setAttribute(attr, output);
+    }
+    sourceAttributes.set(el, saved);
   });
 }
 async function applyLanguage() {
@@ -127,7 +166,8 @@ function markFormClean(form) {
 }
 
 function navActive(name) {
-  document.querySelectorAll(".navbtn").forEach((node) => node.classList.toggle("active", node.id === `${name}Button`));
+  document.querySelectorAll(".navbtn").forEach((node) => node.classList.toggle("active",
+    node.id === `${name}Button` || node.dataset.moduleId === name));
 }
 
 function rememberIpamContext(view = state.view) {
@@ -311,20 +351,63 @@ function roleLabel(role) {
 }
 
 const moduleUiCache = new Map();
+
+async function createModuleTranslator(info) {
+  const id = String(info?.id || "");
+  const version = encodeURIComponent(info?.version || "0");
+  if (!id) return t;
+  const english = await readLanguageFile(`/m/${encodeURIComponent(id)}/i18n/en.json?v=${version}`);
+  const localized = state.language === "en"
+    ? english
+    : await readLanguageFile(`/m/${encodeURIComponent(id)}/i18n/${encodeURIComponent(state.language)}.json?v=${version}`);
+  const localT = createKeyTranslator({ english, translations: localized, language: state.language });
+  return (key, params = {}) => Object.prototype.hasOwnProperty.call(english, key)
+    ? localT(key, params)
+    : t(key, params);
+}
+
 async function loadModuleUi(id) {
   if (moduleUiCache.has(id)) return moduleUiCache.get(id);
   const info = state.bootstrap?.modules?.find((item) => item.id === id);
   if (!info) throw new Error("ماژول مورد نیاز نصب یا فعال نیست.");
   const { createUi } = await import(`/m/${id}/index.mjs?v=${encodeURIComponent(info.version)}`);
-  const link = document.createElement("link");
-  link.rel = "stylesheet"; link.href = `/m/${id}/style.css?v=${encodeURIComponent(info.version)}`;
-  document.head.appendChild(link);
+  if (typeof createUi !== "function") throw new Error("رابط ماژول معتبر نیست.");
+  if (![...document.querySelectorAll("link[data-module-style]")].some((node) => node.dataset.moduleStyle === id)) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.dataset.moduleStyle = id;
+    link.href = `/m/${id}/style.css?v=${encodeURIComponent(info.version)}`;
+    document.head.appendChild(link);
+  }
+  const moduleT = await createModuleTranslator(info);
   const ui = createUi({ state,$,page,isModuleInstalled,hasClientModule,ensureInventory,ensureDeviceTypes,
     updateSelectors,navActive,setRoute,toast,canWrite,isAdmin,ipv4ToInt,intToIpv4,request,prepareHostEditor,
-    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,populateHostTypes,openPersonnelDialog,editPersonnel });
+    loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,t:moduleT,coreT:t,module:info,
+    populateHostTypes,openPersonnelDialog,editPersonnel });
   moduleUiCache.set(id,ui);
   return ui;
 }
+
+async function openGenericModulePage(id, routeParts = [], { fromRoute = false } = {}) {
+  const info = state.bootstrap?.modules?.find((item) => item.id === id);
+  if (!info || info.navigation?.panel !== true) throw new Error("این ماژول صفحه پنلی ثبت‌شده ندارد.");
+  const ui = await loadModuleUi(id);
+  if (typeof ui.openPage !== "function") throw new Error("ماژول تابع openPage ارائه نکرده است.");
+  state.view = "module";
+  state.currentModuleId = id;
+  state.currentModuleRouteParts = Array.isArray(routeParts) ? routeParts.slice(0, 10) : [];
+  state.currentSpaceId = null;
+  state.data = null;
+  navActive(id);
+  if (!fromRoute) {
+    const suffix = state.currentModuleRouteParts.length
+      ? `/${state.currentModuleRouteParts.map((item) => encodeURIComponent(item)).join("/")}`
+      : "";
+    setRoute(`/module/${encodeURIComponent(id)}${suffix}`);
+  }
+  await ui.openPage({ routeParts: [...state.currentModuleRouteParts], fromRoute });
+}
+
 async function openNetworkAccessPage(tab = "mac") {
   try { return (await loadModuleUi("network-access")).openNetworkAccessPage(tab); } catch (error) { toast(error.message); }
 }
@@ -336,9 +419,23 @@ function renderModuleNavigation() {
   const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
   host.innerHTML = modules
     .filter((item) => !["radio","ipam","network-access"].includes(item.id))
+    .filter((item) => item.navigation && typeof item.navigation === "object")
     .filter((item) => !Array.isArray(item.roles) || !item.roles.length || item.roles.includes(role))
     .sort((a, b) => Number(a.navigation?.order || 100) - Number(b.navigation?.order || 100))
-    .map((item) => { const path = item.navigation?.path || `/m/${item.id}/`; const label = item.navigation?.label || item.name || item.id; const icon = item.navigation?.icon || "◫"; return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`; }).join("");
+    .map((item) => {
+      const labels = item.navigation?.labels && typeof item.navigation.labels === "object" ? item.navigation.labels : {};
+      const label = labels[state.language] || labels.en || item.navigation?.label || item.name || item.id;
+      const icon = item.navigation?.icon || "◫";
+      if (item.navigation?.panel === true) {
+        return `<button type="button" class="navbtn module-nav-link" data-module-id="${escapeHtml(item.id)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></button>`;
+      }
+      const path = item.navigation?.path || `/m/${item.id}/`;
+      return `<a class="navbtn module-nav-link" href="${escapeHtml(path)}"><span class="nav-icon">${escapeHtml(icon)}</span><span>${escapeHtml(label)}</span><span class="module-badge">${escapeHtml(item.version || "")}</span></a>`;
+    }).join("");
+  host.querySelectorAll("button.module-nav-link[data-module-id]").forEach((node) => node.addEventListener("click", () => {
+    openGenericModulePage(node.dataset.moduleId).catch((error) => toast(error.message));
+  }));
+  if (state.view === "module" && state.currentModuleId) navActive(state.currentModuleId);
 }
 
 function applyTheme(theme) {
@@ -433,6 +530,7 @@ async function renderRoute(replace = false) {
     else if (parts[0] === "inventory") await openInventoryPage(true, { fromRoute: true });
     else if (parts[0] === "radios") await openRadiosPage(true, { fromRoute: true });
     else if (parts[0] === "topology") await openTopologyPage(true, { fromRoute: true });
+    else if (parts[0] === "module" && parts[1]) await openGenericModulePage(parts[1], parts.slice(2), { fromRoute: true });
     else {
       setRoute("/companies", replace);
       renderCompanies({ keepRoute: true });
@@ -460,6 +558,7 @@ function connectEvents() {
         } else if (state.view === "topology" && change.type === "topology") await openTopologyPage(true);
         else if (state.view === "radios" && change.type === "host") await openRadiosPage(true);
         else if (state.view === "inventory" && change.type === "host") await openInventoryPage(true, { fromRoute: true });
+        else if (state.view === "module" && state.currentModuleId) await openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true });
         else if (state.view === "company" && state.currentCompanyId) await openCompanyPage(state.currentCompanyId, { fromRoute: true });
         else if (state.view === "companies") renderCompanies();
       } catch (error) { console.warn(error); }
@@ -495,6 +594,7 @@ function renderCurrent() {
   else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
   else if (state.view === "inventory") renderInventory();
   else if (state.view === "topology") renderTopology();
+  else if (state.view === "module" && state.currentModuleId) openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true }).catch((error) => toast(error.message));
   else if (state.view === "company" && state.currentCompanyId) openCompanyPage(state.currentCompanyId, { fromRoute: true }).catch((error) => toast(error.message));
   else renderCompanies();
 }
@@ -1277,7 +1377,7 @@ function openHostDialog(ip, overrides = {}) {
   $("hostDialog").showModal();
 }
 
-async function prepareHostEditor(spaceId, ip, returnView, overrides = {}) {
+async function prepareHostEditor(spaceId, ip, returnView, overrides = {}, { requireEmpty = false } = {}) {
   const space = (state.bootstrap?.spaces || []).find((item) => item.id === spaceId);
   const address = ipv4ToInt(ip);
   if (!space || address === null || !contains(space.cidr, address)) throw new Error("IP یا رنج انتخاب‌شده معتبر نیست.");
@@ -1286,6 +1386,9 @@ async function prepareHostEditor(spaceId, ip, returnView, overrides = {}) {
   state.currentCompanyId = space.companyId;
   state.sheetCidr = `${intToIpv4(address & 0xffffff00)}/24`;
   state.data = await request(`/api/spaces/${encodeURIComponent(spaceId)}/data`);
+  if (requireEmpty && (state.data.hosts || []).some((host) => host.ip === ip)) {
+    throw new Error(t("inventory.error.ipAlreadyRegistered"));
+  }
   updateSelectors();
   openHostDialog(ip, overrides);
 }
@@ -1394,25 +1497,25 @@ function parseCsv(text) {
 async function refreshPersonnel(query = "") {
   const result = await request(`/api/personnel${query ? `?q=${encodeURIComponent(query)}` : ""}`);
   const items = result.items || [];
-  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">کد:</span> ${escapeHtml(item.employeeCode || "—")} · <span class="meta-label">واحد:</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">شرکت:</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join("") || `<div class="empty-state">پرسنلی ثبت نشده است.</div>`;
+  $("personnelList").innerHTML = items.map((item) => `<div class="personnel-row"><div><b>${escapeHtml(item.fullName)}</b><small><span class="meta-label">${escapeHtml(t("personnel.meta.code"))}</span> ${escapeHtml(item.employeeCode || "—")} · <span class="meta-label">${escapeHtml(t("personnel.meta.department"))}</span> ${escapeHtml(item.department || "—")} · <span class="meta-label">${escapeHtml(t("personnel.meta.company"))}</span> ${escapeHtml(item.companyName || "—")}</small><div class="contact-meta"><span>📱 ${escapeHtml(item.mobile || "—")}</span><span>☎ ${escapeHtml(item.phone || "—")}</span><span>✉ ${escapeHtml(item.email || "—")}</span></div></div><div class="row-actions"><button class="btn sm edit-personnel" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.edit"))}</button><button class="btn sm danger delete-personnel" data-id="${escapeHtml(item.id)}">${escapeHtml(t("common.delete"))}</button></div></div>`).join("") || `<div class="empty-state">${escapeHtml(t("personnel.empty"))}</div>`;
   $("personnelList").querySelectorAll(".edit-personnel").forEach((node) => node.addEventListener("click", () => editPersonnel(items.find((item) => item.id === node.dataset.id))));
   $("personnelList").querySelectorAll(".delete-personnel").forEach((node) => node.addEventListener("click", async () => {
-    const item = items.find((entry) => entry.id === node.dataset.id); if (!item || !confirm(`پرسنل «${item.fullName}» حذف شود؟`)) return;
-    try { await request(`/api/personnel/${encodeURIComponent(item.id)}`, { method: "DELETE" }); resetPersonnelForm(); await refreshPersonnel($("personnelSearch").value); toast("پرسنل حذف شد."); } catch (error) { toast(error.message); }
+    const item = items.find((entry) => entry.id === node.dataset.id); if (!item || !confirm(t("personnel.confirmDelete", { name: item.fullName }))) return;
+    try { await request(`/api/personnel/${encodeURIComponent(item.id)}`, { method: "DELETE" }); resetPersonnelForm(); await refreshPersonnel($("personnelSearch").value); toast(t("personnel.toast.deleted")); } catch (error) { toast(error.message); }
   }));
 }
 
 function resetPersonnelForm() {
-  $("personnelForm").reset(); $("personnelId").value = ""; $("personnelActive").checked = true; $("personnelFormTitle").textContent = "پرسنل جدید"; $("cancelPersonnelEdit").classList.add("hidden");
+  $("personnelForm").reset(); $("personnelId").value = ""; $("personnelActive").checked = true; $("personnelFormTitle").textContent = t("personnel.form.new"); $("cancelPersonnelEdit").classList.add("hidden");
 }
 
 function editPersonnel(item) {
-  if (!item) return; $("personnelId").value = item.id; $("personnelCode").value = item.employeeCode || ""; $("personnelName").value = item.fullName || ""; $("personnelMobile").value = item.mobile || ""; $("personnelPhone").value = item.phone || ""; $("personnelEmail").value = item.email || ""; $("personnelDepartment").value = item.department || ""; $("personnelJobTitle").value = item.jobTitle || ""; $("personnelCompany").value = item.companyId || ""; $("personnelNotes").value = item.notes || ""; $("personnelActive").checked = item.active !== false; $("personnelFormTitle").textContent = "ویرایش پرسنل"; $("cancelPersonnelEdit").classList.remove("hidden");
+  if (!item) return; $("personnelId").value = item.id; $("personnelCode").value = item.employeeCode || ""; $("personnelName").value = item.fullName || ""; $("personnelMobile").value = item.mobile || ""; $("personnelPhone").value = item.phone || ""; $("personnelEmail").value = item.email || ""; $("personnelDepartment").value = item.department || ""; $("personnelJobTitle").value = item.jobTitle || ""; $("personnelCompany").value = item.companyId || ""; $("personnelNotes").value = item.notes || ""; $("personnelActive").checked = item.active !== false; $("personnelFormTitle").textContent = t("personnel.form.edit"); $("cancelPersonnelEdit").classList.remove("hidden");
 }
 
 async function openPersonnelDialog(companyId = "", { returnToSettings = false } = {}) {
   state.personnelReturnToSettings = returnToSettings;
-  $("personnelCompany").innerHTML = `<option value="">بدون شرکت</option>${(state.bootstrap?.companies || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+  $("personnelCompany").innerHTML = `<option value="">${escapeHtml(t("personnel.company.none"))}</option>${(state.bootstrap?.companies || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
   resetPersonnelForm();
   if (companyId) $("personnelCompany").value = companyId;
   $("personnelSearch").value = ""; await refreshPersonnel(); $("personnelDialog").showModal();
@@ -1487,7 +1590,8 @@ function openInventoryCreateDialog() {
   const select = $("inventoryCreateSpace");
   select.innerHTML = spaces.map((item)=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.companyName || state.bootstrap.companies.find((c)=>c.id===item.companyId)?.name || "")} — ${escapeHtml(item.name)} — ${escapeHtml(item.cidr)}</option>`).join("");
   $("inventoryCreateIp").value = "";
-  $("inventoryCreateError").textContent = "";
+  $("inventoryCreateError").textContent = spaces.length ? "" : t("inventory.error.noSpaces");
+  $("inventoryCreateForm").querySelector('[type="submit"]').disabled = !spaces.length;
   markFormClean($("inventoryCreateForm"));
   $("inventoryCreateDialog").showModal();
 }
@@ -1499,10 +1603,10 @@ async function continueInventoryCreate() {
   const info = parseCidr(space?.cidr || "");
   const ipValue = ipv4ToInt(ip);
   if (!space || ipValue === null || !info || ipValue < info.start || ipValue > info.end) {
-    $("inventoryCreateError").textContent = "IP باید داخل رنج انتخاب‌شده باشد.";
+    $("inventoryCreateError").textContent = t("inventory.error.ipOutsideNetwork");
     return;
   }
-  await prepareHostEditor(spaceId, ip, "inventory");
+  await prepareHostEditor(spaceId, ip, "inventory", {}, { requireEmpty: true });
   $("inventoryCreateDialog").close();
 }
 
@@ -1666,11 +1770,31 @@ async function openBackupsDialog() {
   try { await refreshBackups(); } catch (error) { toast(error.message); }
 }
 
+function ensureSettingsDeviceActions() {
+  const pane = document.querySelector('[data-settings-pane="general"]');
+  if (!pane || $("settingsManageDevices")) return;
+  const actions = document.createElement("div");
+  actions.className = "row-actions settings-device-actions";
+  actions.innerHTML = `<button id="settingsManageDevices" class="btn" type="button">${escapeHtml(t("settings.general.manageDevices"))}</button><button id="settingsManageDeviceTypes" class="btn" type="button">${escapeHtml(t("settings.general.manageDeviceTypes"))}</button>`;
+  pane.querySelector("p")?.insertAdjacentElement("afterend", actions);
+  $("settingsManageDevices").addEventListener("click", async () => {
+    $("settingsDialog").close();
+    try { await openInventoryPage(true); } catch (error) { toast(error.message); }
+  });
+  $("settingsManageDeviceTypes").addEventListener("click", async () => {
+    $("settingsDialog").close();
+    try { await openDeviceTypesPage(); } catch (error) { toast(error.message); }
+  });
+}
+
 function openSettingsDialog(tab = "general") {
+  ensureSettingsDeviceActions();
+  $("settingsManageDevices")?.classList.toggle("hidden", !hasClientModule("inventory"));
+  $("settingsManageDeviceTypes")?.classList.toggle("hidden", !isAdmin());
   if ($("appearanceTheme")) $("appearanceTheme").value = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   if ($("settingsModulesList")) {
     const modules = Array.isArray(state.bootstrap?.modules) ? state.bootstrap.modules : [];
-    $("settingsModulesList").innerHTML = modules.length ? modules.map((item) => `<div class="user-row"><div><b>${escapeHtml(item.name || item.id)}</b><small>${escapeHtml(item.description || item.id)}</small></div><span class="status-pill">v${escapeHtml(item.version || "0.0.0")}</span></div>`).join("") : `<div class="empty-state compact-empty">فعلاً افزونه‌ای نصب نشده است. Core + IPAM مستقل فعال است.</div>`;
+    $("settingsModulesList").innerHTML = modules.length ? modules.map((item) => `<div class="user-row"><div><b>${escapeHtml(item.name || item.id)}</b><small>${escapeHtml(item.description || item.id)}</small></div><span class="status-pill">v${escapeHtml(item.version || "0.0.0")}</span></div>`).join("") : `<div class="empty-state compact-empty">${escapeHtml(t("settings.modules.empty"))}</div>`;
   }
   $("toolsSettings").innerHTML = state.bootstrap.tools.map((tool) => `<div class="tool-setting" data-tool="${escapeHtml(tool.tool)}"><b style="color:${escapeHtml(tool.color)}">${escapeHtml(tool.tool)}</b><input class="tool-label" value="${escapeHtml(tool.label)}"><input class="tool-port" type="number" min="0" max="65535" value="${escapeHtml(tool.defaultPort)}"><input class="tool-color" type="color" value="${escapeHtml(tool.color)}"></div>`).join("");
   if ($("settingsVersion")) $("settingsVersion").textContent = state.bootstrap?.version || "";
@@ -1711,8 +1835,30 @@ async function openTrashDialog() {
 
 function openAboutDialog() {
   $("aboutVersion").textContent = state.bootstrap?.version || "";
+  $("donationCopyStatus").textContent = "";
   $("aboutDialog").showModal();
 }
+
+// The panel may be served over LAN HTTP, where Clipboard API is unavailable.
+document.querySelectorAll("[data-copy-donation]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const input = $(button.dataset.copyDonation);
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(input.value);
+        copied = true;
+      }
+    } catch { /* Fall back to copying the selected address on HTTP/denied permission. */ }
+    if (!copied) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+      try { copied = document.execCommand("copy"); } catch { /* Keep manual selection available. */ }
+    }
+    $("donationCopyStatus").textContent = t(copied ? "donation.copied" : "donation.copyManually");
+  });
+});
 
 function openMikrotikScriptDialog() {
   $("mikrotikScriptForm").reset();
@@ -1795,6 +1941,7 @@ $("companySelect").addEventListener("change", (event) => {
   else if (state.view === "radios") renderRadios();
   else if (state.view === "device-types") openDeviceTypesPage();
   else if (state.view === "network-access") openNetworkAccessPage(state.networkAccessTab);
+  else if (state.view === "module" && state.currentModuleId) openGenericModulePage(state.currentModuleId, state.currentModuleRouteParts, { fromRoute: true }).catch((error) => toast(error.message));
   else if (state.currentCompanyId) openCompanyPage(state.currentCompanyId);
   else renderCompanies();
 });
@@ -1810,7 +1957,7 @@ $("personnelDialog").addEventListener("close", () => {
   if (state.view === "network-access") openNetworkAccessPage("personnel");
 });
 $("openBackupsFromSettings").addEventListener("click", () => { $("settingsDialog").close(); openBackupsDialog(); });
-$("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast("تنظیم ظاهر اعمال شد."); });
+$("applyAppearance").addEventListener("click", () => { applyTheme($("appearanceTheme").value); toast(t("settings.appearance.applied")); });
 document.querySelectorAll(".settings-tab").forEach((node) => node.addEventListener("click", () => { document.querySelectorAll(".settings-tab").forEach((n) => n.classList.toggle("active", n === node)); document.querySelectorAll(".settings-pane").forEach((pane) => pane.classList.toggle("active", pane.dataset.settingsPane === node.dataset.settingsTab)); }));
 $("exportButton").addEventListener("click", () => state.currentSpaceId ? window.location.assign(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/export`) : toast("ابتدا یک رنج اصلی را باز کنید."));
 
@@ -1934,7 +2081,7 @@ $("userForm").addEventListener("submit", async (event) => {
 $("settingsForm").addEventListener("submit", (event) => event.preventDefault());
 $("saveToolsSettings").addEventListener("click", async () => {
   const tools = [...$("toolsSettings").querySelectorAll(".tool-setting")].map((node) => ({ tool: node.dataset.tool, label: node.querySelector(".tool-label").value, defaultPort: Number(node.querySelector(".tool-port").value), color: node.querySelector(".tool-color").value }));
-  try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast("تنظیمات ابزارهای IP ذخیره شد."); } catch (error) { toast(error.message); }
+  try { await request("/api/tools", { method: "PUT", body: { tools } }); state.bootstrap = await request("/api/bootstrap"); toast(t("settings.tools.saved")); } catch (error) { toast(error.message); }
 });
 
 $("personnelForm").addEventListener("submit", async (event) => {
@@ -1942,7 +2089,7 @@ $("personnelForm").addEventListener("submit", async (event) => {
   const submittedForm = event.currentTarget;
   const id = $("personnelId").value;
   const fullName = $("personnelName").value.trim();
-  if (!fullName) return toast("نام و نام خانوادگی الزامی است.");
+  if (!fullName) return toast(t("personnel.validation.fullName"));
   const body = {
     employeeCode: $("personnelCode").value.trim(),
     fullName,
@@ -1960,13 +2107,13 @@ $("personnelForm").addEventListener("submit", async (event) => {
     markFormClean(submittedForm);
     resetPersonnelForm();
     await refreshPersonnel($("personnelSearch").value);
-    toast(id ? "اطلاعات پرسنل ویرایش شد." : "پرسنل اضافه شد.");
+    toast(id ? t("personnel.toast.updated") : t("personnel.toast.added"));
   } catch (error) { toast(error.message); }
 });
 $("cancelPersonnelEdit").addEventListener("click", resetPersonnelForm);
 $("exportPersonnel").addEventListener("click",()=>window.location.assign(`/api/personnel/export?q=${encodeURIComponent($("personnelSearch").value||"")}`));
 $("importPersonnel").addEventListener("click",()=>$("personnelImportFile").click());
-$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error("CSV خالی است.");const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.name<0)throw new Error("ستون Full Name الزامی است.");const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:ix.code>=0?r[ix.code]||"":"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(`Import: ${result.created} جدید، ${result.updated} ویرایش، ${result.skipped} رد شد.`);}catch(error){toast(error.message);}finally{event.target.value="";}});
+$("personnelImportFile").addEventListener("change",async(event)=>{const file=event.target.files?.[0];if(!file)return;try{const rows=parseCsv(await file.text());if(rows.length<2)throw new Error(t("personnel.csv.empty"));const head=rows[0].map((x)=>x.trim().toLowerCase());const col=(...names)=>names.map((n)=>head.indexOf(n)).find((i)=>i>=0);const ix={code:col("employee code","employee_code","code"),name:col("full name","full_name","name"),mobile:col("mobile"),phone:col("phone"),email:col("email"),department:col("department"),job:col("job title","job_title"),company:col("company"),notes:col("notes"),active:col("active")};if(ix.name<0)throw new Error(t("personnel.csv.fullNameRequired"));const items=rows.slice(1).filter((r)=>r.some(Boolean)).map((r)=>({employeeCode:ix.code>=0?r[ix.code]||"":"",fullName:r[ix.name]||"",mobile:ix.mobile>=0?r[ix.mobile]:"",phone:ix.phone>=0?r[ix.phone]:"",email:ix.email>=0?r[ix.email]:"",department:ix.department>=0?r[ix.department]:"",jobTitle:ix.job>=0?r[ix.job]:"",companyName:ix.company>=0?r[ix.company]:"",notes:ix.notes>=0?r[ix.notes]:"",active:ix.active<0||String(r[ix.active]).toLowerCase()!=="false"}));const result=await request("/api/personnel/import",{method:"POST",body:{items}});await refreshPersonnel();toast(t("personnel.csv.importSummary",{created:result.created,updated:result.updated,skipped:result.skipped}));}catch(error){toast(error.message);}finally{event.target.value="";}});
 
 $("createBackupButton").addEventListener("click", async () => {
   const button = $("createBackupButton"); button.disabled = true; button.textContent = "در حال ساخت…";

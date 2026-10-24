@@ -25,7 +25,7 @@ test('radio module is simple IPAM-synchronized AP Station management', async () 
     fs.readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
   ]);
   assert.match(html, /id="radiosButton"/);
-  assert.match(await fs.readFile(new URL("../../modules/radio/public/index.mjs",import.meta.url),"utf8"), /جست‌وجوی نام، IP، MAC یا SSID/);
+  assert.match(await fs.readFile(new URL("../../modules/radio/public/index.mjs",import.meta.url),"utf8"), /radio\.search\.placeholder/);
   assert.match(app, /radioParentHostId/);
   assert.doesNotMatch(app.slice(app.indexOf('function renderRadios'), app.indexOf('async function openTopologyPage')), /signal|frequency|channel|monitor/i);
 });

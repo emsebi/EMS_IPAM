@@ -1,0 +1,71 @@
+name: EMS-IPAM CI
+
+on:
+  push:
+    branches:
+      - main
+      - "work/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docker-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: |
+          npm test
+          node --test ../modules/radius-ops/tests/*.test.mjs
+          node --test ../modules/radius/tests/*.test.mjs
+          node --test ../modules/network-map/tests/*.test.mjs
+      - name: Compile and test RADIUS supervisor
+        working-directory: .
+        run: |
+          python3 -m py_compile modules/radius-ops/freeradius/supervisor.py modules/radius-ops/freeradius/configure-logging.py
+          python3 -m unittest discover -s modules/radius-ops/tests -p 'supervisor_test.py'
+          python3 -m unittest discover -s modules/radius-ops/tests -p 'configure_logging_test.py'
+
+  browser:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docker-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser integration
+        run: npm run test:browser
+      - name: Save browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ems-ipam-browser-results
+          path: |
+            docs/test-results/*.png
+            docs/test-results/browser-result.json
+          retention-days: 14

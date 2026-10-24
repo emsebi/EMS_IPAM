@@ -1,0 +1,84 @@
+name: EMS-IPAM RADIUS Real Lab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/i18n-personnel-foundation
+    paths:
+      - "modules/radius/**"
+      - "modules/radius-ops/**"
+      - "scripts/radius-ops-docker-smoke.py"
+      - "docker-app/tests/radius-real-backend.mjs"
+      - ".github/workflows/radius-ops-real.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-radius-real-lab
+  cancel-in-progress: true
+
+jobs:
+  radius-real:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 75
+    env:
+      EMS_RADIUS_SKIP_BROWSER: "0"
+      EMS_RADIUS_BROWSER_IMAGE: "ghcr.io/browserless/chromium:latest"
+      EMS_RADIUS_BROWSER_HOST: "host.docker.internal"
+    steps:
+      - name: Checkout trusted branch commit
+        uses: actions/checkout@v4
+
+      - name: Verify lab runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          docker compose version
+          python3 --version
+
+      - name: Provision Node without changing host packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+
+      - name: Start isolated Chromium runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd docker-app
+          npm ci --ignore-scripts
+          docker pull "$EMS_RADIUS_BROWSER_IMAGE"
+          docker rm -f ems-radius-browser >/dev/null 2>&1 || true
+          token="$(openssl rand -hex 24)"
+          echo "::add-mask::$token"
+          docker run -d --rm --name ems-radius-browser \
+            --add-host host.docker.internal:host-gateway \
+            -p 127.0.0.1::3000 \
+            -e "TOKEN=$token" \
+            "$EMS_RADIUS_BROWSER_IMAGE" >/dev/null
+          browser_port="$(docker port ems-radius-browser 3000/tcp | sed -E 's/.*:([0-9]+)$/\1/' | head -n1)"
+          test -n "$browser_port"
+          echo "EMS_RADIUS_BROWSER_CDP_URL=ws://127.0.0.1:${browser_port}?token=${token}" >> "$GITHUB_ENV"
+
+      - name: Clean stale disposable RADIUS lab resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker ps -aq --filter 'name=emsradius' | xargs -r docker rm -f
+          docker volume ls -q | grep -E '^emsradius[0-9a-f]+-db$' | xargs -r docker volume rm -f || true
+          docker network ls --format '{{.Name}}' | grep -E '^emsradius[0-9a-f]+-network$' | xargs -r docker network rm || true
+
+      - name: Run real Docker PostgreSQL FreeRADIUS smoke
+        shell: bash
+        run: python3 scripts/radius-ops-docker-smoke.py
+
+      - name: Stop isolated Chromium runtime
+        if: always()
+        shell: bash
+        run: docker rm -f ems-radius-browser >/dev/null 2>&1 || true

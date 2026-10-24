@@ -1,0 +1,69 @@
+server default {
+  listen {
+    type = auth
+    ipaddr = *
+    port = 1812
+  }
+
+  listen {
+    type = acct
+    ipaddr = *
+    port = 1813
+  }
+
+  authorize {
+    preprocess
+    if (!&User-Name) {
+      reject
+    }
+    if (&User-Name !~ /^[A-Za-z0-9_.:@-]{1,64}$/) {
+      reject
+    }
+    # Actual UDP packet source is matched to the NAS and company in PostgreSQL.
+    if ("%{sql:SELECT CASE WHEN radius_ops_identity_allowed('%{User-Name}', '%{Packet-Src-IP-Address}'::inet) THEN 1 ELSE 0 END}" != "1") {
+      reject
+    }
+    chap
+    mschap
+    sql
+    # Device-admin authorization is resolved from the actual UDP packet
+    # source.  The most-specific NAS collection member wins; ambiguous
+    # equal-prefix profiles fail closed in radius_ops_resolve_access().
+    if ("%{sql:SELECT count(*) FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}" == "1") {
+      update reply {
+        Cisco-AVPair := "shell:priv-lvl=%{sql:SELECT cisco_privilege FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}"
+        Mikrotik-Group := "%{sql:SELECT mikrotik_group FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}"
+      }
+    }
+    pap
+  }
+
+  authenticate {
+    Auth-Type PAP {
+      pap
+    }
+    Auth-Type CHAP {
+      chap
+    }
+    Auth-Type MS-CHAP {
+      mschap
+    }
+  }
+
+  preacct {
+    preprocess
+    acct_unique
+    suffix
+  }
+
+  accounting {
+    sql
+  }
+
+  post-auth {
+    sql
+    Post-Auth-Type REJECT {
+      sql
+    }
+  }
+}

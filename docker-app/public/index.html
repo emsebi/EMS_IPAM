@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.2">
+  <link rel="stylesheet" href="/styles.css?v=1.7.0-rc.3">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -254,50 +254,50 @@
 
   <dialog id="settingsDialog" class="wide-dialog settings-dialog">
     <form id="settingsForm">
-      <div class="modal-head"><div><h3>تنظیمات EMS_IPAM</h3><p>تنظیمات اصلی برنامه از یک محل مدیریت می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3 data-i18n="settings.title">EMS IPAM Settings</h3><p data-i18n="settings.subtitle">Manage the main application settings in one place.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="settings-layout">
         <nav class="settings-nav">
-          <button type="button" class="settings-tab active" data-settings-tab="general">عمومی</button>
-          <button type="button" class="settings-tab" data-settings-tab="users">کاربران و دسترسی‌ها</button>
-          <button type="button" class="settings-tab" data-settings-tab="backup">پشتیبان‌گیری</button>
-          <button type="button" class="settings-tab" data-settings-tab="appearance">ظاهر</button>
-          <button type="button" class="settings-tab" data-settings-tab="tools">ابزارهای IP</button>
-          <button type="button" class="settings-tab" data-settings-tab="modules">ماژول‌ها</button>
-          <button type="button" class="settings-tab" data-settings-tab="system">سیستم</button>
+          <button type="button" class="settings-tab active" data-settings-tab="general" data-i18n="settings.tab.general">General</button>
+          <button type="button" class="settings-tab" data-settings-tab="users" data-i18n="settings.tab.users">Users & Access</button>
+          <button type="button" class="settings-tab" data-settings-tab="backup" data-i18n="settings.tab.backup">Backup</button>
+          <button type="button" class="settings-tab" data-settings-tab="appearance" data-i18n="settings.tab.appearance">Appearance</button>
+          <button type="button" class="settings-tab" data-settings-tab="tools" data-i18n="settings.tab.tools">IP Tools</button>
+          <button type="button" class="settings-tab" data-settings-tab="modules" data-i18n="settings.tab.modules">Modules</button>
+          <button type="button" class="settings-tab" data-settings-tab="system" data-i18n="settings.tab.system">System</button>
         </nav>
         <div class="settings-content modal-body">
-          <section class="settings-pane active" data-settings-pane="general"><h4>تنظیمات عمومی</h4><p>Company، Site، Address Space و اطلاعات پایه از بخش‌های اصلی پنل مدیریت می‌شوند.</p><div class="settings-card"><b>نسخه برنامه</b><span id="settingsVersion" class="ltr mono"></span></div><div class="settings-card"><b>منطقه زمانی</b><span>Asia/Tehran</span></div></section>
-          <section class="settings-pane" data-settings-pane="users"><h4>کاربران و دسترسی‌ها</h4><p>ایجاد، ویرایش، غیرفعال‌سازی و حذف Admin / Support / Helpdesk / Viewer.</p><button id="openUsersFromSettings" class="btn primary" type="button">مدیریت کاربران</button></section>
-          <section class="settings-pane" data-settings-pane="backup"><h4>پشتیبان‌گیری</h4><p>Backup دستی و زمان‌بندی خودکار.</p><button id="openBackupsFromSettings" class="btn primary" type="button">تنظیم Backup</button></section>
-          <section class="settings-pane" data-settings-pane="appearance"><h4>ظاهر</h4><p>پوسته انتخاب‌شده برای همین مرورگر ذخیره و بلافاصله اعمال می‌شود.</p><div class="form-grid"><label class="field">پوسته<select id="appearanceTheme"><option value="light">روشن</option><option value="dark">تیره</option></select></label></div><button id="applyAppearance" class="btn primary" type="button">اعمال ظاهر</button></section>
-          <section class="settings-pane" data-settings-pane="tools"><h4>ابزارهای IP</h4><p>پورت‌ها و برچسب‌های پیش‌فرض.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button">ذخیره ابزارهای IP</button></section>
-          <section class="settings-pane" data-settings-pane="modules"><h4>ماژول‌ها</h4><p>افزونه‌های معتبر موجود در پوشه modules/ به صورت مستقل بارگذاری می‌شوند.</p><div id="settingsModulesList" class="table-list"></div></section>
-          <section class="settings-pane" data-settings-pane="system"><h4>سیستم</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span>پشتیبانی از افزونه‌های مستقل در modules/</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
+          <section class="settings-pane active" data-settings-pane="general"><h4 data-i18n="settings.general.title">General Settings</h4><p data-i18n="settings.general.description">Company, Site, Address Space, and core information are managed from the main panel sections.</p><div class="settings-card"><b data-i18n="settings.general.version">Application Version</b><span id="settingsVersion" class="ltr mono"></span></div><div class="settings-card"><b data-i18n="settings.general.timezone">Time Zone</b><span>Asia/Tehran</span></div></section>
+          <section class="settings-pane" data-settings-pane="users"><h4 data-i18n="settings.users.title">Users & Access</h4><p data-i18n="settings.users.description">Create, edit, disable, and remove Admin / Support / Helpdesk / Viewer accounts.</p><button id="openUsersFromSettings" class="btn primary" type="button" data-i18n="settings.users.manage">Manage Users</button></section>
+          <section class="settings-pane" data-settings-pane="backup"><h4 data-i18n="settings.backup.title">Backup</h4><p data-i18n="settings.backup.description">Manual backup and automatic scheduling.</p><button id="openBackupsFromSettings" class="btn primary" type="button" data-i18n="settings.backup.manage">Backup Settings</button></section>
+          <section class="settings-pane" data-settings-pane="appearance"><h4 data-i18n="settings.appearance.title">Appearance</h4><p data-i18n="settings.appearance.description">The selected theme is stored for this browser and applied immediately.</p><div class="form-grid"><label class="field"><span data-i18n="settings.appearance.theme">Theme</span><select id="appearanceTheme"><option value="light" data-i18n="settings.appearance.light">Light</option><option value="dark" data-i18n="settings.appearance.dark">Dark</option></select></label></div><button id="applyAppearance" class="btn primary" type="button" data-i18n="settings.appearance.apply">Apply Appearance</button></section>
+          <section class="settings-pane" data-settings-pane="tools"><h4 data-i18n="settings.tools.title">IP Tools</h4><p data-i18n="settings.tools.description">Default ports and labels.</p><div id="toolsSettings" class="tool-settings"></div><button id="saveToolsSettings" class="btn primary" type="button" data-i18n="settings.tools.save">Save IP Tools</button></section>
+          <section class="settings-pane" data-settings-pane="modules"><h4 data-i18n="settings.modules.title">Modules</h4><p data-i18n="settings.modules.description">Valid extensions in the modules/ directory are loaded independently.</p><div id="settingsModulesList" class="table-list"></div></section>
+          <section class="settings-pane" data-settings-pane="system"><h4 data-i18n="settings.system.title">System</h4><div class="settings-card"><b>Database</b><span>PostgreSQL</span></div><div class="settings-card"><b>Modules</b><span data-i18n="settings.system.moduleSupport">Independent extensions are supported from modules/.</span></div><div class="settings-card"><b>Repository</b><span class="ltr">github.com/emsebi/EMS_IPAM</span></div></section>
         </div>
       </div>
-      <div class="modal-foot"><button class="btn primary" type="button" data-close>بستن تنظیمات</button></div>
+      <div class="modal-foot"><button class="btn primary" type="button" data-close data-i18n="settings.close">Close Settings</button></div>
     </form>
   </dialog>
 
   <dialog id="personnelDialog" class="wide-dialog">
-    <div class="modal-head"><div><h3>پرسنل</h3><p>جست‌وجوی سریع با کد پرسنلی، نام، تلفن یا واحد</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button">← بازگشت</button><button class="close" type="button" data-close>×</button></div></div>
+    <div class="modal-head"><div><h3 data-i18n="personnel.title">Personnel</h3><p data-i18n="personnel.subtitle">Search by employee code, name, phone, or department</p></div><div class="modal-head-actions"><button id="personnelBackSettings" class="btn sm" type="button"><span aria-hidden="true">←</span> <span data-i18n="common.back">Back</span></button><button class="close" type="button" data-close>×</button></div></div>
     <div class="modal-body personnel-layout">
       <form id="personnelForm" class="card-form">
         <input id="personnelId" type="hidden">
-        <h4 id="personnelFormTitle">پرسنل جدید</h4>
-        <label class="field">کد پرسنلی (اختیاری)<input id="personnelCode" autocomplete="off"></label>
-        <label class="field">نام و نام خانوادگی (الزامی)<input id="personnelName" required></label>
-        <label class="field">موبایل<input id="personnelMobile" class="ltr"></label>
-        <label class="field">تلفن<input id="personnelPhone" class="ltr"></label>
-        <label class="field">ایمیل<input id="personnelEmail" class="ltr"></label>
-        <label class="field">واحد<input id="personnelDepartment"></label>
-        <label class="field">سمت<input id="personnelJobTitle"></label>
-        <label class="field">شرکت<select id="personnelCompany"></select></label>
-        <label class="field">توضیحات<textarea id="personnelNotes"></textarea></label>
-        <label class="check-field"><input id="personnelActive" type="checkbox" checked> فعال</label>
-        <div class="row-actions"><button class="btn primary" type="submit">ذخیره</button><button id="cancelPersonnelEdit" class="btn hidden" type="button">انصراف</button></div>
+        <h4 id="personnelFormTitle" data-i18n="personnel.form.new">New Personnel</h4>
+        <label class="field"><span data-i18n="personnel.field.employeeCodeOptional">Employee Code (optional)</span><input id="personnelCode" autocomplete="off"></label>
+        <label class="field"><span data-i18n="personnel.field.fullNameRequired">Full Name (required)</span><input id="personnelName" required></label>
+        <label class="field"><span data-i18n="personnel.field.mobile">Mobile</span><input id="personnelMobile" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.phone">Phone</span><input id="personnelPhone" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.email">Email</span><input id="personnelEmail" class="ltr"></label>
+        <label class="field"><span data-i18n="personnel.field.department">Department</span><input id="personnelDepartment"></label>
+        <label class="field"><span data-i18n="personnel.field.jobTitle">Job Title</span><input id="personnelJobTitle"></label>
+        <label class="field"><span data-i18n="personnel.field.company">Company</span><select id="personnelCompany"></select></label>
+        <label class="field"><span data-i18n="personnel.field.notes">Notes</span><textarea id="personnelNotes"></textarea></label>
+        <label class="check-field"><input id="personnelActive" type="checkbox" checked> <span data-i18n="personnel.field.active">Active</span></label>
+        <div class="row-actions"><button class="btn primary" type="submit" data-i18n="common.save">Save</button><button id="cancelPersonnelEdit" class="btn hidden" type="button" data-i18n="common.cancel">Cancel</button></div>
       </form>
-      <div><div class="quick-filter personnel-toolbar"><input id="personnelSearch" placeholder="جست‌وجو..." autocomplete="off"><button id="exportPersonnel" class="btn sm" type="button">Export CSV</button><button id="importPersonnel" class="btn sm" type="button">Import CSV</button><input id="personnelImportFile" class="hidden" type="file" accept=".csv,text/csv"></div><div id="personnelList" class="table-list"></div></div>
+      <div><div class="quick-filter personnel-toolbar"><input id="personnelSearch" placeholder="Search..." data-i18n-placeholder="common.search" autocomplete="off"><button id="exportPersonnel" class="btn sm" type="button" data-i18n="personnel.action.exportCsv">Export CSV</button><button id="importPersonnel" class="btn sm" type="button" data-i18n="personnel.action.importCsv">Import CSV</button><input id="personnelImportFile" class="hidden" type="file" accept=".csv,text/csv"></div><div id="personnelList" class="table-list"></div></div>
     </div>
   </dialog>
 
@@ -361,6 +361,36 @@
       <p>این پروژه Open Source برای مدیریت IP، شعب، تجهیزات و توسعه ماژول‌های شبکه در سازمان‌ها، دیتاسنترها و سرویس‌دهندگان طراحی شده است.</p><p class="about-note">پیش از استقرار Production، اصالت نسخه را با Repository رسمی پروژه بررسی کنید. و یک یادآوری از ابراهیم مامانی: اگر شبکه قرار است پیچیده باشد، حداقل مستنداتش نباید پیچیده بماند.</p>
       <dl><div><dt>طراحی پروژه</dt><dd>ابراهیم مامانی / Ebrahim Mamani</dd></div><div><dt>نسخه</dt><dd id="aboutVersion" class="ltr mono"></dd></div><div><dt>Repository رسمی</dt><dd class="ltr mono">github.com/emsebi/EMS_IPAM</dd></div></dl>
       <div class="about-actions"><a class="btn primary github-star" href="https://github.com/emsebi/EMS_IPAM" target="_blank" rel="noopener noreferrer">مشاهده پروژه و ثبت Star در GitHub</a><a class="btn" href="/client.html" target="_blank" rel="noopener">دانلود کلاینت اتصال ویندوز</a></div>
+      <section class="donation-section" aria-labelledby="donationTitle">
+        <h3 id="donationTitle" data-i18n="donation.title">Support EMS_IPAM</h3>
+        <p class="donation-description" data-i18n="donation.description">If EMS_IPAM helps your work, you can support its continued development. Donations are optional.</p>
+        <div class="donation-grid">
+          <article class="donation-card">
+            <h4 dir="ltr">Tether <span class="donation-symbol">USDT</span></h4>
+            <p class="donation-network" dir="ltr">TRON · TRC20</p>
+            <img src="/donations/usdt-trc20.png" width="212" height="212" alt="USDT on TRON (TRC20) donation QR code">
+            <label class="donation-address-label" for="donationUsdt" data-i18n="donation.address">Receiving address</label>
+            <input id="donationUsdt" class="donation-address mono" dir="ltr" readonly spellcheck="false" autocomplete="off" value="TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH">
+            <div class="donation-actions">
+              <button type="button" class="btn" data-copy-donation="donationUsdt" data-i18n="donation.copy">Copy address</button>
+              <a class="btn" href="tron:TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH?req-asset=TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" data-i18n="donation.open">Open wallet</a>
+            </div>
+          </article>
+          <article class="donation-card">
+            <h4 dir="ltr">Bitcoin <span class="donation-symbol">BTC</span></h4>
+            <p class="donation-network" dir="ltr">Bitcoin</p>
+            <img src="/donations/bitcoin.png" width="212" height="212" alt="Bitcoin donation QR code">
+            <label class="donation-address-label" for="donationBtc" data-i18n="donation.address">Receiving address</label>
+            <input id="donationBtc" class="donation-address mono" dir="ltr" readonly spellcheck="false" autocomplete="off" value="bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0">
+            <div class="donation-actions">
+              <button type="button" class="btn" data-copy-donation="donationBtc" data-i18n="donation.copy">Copy address</button>
+              <a class="btn" href="bitcoin:bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0" data-i18n="donation.open">Open wallet</a>
+            </div>
+          </article>
+        </div>
+        <p class="donation-network-note" data-i18n="donation.networkNote">Use the exact network shown on each card. USDT is accepted on TRON (TRC20).</p>
+        <p id="donationCopyStatus" class="donation-copy-status" role="status" aria-live="polite"></p>
+      </section>
     </div>
   </dialog>
 
@@ -414,6 +444,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.0-rc.2"></script>
+  <script type="module" src="/app.js?v=1.7.0-rc.3"></script>
 </body>
 </html>

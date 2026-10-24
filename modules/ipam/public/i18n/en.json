@@ -1,0 +1,17 @@
+{
+  "ipam.deviceTypes.adminOnly": "Only administrators can manage device types.",
+  "ipam.deviceTypes.breadcrumb": "IP Manager / Device Types",
+  "ipam.deviceTypes.title": "Device Types",
+  "ipam.deviceTypes.subtitle": "These types are used in IP records and inventory filters.",
+  "ipam.deviceTypes.name": "Device type name",
+  "ipam.deviceTypes.color": "Color",
+  "ipam.deviceTypes.save": "Save type",
+  "ipam.deviceTypes.cancel": "Cancel",
+  "ipam.deviceTypes.saved": "Device type saved.",
+  "ipam.deviceTypes.deviceUnit": "devices",
+  "ipam.deviceTypes.edit": "Edit",
+  "ipam.deviceTypes.delete": "Delete",
+  "ipam.deviceTypes.empty": "No device types have been registered.",
+  "ipam.deviceTypes.confirmDelete": "Delete this device type?",
+  "ipam.deviceTypes.deleted": "Device type deleted."
+}

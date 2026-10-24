@@ -1,0 +1,16 @@
+{
+  "id": "network-map",
+  "name": "Network Map",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "enabled": true,
+  "roles": [
+    "admin"
+  ],
+  "permissions": [
+    "network-map.read",
+    "network-map.write"
+  ],
+  "backend": "backend/index.mjs",
+  "description": "Manual topology snapshot foundation; no automated discovery or device configuration."
+}
