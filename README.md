@@ -111,7 +111,7 @@ ZIP را استخراج و `Install.cmd` را با کاربر خودتان اج�
 
 - [شروع نصب و تست](START-HERE-FA.md)
 - [راهنمای کلاینت و اصلاح WinBox](docs/WINDOWS-CLIENT-FA.md)
-- [گزارش تست و محدودیت‌ها](docs/TEST-REPORT-FA.md)
+- [گزارش تست و محدودیت‌های این نقطهٔ ذخیره](docs/TEST-REPORT-FA.md)
 - [نقشهٔ راه پنج‌مرحله‌ای](docs/ROADMAP-FA.md)
 - [نقطهٔ ادامه کار](CONTINUATION.md) و [قرارداد ماژول‌ها](docs/MODULE-SDK-FA.md)
 

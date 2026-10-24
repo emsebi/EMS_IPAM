@@ -1,370 +1,198 @@
-TAP version 13
-# Subtest: passwords are salted and verified
-ok 1 - passwords are salted and verified
-  ---
-  duration_ms: 246.468638
-  type: 'test'
-  ...
-# Subtest: short non-empty passwords are accepted without a forced length
-ok 2 - short non-empty passwords are accepted without a forced length
-  ---
-  duration_ms: 101.744168
-  type: 'test'
-  ...
-# Subtest: BASE navigation and restricted branch role are wired end to end
-ok 3 - BASE navigation and restricted branch role are wired end to end
-  ---
-  duration_ms: 13.676112
-  type: 'test'
-  ...
-# Subtest: module capabilities are not mistaken for user roles
-ok 4 - module capabilities are not mistaken for user roles
-  ---
-  duration_ms: 10.398367
-  type: 'test'
-  ...
-# Subtest: Inventory company scope and Radio actions have distinct paths
-ok 5 - Inventory company scope and Radio actions have distinct paths
-  ---
-  duration_ms: 19.768386
-  type: 'test'
-  ...
-# Subtest: only Persian and English languages are registered
-ok 6 - only Persian and English languages are registered
-  ---
-  duration_ms: 1.199376
-  type: 'test'
-  ...
-# Subtest: Portainer stack matches the BASE IPAM Radio release
-ok 7 - Portainer stack matches the BASE IPAM Radio release
-  ---
-  duration_ms: 4.991766
-  type: 'test'
-  ...
-# Subtest: personnel creation requires only full name
-ok 8 - personnel creation requires only full name
-  ---
-  duration_ms: 24.123944
-  type: 'test'
-  ...
-# Subtest: inventory create and edit use a loaded host editor and report save errors
-ok 9 - inventory create and edit use a loaded host editor and report save errors
-  ---
-  duration_ms: 6.988353
-  type: 'test'
-  ...
-# Subtest: station shortcut keeps the AP selected
-ok 10 - station shortcut keeps the AP selected
-  ---
-  duration_ms: 11.707623
-  type: 'test'
-  ...
-# Subtest: IPAM remembers the exact space and sheet across module navigation
-ok 11 - IPAM remembers the exact space and sheet across module navigation
-  ---
-  duration_ms: 1.757877
-  type: 'test'
-  ...
-# Subtest: larger viewport exposes more IP rows
-ok 12 - larger viewport exposes more IP rows
-  ---
-  duration_ms: 0.732543
-  type: 'test'
-  ...
-# Subtest: WinBox uses the repaired client protocol and receives only target
-ok 13 - WinBox uses the repaired client protocol and receives only target
-  ---
-  duration_ms: 4.033203
-  type: 'test'
-  ...
-# Subtest: schema keeps companies, IP, scoped access and topology in one database
-ok 14 - schema keeps companies, IP, scoped access and topology in one database
-  ---
-  duration_ms: 6.349551
-  type: 'test'
-  ...
-# Subtest: server exposes inventory, global search, topology and downloadable backups
-ok 15 - server exposes inventory, global search, topology and downloadable backups
-  ---
-  duration_ms: 1.882184
-  type: 'test'
-  ...
-# Subtest: native VNC viewer uses its standard default port
-ok 16 - native VNC viewer uses its standard default port
-  ---
-  duration_ms: 5.056504
-  type: 'test'
-  ...
-# Subtest: destructive and scoped workflows keep their safety guards
-ok 17 - destructive and scoped workflows keep their safety guards
-  ---
-  duration_ms: 3.517356
-  type: 'test'
-  ...
-# Subtest: installer file and stdin entry both support help without installing
-ok 18 - installer file and stdin entry both support help without installing
-  ---
-  duration_ms: 41.467723
-  type: 'test'
-  ...
-# Subtest: installer can be sourced for diagnostics without opening the menu
-ok 19 - installer can be sourced for diagnostics without opening the menu
-  ---
-  duration_ms: 7.148814
-  type: 'test'
-  ...
-# Subtest: prerequisites call bundled official installer without optional Portainer
-ok 20 - prerequisites call bundled official installer without optional Portainer
-  ---
-  duration_ms: 12.616507
-  type: 'test'
-  ...
-# Subtest: download validates an archive, selects project root and rejects an invalid archive
-ok 21 - download validates an archive, selects project root and rejects an invalid archive
-  ---
-  duration_ms: 69.522953
-  type: 'test'
-  ...
-# Subtest: installer uses the official repository and ASCII terminal messages
-ok 22 - installer uses the official repository and ASCII terminal messages
-  ---
-  duration_ms: 12.177446
-  type: 'test'
-  ...
-# Subtest: installer validates GitHub archive before extraction
-ok 23 - installer validates GitHub archive before extraction
-  ---
-  duration_ms: 3.033988
-  type: 'test'
-  ...
-# Subtest: installer exposes five safe lifecycle actions and asks fresh settings
-ok 24 - installer exposes five safe lifecycle actions and asks fresh settings
-  ---
-  duration_ms: 7.203752
-  type: 'test'
-  ...
-# Subtest: Windows connection client auto-detects tools and passes usernames without passwords
-ok 25 - Windows connection client auto-detects tools and passes usernames without passwords
-  ---
-  duration_ms: 13.422691
-  type: 'test'
-  ...
-# Subtest: IPv4 conversion is stable
-ok 26 - IPv4 conversion is stable
-  ---
-  duration_ms: 1.221118
-  type: 'test'
-  ...
-# Subtest: CIDR is normalized and alignment is reported
-ok 27 - CIDR is normalized and alignment is reported
-  ---
-  duration_ms: 0.376216
-  type: 'test'
-  ...
-# Subtest: parent child containment works
-ok 28 - parent child containment works
-  ---
-  duration_ms: 0.437669
-  type: 'test'
-  ...
-# Subtest: root ranges and ports are validated
-ok 29 - root ranges and ports are validated
-  ---
-  duration_ms: 0.507744
-  type: 'test'
-  ...
-# Subtest: gateway is calculated from the selected network
-ok 30 - gateway is calculated from the selected network
-  ---
-  duration_ms: 0.292631
-  type: 'test'
-  ...
-# Subtest: fresh install, revocation and renamed/deleted types survive repeated startup
-ok 31 - fresh install, revocation and renamed/deleted types survive repeated startup
-  ---
-  duration_ms: 1930.797952
-  type: 'test'
-  ...
-# Subtest: upgrade existing 1.6-style database preserves intentionally empty catalog and permissions
-ok 32 - upgrade existing 1.6-style database preserves intentionally empty catalog and permissions
-  ---
-  duration_ms: 1322.944708
-  type: 'test'
-  ...
-# Subtest: generated MikroTik setup defaults to simple read-only API without a certificate
-ok 33 - generated MikroTik setup defaults to simple read-only API without a certificate
-  ---
-  duration_ms: 1.503554
-  type: 'test'
-  ...
-# Subtest: MikroTik helper has no device connection or polling implementation
-ok 34 - MikroTik helper has no device connection or polling implementation
-  ---
-  duration_ms: 6.601319
-  type: 'test'
-  ...
-# Subtest: Jalali helpers use Tehran time and filesystem-safe names
-ok 35 - Jalali helpers use Tehran time and filesystem-safe names
-  ---
-  duration_ms: 26.840564
-  type: 'test'
-  ...
-# Subtest: MikroTik backup metadata is normalized without changing Persian identity
-ok 36 - MikroTik backup metadata is normalized without changing Persian identity
-  ---
-  duration_ms: 1.25485
-  type: 'test'
-  ...
-# Subtest: backup implementation passes passwords only through the process environment
-ok 37 - backup implementation passes passwords only through the process environment
-  ---
-  duration_ms: 5.97765
-  type: 'test'
-  ...
-# Subtest: installation guide provides automatic prerequisites and one download/install command
-ok 38 - installation guide provides automatic prerequisites and one download/install command
-  ---
-  duration_ms: 11.016468
-  type: 'test'
-  ...
-# Subtest: portable subnet export stays scoped and excludes every secret
-ok 39 - portable subnet export stays scoped and excludes every secret
-  ---
-  duration_ms: 7.528451
-  type: 'test'
-  ...
-# Subtest: portable subnet import uses a transaction and valid SQL parameter counts
-ok 40 - portable subnet import uses a transaction and valid SQL parameter counts
-  ---
-  duration_ms: 2.849991
-  type: 'test'
-  ...
-# Subtest: portable package rejects addresses outside its declared scope
-ok 41 - portable package rejects addresses outside its declared scope
-  ---
-  duration_ms: 1.649083
-  type: 'test'
-  ...
-# Subtest: PostgreSQL schema installs twice and migrates legacy roles
-ok 42 - PostgreSQL schema installs twice and migrates legacy roles
-  ---
-  duration_ms: 2002.157624
-  type: 'test'
-  ...
-# Subtest: equipment credentials have no persistence or encryption helper
-ok 43 - equipment credentials have no persistence or encryption helper
-  ---
-  duration_ms: 9.278271
-  type: 'test'
-  ...
-# Subtest: stage01 UI keeps mandatory base workflows
-ok 44 - stage01 UI keeps mandatory base workflows
-  ---
-  duration_ms: 1.665828
-  type: 'test'
-  ...
-# Subtest: stage01 update never removes the database volume
-ok 45 - stage01 update never removes the database volume
-  ---
-  duration_ms: 0.400663
-  type: 'test'
-  ...
-# Subtest: stage01 database keeps shared IDs for future modules
-ok 46 - stage01 database keeps shared IDs for future modules
-  ---
-  duration_ms: 0.321594
-  type: 'test'
-  ...
-# Subtest: stage01 role migration selects constraint oid before reading it
-ok 47 - stage01 role migration selects constraint oid before reading it
-  ---
-  duration_ms: 0.333131
-  type: 'test'
-  ...
-# Subtest: installer exposes persistent env to ordinary docker compose commands
-ok 48 - installer exposes persistent env to ordinary docker compose commands
-  ---
-  duration_ms: 0.319141
-  type: 'test'
-  ...
-# Subtest: graphical interface contains the required workflows
-ok 49 - graphical interface contains the required workflows
-  ---
-  duration_ms: 8.900001
-  type: 'test'
-  ...
-# Subtest: browser modules are served with a JavaScript MIME type
-ok 50 - browser modules are served with a JavaScript MIME type
-  ---
-  duration_ms: 4.866888
-  type: 'test'
-  ...
-# Subtest: Windows client is downloadable from the installed web service
-ok 51 - Windows client is downloadable from the installed web service
-  ---
-  duration_ms: 4.129949
-  type: 'test'
-  ...
-# Subtest: every root size uses the same vertical subnet model
-ok 52 - every root size uses the same vertical subnet model
-  ---
-  duration_ms: 3.174369
-  type: 'test'
-  ...
-# Subtest: vertical detail boundaries start at zero and end at 255
-ok 53 - vertical detail boundaries start at zero and end at 255
-  ---
-  duration_ms: 0.645401
-  type: 'test'
-  ...
-# Subtest: tree reaches individual IPs and the UI keeps all requested modes
-ok 54 - tree reaches individual IPs and the UI keeps all requested modes
-  ---
-  duration_ms: 16.747317
-  type: 'test'
-  ...
-# Subtest: v1.5 restores language control, editable device taxonomy and personnel transfer
-ok 55 - v1.5 restores language control, editable device taxonomy and personnel transfer
-  ---
-  duration_ms: 10.085306
-  type: 'test'
-  ...
-# Subtest: radio module is simple IPAM-synchronized AP Station management
-ok 56 - radio module is simple IPAM-synchronized AP Station management
-  ---
-  duration_ms: 2.920477
-  type: 'test'
-  ...
-# Subtest: company contact summary keeps phone mobile and email separate
-ok 57 - company contact summary keeps phone mobile and email separate
-  ---
-  duration_ms: 4.319564
-  type: 'test'
-  ...
-# Subtest: translations are file based
-ok 58 - translations are file based
-  ---
-  duration_ms: 0.859094
-  type: 'test'
-  ...
-# Subtest: inventory create and edit path exists
-ok 59 - inventory create and edit path exists
-  ---
-  duration_ms: 0.257487
-  type: 'test'
-  ...
-# Subtest: winbox receives target not emsipam uri
-ok 60 - winbox receives target not emsipam uri
-  ---
-  duration_ms: 0.166731
-  type: 'test'
-  ...
-1..60
-# tests 60
-# suites 0
-# pass 60
-# fail 0
-# cancelled 0
-# skipped 0
-# todo 0
-# duration_ms 3593.55014
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ems-ipam-container@1.7.0-rc.3 test
+> node --test tests/*.test.mjs
+
+✔ passwords are salted and verified (503.750645ms)
+✔ short non-empty passwords are accepted without a forced length (260.640228ms)
+✔ BASE navigation and restricted branch role are wired end to end (31.895305ms)
+✔ module capabilities are not mistaken for user roles (18.987575ms)
+✔ Inventory company scope and Radio actions have distinct paths (6.425454ms)
+✔ only Persian and English languages are registered (2.885829ms)
+✔ Portainer stack matches the BASE IPAM Radio release (4.023435ms)
+✔ personnel creation requires only full name (27.310645ms)
+✔ inventory create and edit use a loaded host editor and report save errors (9.551675ms)
+✔ station shortcut keeps the AP selected (12.632678ms)
+✔ IPAM remembers the exact space and sheet across module navigation (7.028449ms)
+✔ larger viewport exposes more IP rows (0.882861ms)
+✔ WinBox uses the repaired client protocol and receives only target (10.497995ms)
+✔ schema keeps companies, IP, scoped access and topology in one database (15.884897ms)
+✔ server exposes inventory, global search, topology and downloadable backups (11.81359ms)
+✔ native VNC viewer uses its standard default port (5.655591ms)
+✔ destructive and scoped workflows keep their safety guards (5.90394ms)
+✔ English catalog provides stable canonical keys and Persian covers them (30.908365ms)
+✔ English and Persian translate both legacy and canonical UI strings (23.14763ms)
+✔ missing translations fall back to English, not Persian or empty text (0.637381ms)
+✔ additional language packs work without translator code changes (0.436836ms)
+✔ radio module has no hard-coded Persian UI strings and uses stable keys (3.199155ms)
+✔ personnel semantic keys preserve English base and Persian translations (10.505131ms)
+✔ personnel dialog is authored in English and bound to stable i18n keys (6.698274ms)
+✔ settings dialog is English-first and uses stable keys (1.023046ms)
+✔ semantic-key translator uses exact lookups and preserves interpolated user values (0.721876ms)
+✔ legacy phrase translator falls back to English for blank localized values (0.317792ms)
+✔ application uses exact semantic-key translator for marked UI (4.40419ms)
+✔ legacy translator does not rewrite user-entered English device names (0.351648ms)
+✔ installer file and stdin entry both support help without installing (44.999053ms)
+✔ installer can be sourced for diagnostics without opening the menu (16.288052ms)
+✔ prerequisites call bundled official installer without optional Portainer (20.531184ms)
+✔ download validates an archive, selects project root and rejects an invalid archive (95.309951ms)
+✔ installer uses the official repository and ASCII terminal messages (13.240517ms)
+✔ installer validates GitHub archive before extraction (6.4568ms)
+✔ installer exposes five safe lifecycle actions and asks fresh settings (3.806378ms)
+✔ Windows connection client auto-detects tools and passes usernames without passwords (6.141762ms)
+✔ Settings device shortcuts are created once and respect access roles (13.324273ms)
+✔ Inventory create refuses to overwrite an already registered IP (9.157803ms)
+✔ Settings and Inventory additions have English and Persian labels (4.236589ms)
+✔ Inventory creation errors have complete English and Persian translations (12.134304ms)
+✔ IPv4 conversion is stable (2.709573ms)
+✔ CIDR is normalized and alignment is reported (0.668233ms)
+✔ parent child containment works (0.996416ms)
+✔ root ranges and ports are validated (1.19634ms)
+✔ gateway is calculated from the selected network (0.720321ms)
+✔ IPAM Device Types English catalog has usable fallback (2.566844ms)
+✔ fresh install, revocation and renamed/deleted types survive repeated startup (8243.667831ms)
+✔ upgrade existing 1.6-style database preserves intentionally empty catalog and permissions (4770.547561ms)
+✔ generated MikroTik setup defaults to simple read-only API without a certificate (2.584047ms)
+✔ MikroTik helper has no device connection or polling implementation (7.824352ms)
+✔ module migrations apply once and preserve module data across restarts (9443.543369ms)
+✔ modified applied migration fails closed for only that module (4455.733346ms)
+✔ one broken module rolls back without blocking a healthy module (3866.26616ms)
+✔ invalid SQL migration filenames disable the owning module (3208.356279ms)
+✔ module navigation supports manifest-owned localized labels with English fallback (17.314633ms)
+✔ bundled panel modules own their navigation translations (10.857304ms)
+✔ optional modules keep English-first catalogs and UI sources free of embedded Persian (21.639811ms)
+✔ panel modules route through the generic module loader (17.607878ms)
+✔ modules can own translations with English fallback to core (10.218471ms)
+✔ module SDK documents panel contract instead of requiring per-module core routes (3.407123ms)
+✔ Network Access UI uses explicit translation keys and no Persian UI literals (12.145438ms)
+✔ Network Access keys exist in English and Persian catalogs (10.048409ms)
+✔ Jalali helpers use Tehran time and filesystem-safe names (49.335156ms)
+✔ MikroTik backup metadata is normalized without changing Persian identity (2.37602ms)
+✔ backup implementation passes passwords only through the process environment (15.367353ms)
+✔ installation guide provides automatic prerequisites and one download/install command (7.408241ms)
+✔ Personnel API errors are English-first without changing authorization logic (4.605063ms)
+✔ portable subnet export stays scoped and excludes every secret (6.321519ms)
+✔ portable subnet import uses a transaction and valid SQL parameter counts (2.627162ms)
+✔ portable package rejects addresses outside its declared scope (0.787719ms)
+✔ radio UI has no hard-coded AP and station labels (2.186046ms)
+✔ Cisco privilege levels 0-15 are displayed for review (6.480674ms)
+✔ invalid Cisco privilege fails closed (0.893715ms)
+✔ MikroTik group preview (2.424988ms)
+✔ malformed MikroTik groups are rejected (0.556343ms)
+✔ disabled profiles and unsupported vendors reject (0.4541ms)
+✔ default deletion persists and dependent users move only to equivalent profiles and collections (8752.549088ms)
+✔ Cisco device-admin preview contains placeholders but no supplied secret (3.730241ms)
+✔ Cisco MAB preview requires a validated interface (1.623428ms)
+✔ MikroTik device-admin preview is manual and MAB stays model/version gated (2.113791ms)
+✔ invalid server IPs and command injection tokens fail closed (15.154519ms)
+✔ verified EAP identity with exactly one approved role previews dynamic VLAN (8.431448ms)
+✔ failed EAP never gets guest access or fallback to MAB (0.960536ms)
+✔ no trusted EAP source or missing verified status fails closed (1.054146ms)
+✔ disabled or unrelated NAS cannot authorize 802.1X (0.978613ms)
+✔ disabled, unknown, duplicated and cross-company identities reject (1.09539ms)
+✔ no role or ambiguous multiple matching roles rejects instead of guessing (0.390988ms)
+✔ static VLAN and explicit reject mode have deterministic previews (0.454133ms)
+✔ invalid VLANs, duplicate rules and unused invalid rules fail closed (0.555695ms)
+✔ malformed principals and injected extra fields are rejected (2.319269ms)
+✔ null-prototype JSON-like inputs remain supported (0.648884ms)
+✔ live event strips attempted credentials, raw messages and free-form reasons (2.102382ms)
+✔ service event never passes raw daemon messages (0.799404ms)
+✔ transport reasons are an allowlist, not arbitrary daemon output (0.308084ms)
+✔ diagnostics never forwards serviceMessages or unknown fields (1.511989ms)
+✔ invalid input is rejected without reflecting content (0.309319ms)
+✔ RADIUS operator live view has no attempted-password rendering (5.247734ms)
+✔ per-NAS MAB policy CRUD persists requested known/unknown behavior (7737.677956ms)
+✔ MAB policy refuses missing NAS and invalid VLAN/mode combinations (3629.045299ms)
+✔ MAB policy updates fail closed when NAS is disabled or lacks MAB service (4802.477448ms)
+✔ MAB policy NAS binding cannot be changed after creation (4179.459993ms)
+✔ enabled MAB policy requires enabled NAS and MAB service (4.756212ms)
+✔ disabled policies may be staged but NAS binding is immutable (0.607913ms)
+✔ malformed policies fail closed (0.506639ms)
+✔ stored MAB policy validates the four requested policy modes (3.477165ms)
+✔ dynamic and guest VLAN modes require valid VLANs (0.727166ms)
+✔ static/reject modes reject stray VLAN values and implicit enabled state (0.522823ms)
+✔ stored policy maps deterministically into preview engine policy (3.559022ms)
+✔ injected fields and mismatched forced IDs fail closed (0.987019ms)
+✔ RADIUS manifest is a self-contained panel module (26.997376ms)
+✔ MAB preview endpoint uses the fail-closed evaluator (3.358905ms)
+✔ device admin preview exposes Cisco privilege without authentication claims (0.462684ms)
+✔ matrix endpoint returns only redacted result rows (1.480443ms)
+✔ RADIUS UI owns its translations and contains no Persian literals (22.213151ms)
+✔ NAS draft endpoint resolves the device from EMS inventory and emits only comments (7.234476ms)
+✔ NAS draft endpoint rejects a client-supplied IP that differs from EMS inventory (0.655167ms)
+✔ generates a commented, inert FreeRADIUS client skeleton for manual review (4.326105ms)
+✔ even enabled NAS profiles produce no active FreeRADIUS configuration (0.80996ms)
+✔ rejects unsupported fields and cannot echo credentials into output (4.14452ms)
+✔ cannot emit config for cross-company or invalid NAS addresses (10.024237ms)
+✔ client label encoding does not collide on punctuation (1.086025ms)
+✔ NAS profile remains explicitly disabled and never stores a shared secret (15.537979ms)
+✔ literal NAS addresses only; reject loopback, multicast, link-local, CIDR and URL (10.174956ms)
+✔ cannot implicitly enable a NAS or accept string booleans (0.535224ms)
+✔ reject credential-like and arbitrary fields instead of accidentally persisting them (0.460405ms)
+✔ reject malformed service lists, vendors and ports (0.425311ms)
+✔ device references must be unambiguous and company-scoped (0.381134ms)
+✔ reject prototype-polluted, accessor-bearing and array records (0.240645ms)
+✔ accept null-prototype JSON-like records (0.302827ms)
+✔ inventory rejects duplicate source IPs across companies and duplicate IDs (0.507611ms)
+✔ inventory catches equivalent IPv6 source addresses across tenants (0.474907ms)
+✔ inventory rejects multiple profiles for one device (4.530063ms)
+✔ valid inventory keeps company separation and sanitized output (0.21883ms)
+✔ malformed inventory fails without partial acceptance (0.385399ms)
+✔ RADIUS operations module is hidden service backing the main RADIUS panel (3.726114ms)
+✔ direct NAS source supports one IPv4 or canonical CIDR (1.387717ms)
+✔ shared secrets allow weak values with validation and 802.1X stays fail-closed (1.038149ms)
+✔ simple AAA migration adds groups, optional inventory link and CIDR policy (0.993604ms)
+✔ FreeRADIUS SQL config reads group replies and device updates can unlink inventory (0.940056ms)
+✔ NAS profiles create, list, update and delete without credential fields (8992.4387ms)
+✔ NAS profile persistence binds source IP and company to the selected EMS device (4524.598235ms)
+✔ device administrator profiles persist Cisco privilege and MikroTik group separately (3986.058353ms)
+✔ administrator profile validation rejects implicit state and injected fields (3923.834284ms)
+✔ MAC normalization and invalid group MACs (3.785265ms)
+✔ VLAN validation (0.46012ms)
+✔ deny by default and invalid input (1.692398ms)
+✔ known MAC static and dynamic VLAN (2.446696ms)
+✔ unknown MAC rejects unless guest VLAN explicitly configured (0.480062ms)
+✔ duplicate and disabled MACs reject (0.833623ms)
+✔ switch override and disabled switch (1.140759ms)
+✔ malformed NAS IDs and null overrides never inherit permissive guest policy (1.329268ms)
+✔ offline matrix evaluates expectations without returning MAC, switch or inventory (2.628637ms)
+✔ policy regressions are counted without granting access (0.295909ms)
+✔ malformed and duplicate cases fail atomically (0.959167ms)
+✔ no mutation of frozen input (1.826279ms)
+✔ empty matrix is safe and explicit (1.438824ms)
+✔ RADIUS owns its schema migration and applies it through the generic module runner (8445.556532ms)
+✔ RADIUS schema has no credential-bearing columns (4083.320025ms)
+✔ RADIUS NAS uniqueness and MAB policy constraints fail closed in the database (3265.165495ms)
+✔ legacy credential reveal endpoints are explicit 403 and never query secrets (4.287371ms)
+✔ NAS config generation does not select stored secret and uses a placeholder (1.312614ms)
+✔ generated Cisco and MikroTik CLI never include a real stored credential (2.234163ms)
+✔ RADIUS UI has no credential reveal or copy affordance (1.222435ms)
+✔ reports summarize core and optional module data without exposing audit detail (8627.644507ms)
+✔ reports return zero for optional module tables that are not installed (4194.805739ms)
+✔ PostgreSQL schema installs twice and migrates legacy roles (6042.630995ms)
+✔ live server never stores or encrypts equipment credentials (39.345396ms)
+✔ stage01 UI keeps mandatory base workflows (4.659536ms)
+✔ stage01 update never removes the database volume (0.931319ms)
+✔ stage01 database keeps shared IDs for future modules (0.534381ms)
+✔ stage01 role migration selects constraint oid before reading it (0.461644ms)
+✔ installer exposes persistent env to ordinary docker compose commands (0.725361ms)
+✔ graphical interface contains the required workflows (56.103427ms)
+✔ browser modules are served with a JavaScript MIME type (16.288703ms)
+✔ Windows client is downloadable from the installed web service (28.668793ms)
+✔ every root size uses the same vertical subnet model (5.159366ms)
+✔ vertical detail boundaries start at zero and end at 255 (0.751112ms)
+✔ tree reaches individual IPs and the UI keeps all requested modes (40.535946ms)
+✔ v1.5 restores language control, editable device taxonomy and personnel transfer (21.730927ms)
+✔ radio module is simple IPAM-synchronized AP Station management (7.193596ms)
+✔ company contact summary keeps phone mobile and email separate (3.640241ms)
+✔ translations are file based (2.743107ms)
+✔ inventory create and edit path exists (0.95401ms)
+✔ winbox receives target not emsipam uri (0.224903ms)
+ℹ tests 185
+ℹ suites 0
+ℹ pass 185
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23602.345761
