@@ -2,7 +2,7 @@
 
 پنل مدیریت شبکه با **Core + IPAM، فهرست تجهیزات، Radio و RADIUS Device Access**، رابط فارسی و انگلیسی و کلاینت اتصال ویندوز. این نسخه RC است؛ کشف کامل خودکار شبکه، MAC Trace و اعمال 802.1X هنوز تکمیل نشده‌اند.
 
-[تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
+[اصلاح نمایش رمز RADIUS 1.0.1-lab](docs/releases/radius-1.0.1-lab.md) · [تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
 
 ## دانلود و نصب با یک دستور
 

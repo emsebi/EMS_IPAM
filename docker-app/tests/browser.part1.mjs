@@ -209,8 +209,14 @@ try {
   await page.locator('#rSecretForm [type=submit]').click();
   await page.locator('.r-secret-list').getByText('Browser Shared Secret', { exact: true }).waitFor();
   const secretRow = page.locator('.r-secret-list tbody tr').filter({ hasText: 'Browser Shared Secret' });
-  assert.equal(await secretRow.locator('.rRevealSecret').count(), 0);
-  assert.equal(await page.locator('.r-credential-value').count(), 0);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await secretRow.locator('.rRevealSecret').click();
+  await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === 'shortsec');
+  await page.locator('#rCredentialCopy').click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'shortsec');
+  await page.locator('#rCredentialHide').click();
+  assert.equal(await page.locator('#rCredentialValue').inputValue(), '');
+  assert.equal(await page.locator('#rCredentialDialog').evaluate(el => el.open), false);
   await page.locator('#rSecretClose').click();
 
   await page.locator('#rAdd').click();
@@ -260,10 +266,30 @@ try {
   assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
   const userRow = page.locator('.r-list tbody tr').filter({ hasText: 'browseradmin' });
-  assert.equal(await userRow.locator('.rRevealPassword').count(), 0);
-  assert.equal(await page.locator('.r-credential-value').count(), 0);
-  await api(`/api/radius-ops/accounts/${browserUser.id}/reveal-password`, 'POST', {}, 403);
-  await api(`/api/radius-ops/secret-profiles/${browserNas.secretProfileId}/reveal`, 'POST', {}, 403);
+  await userRow.locator('.rRevealPassword').click();
+  await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === '1234');
+  await page.screenshot({ path: path.join(outputDir, 'radius-password-display.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === '');
+  // Viewing the saved value must not erase an unsaved replacement in the edit form.
+  await userRow.locator('.rEdit').click();
+  await page.locator('#rUserForm [name=password]').fill('unsaved-replacement');
+  await page.locator('#rUserForm .rRevealPassword').click();
+  await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === '1234');
+  await page.locator('#rCredentialClose').click();
+  assert.equal(await page.locator('#rUserForm [name=password]').inputValue(), 'unsaved-replacement');
+  await page.locator('#rCancel').click();
+  for (const [route, value] of [[`/api/radius-ops/accounts/${browserUser.id}/reveal-password`, '1234'], [`/api/radius-ops/secret-profiles/${browserNas.secretProfileId}/reveal`, 'shortsec']]) {
+    const response = await context.request.post(route, { data: {}, headers: { 'X-EMS-CSRF': '1' } });
+    assert.equal(response.status(), 200);
+    assert.match(response.headers()['cache-control'], /no-store/);
+    assert.equal((await response.json()).value, value);
+    await api(route, 'GET', undefined, 404);
+    const anonymous = await browser.newContext({ baseURL });
+    await api(route, 'POST', {}, 401, anonymous.request);
+    await anonymous.close();
+  }
+  check('Admin can reveal, copy and hide saved RADIUS credentials without changing unsaved edits; responses are not cached');
 
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('#rOpenConfig').click();
@@ -370,6 +396,8 @@ try {
   await api('/api/device-types', 'POST', { name: 'Forbidden' }, 403, viewer.request);
   await api('/api/hosts', 'PUT', { spaceId: 'test-space', ip: '192.0.2.99', name: 'Forbidden' }, 403, viewer.request);
   await api('/api/personnel', 'GET', undefined, 403, viewer.request);
+  await api(`/api/radius-ops/accounts/${browserUser.id}/reveal-password`, 'POST', {}, 403, viewer.request);
+  await api(`/api/radius-ops/secret-profiles/${browserNas.secretProfileId}/reveal`, 'POST', {}, 403, viewer.request);
   await viewer.close();
   check('viewer can read assigned inventory; cannot mutate hosts/types or list personnel');
   assert.deepEqual(errors, []);

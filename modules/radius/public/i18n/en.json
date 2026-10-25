@@ -127,7 +127,7 @@
   "radius.simple.showSecret": "Show Secret",
   "radius.simple.showPassword": "Show Password",
   "radius.simple.sharedSecret": "Shared Secret",
-  "radius.simple.credentialRevealHint": "This is the real credential value. Hide it again after use.",
+  "radius.simple.credentialRevealHint": "The saved value is displayed only after you request it. Closing this window hides it again.",
   "radius.simple.hide": "Hide",
   "radius.simple.copied": "Copied",
   "radius.simple.copyFailed": "Copy failed",
@@ -137,5 +137,7 @@
   "radius.simple.noNasMembers": "No NAS is assigned to this Collection yet",
   "radius.simple.defaultLabel": "Default",
   "radius.simple.manageCollections": "Manage NAS Collections",
-  "radius.simple.manageProfiles": "Manage Permission Profiles"
+  "radius.simple.manageProfiles": "Manage Permission Profiles",
+  "radius.simple.credentialUnavailable": "Stored credential is unavailable.",
+  "radius.simple.copyManually": "Value selected. Copy it using your device’s copy command."
 }

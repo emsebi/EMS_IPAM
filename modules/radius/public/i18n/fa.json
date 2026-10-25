@@ -127,7 +127,7 @@
   "radius.simple.showSecret": "نمایش Secret",
   "radius.simple.showPassword": "نمایش رمز",
   "radius.simple.sharedSecret": "Shared Secret",
-  "radius.simple.credentialRevealHint": "این مقدار واقعی Credential است. بعد از استفاده Hide کنید.",
+  "radius.simple.credentialRevealHint": "مقدار ذخیره‌شده فقط با درخواست شما نمایش داده می‌شود. با بستن این پنجره دوباره مخفی می‌شود.",
   "radius.simple.hide": "مخفی‌کردن",
   "radius.simple.copied": "کپی شد",
   "radius.simple.copyFailed": "کپی انجام نشد",
@@ -137,5 +137,7 @@
   "radius.simple.noNasMembers": "هنوز NASی عضو این Collection نیست",
   "radius.simple.defaultLabel": "پیش‌فرض",
   "radius.simple.manageCollections": "مدیریت NAS Collectionها",
-  "radius.simple.manageProfiles": "مدیریت Permission Profileها"
+  "radius.simple.manageProfiles": "مدیریت Permission Profileها",
+  "radius.simple.credentialUnavailable": "مقدار رمز ذخیره‌شده در دسترس نیست.",
+  "radius.simple.copyManually": "مقدار انتخاب شد؛ با فرمان کپی دستگاه خود آن را کپی کنید."
 }

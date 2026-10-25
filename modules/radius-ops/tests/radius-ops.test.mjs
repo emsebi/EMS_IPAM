@@ -275,17 +275,6 @@ test('v27 specific NAS definitions shadow broader fallback even when disabled',(
  assert.match(backend,/nas-disabled-or-inventory-denied/);
 });
 
-test('stored credentials cannot be revealed even by an admin',async()=>{
- let queried=false;
- const h=createModule({pool:{query(){queried=true;throw Error('Unexpected credential query');}},
-  requireModuleAccess:async()=>{},requireAdmin:()=>{}});
- for(const route of ['secret-profiles/00000000-0000-4000-8000-000000000001/reveal',
-                     'accounts/00000000-0000-4000-8000-000000000001/reveal-password']){
-  await assert.rejects(h.handle({method:'POST'},{},new URL('http://localhost/api/radius-ops/'+route),{role:'admin'}),{status:403});
- }
- assert.equal(queried,false);
-});
-
 test('safe default NAS and permission groups guide first-time users',()=>{
  const sql=fs.readFileSync(path.join(root,'migrations/011-default-operator-groups.sql'),'utf8');
  const backend=fs.readFileSync(path.join(root,'backend/index.mjs'),'utf8');
