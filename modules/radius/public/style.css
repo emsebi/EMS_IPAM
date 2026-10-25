@@ -13,3 +13,8 @@
 .r-live-dot.off{opacity:.35}.r-live-state{font-size:.72rem;opacity:.72;min-width:72px}
 
 .r-credential-reveal{margin:-2px 0 18px;padding:14px 16px;border:1px solid var(--line,#dce3ed)}.r-credential-reveal .r-form-head{padding:0 0 10px}.r-credential-value{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;border-radius:10px;background:#101c27}.r-credential-value code{direction:ltr;unicode-bidi:plaintext;flex:1;min-width:180px;overflow-wrap:anywhere;color:#e4f1fb;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88rem}.r-credential-value .btn{background:#1b3142;color:#d8edff;border-color:#385269}
+
+.r-credential-dialog{max-width:620px}
+.r-credential-value{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:var(--soft);text-align:left}
+#rCredentialName{overflow-wrap:anywhere}
+#rCredentialStatus{min-height:1.5em;color:var(--muted)}
