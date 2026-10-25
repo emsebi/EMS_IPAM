@@ -1,5 +1,9 @@
 # Current continuation — RADIUS 1.0.1-lab
 
+Functional release `051f77be2f89bfd1bad90c2a80a495173088f48d` is merged into main and deployed to the dedicated VM. CI 40233050436 and Lab Deploy 40233050403 succeeded, including real PostgreSQL/FreeRADIUS credential reveal, UDP authentication/accounting and outage recovery. Separate Real Lab run 40233050453 was preparing Chromium at this documentation checkpoint; follow its actual result. Documentation-only follow-ups can have a newer SHA than the deployed functional release.
+
+The hourly development automation "تکمیل و تست EMS-IPAM" was found paused and resumed on 2026-10-26. Its obsolete instruction to remove administrator reveal was replaced with the acceptance contract below. The separate completion-only watch does not perform development. Continue actual implementation and report concrete progress or the precise blocker on each development run.
+
 The user explicitly requires existing features to remain available while development continues. Administrator display/copy of saved RADIUS account passwords and NAS Shared Secrets is an accepted feature. Do not remove it or convert regression tests to expect its absence. Normal lists and audit/live logs omit credentials; explicit administrator POST reveal is a separate action.
 
 See [RADIUS correction](docs/releases/radius-1.0.1-lab.md) and [feature acceptance contract](docs/FEATURE-ACCEPTANCE-FA.md). Use the actual current GitHub main HEAD as integration source; preserve in-progress module work. The dedicated user-provided VM is updated through the existing EMS-IPAM Lab Deploy workflow. Record the exact deployed SHA and completed run, not merely a queued job.

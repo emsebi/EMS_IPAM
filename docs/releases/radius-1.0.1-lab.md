@@ -13,6 +13,9 @@
 - ۱۸۸ تست Core/API و ۴۲ تست ماژول‌ها موفق.
 - ۱۶ سناریوی مرورگر/API واقعی با دیتابیس موقت PGlite موفق؛ شامل نمایش، کپی، مخفی‌کردن، حفظ فرم ویرایش، منع کاربر غیرمدیر و سایر جریان‌های قبلی.
 - [گزارش مرورگر](../test-results/radius-1.0.1-browser-result.json) و تصویر زیر از داده‌های صرفاً آزمایشی هستند.
-- smoke واقعی Docker نیز اکنون نمایش صریح رمز ذخیره‌شده برای مدیر را بررسی می‌کند. نتیجهٔ اجرای CI و نصب VM از Actions همان commit باید تأیید شود؛ اجرای محلی PGlite جای PostgreSQL واقعی نیست.
+- [CI کد اصلاح‌شده موفق شد](https://github.com/emsebi/EMS_IPAM/actions/runs/40232903844)؛ CI مربوط به commit ادغام‌شده نیز [موفق است](https://github.com/emsebi/EMS_IPAM/actions/runs/40233050436).
+- [نصب روی VM اختصاصی و smoke واقعی موفق شد](https://github.com/emsebi/EMS_IPAM/actions/runs/40233050403). کد نصب‌شده: `051f77be2f89bfd1bad90c2a80a495173088f48d`؛ تنظیمات موجود حفظ و سلامت پنل روی پورت 8888 تأیید شد.
+- روی PostgreSQL/FreeRADIUS واقعی، نمایش صریح رمز مدیر، Access-Accept/Reject، سطح دسترسی Cisco/MikroTik، Accounting روی UDP1813، جداسازی شرکت‌ها، چرخش Secret و بازیابی بعد از restart و قطع دیتابیس موفق شدند.
+- [اجرای جداگانهٔ مرورگر روی بک‌اند واقعی](https://github.com/emsebi/EMS_IPAM/actions/runs/40233050453) مستقل از تست مرورگر PGlite است؛ هنگام ثبت این گزارش در مرحلهٔ آماده‌سازی Chromium بود و هنوز موفق اعلام نشده است.
 
 ![نمایش رمز نمونهٔ آزمایشی در پنل](../test-results/radius-password-display.png)
