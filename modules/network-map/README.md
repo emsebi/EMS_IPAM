@@ -1,12 +1,14 @@
-# Network Map — phase 1 foundation
+# Smart Network Map — 0.2.0-lab.1
 
-This is an **isolated, admin-only foundation**, not a completed discovery engine.
+This increment adds an isolated, administrator-only **manual read-only discovery** flow. It does not push configuration and does not poll automatically.
 
-- `GET /api/network-map/snapshots` returns the 20 latest saved topology snapshots.
-- `POST /api/network-map/snapshots` saves a validated, manual JSON topology.
-- Nodes: `[{ "id":"sw1", "name":"Core", "address":"192.0.2.10", "platform":"Cisco" }]`
-- Links: `[{ "source":"sw1", "target":"sw2", "sourcePort":"Gi1/0/1", "targetPort":"Gi1/0/24" }]`
-- Data is stored in a separate PostgreSQL table, with no changes to IPAM or RADIUS tables.
-- The API requires an authenticated administrator; it does not log in to network devices.
+- The administrator saves an SSH read account, explicit device list and/or bounded IPv4 ranges. The password is AES-256-GCM encrypted with a file key outside PostgreSQL and is never returned by the API.
+- **Create Map** is the only full discovery trigger. It runs a fixed allowlist of Cisco or MikroTik read commands; no arbitrary CLI endpoint exists.
+- The first SSH host key is remembered per company/address/port. A changed key blocks collection.
+- LLDP/CDP/MikroTik neighbors produce port-to-port links. Device status distinguishes unreachable, login failure, changed host key and incomplete reads.
+- Saved node data includes ports, VLAN/trunk evidence, selected capabilities and MAC forwarding observations. MAC trace includes source and collection time and marks uncertainty/staleness.
+- Map positions and an optional background image are stored independently of topology data. Impact analysis is a physical-topology estimate and explicitly does not claim STP/LAG/routing certainty.
+- Each successful manual run stores one readable JSON snapshot; only the latest 20 are retained. Configuration text is optional and credential-bearing lines are removed before it reaches the archive.
+- Module tables and files are separate from IPAM and RADIUS. Registering a MAC here never enables MAB and never changes access policy.
 
-Next increments: read-only credentials and explicit manual discovery; LLDP/CDP collection and port mapping; MAC forwarding-table tracing; topology UI. No automatic polling, switch configuration, or network scans are included in this commit.
+Validation in this phase uses offline parser fixtures and a PGlite-backed API scan with an injected collector. Live Cisco/MikroTik compatibility and production PostgreSQL/Docker deployment remain separate acceptance gates.
