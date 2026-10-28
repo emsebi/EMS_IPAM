@@ -45,6 +45,18 @@ def parsed_radtest_reply(output):
     return kind
 
 
+def reply_has_attributes(output, expected):
+    """Match exact attributes only in the verified response, not the request."""
+    if parsed_radtest_reply(output) != 'Access-Accept':
+        return False
+    response = re.split(r'(?m)^Received Access-Accept ', output, maxsplit=1)[1]
+    for attribute, value in expected.items():
+        values = re.findall(rf'(?m)^\s*{re.escape(attribute)}\s*=\s*(.*?)\s*$', response)
+        if [item.strip('"') for item in values] != [value]:
+            return False
+    return True
+
+
 def port(protocol):
     kind = socket.SOCK_DGRAM if protocol == 'udp' else socket.SOCK_STREAM
     with socket.socket(socket.AF_INET, kind) as s:
@@ -198,18 +210,32 @@ def main():
                           f' exit={r.returncode}', flush=True)
             return actual == expected
 
-        def radtest_reply_attributes(username, password, shared_secret, expected):
+        def radtest_reply_attributes(username, password, shared_secret, expected, method='pap'):
             """Require an authenticated Access-Accept carrying exact wire attributes."""
-            r = dc('exec', '-T', 'radius_ops', 'radtest', username, password,
+            if method not in ('pap', 'chap', 'mschap'):
+                raise ValueError('Unsupported test authentication method')
+            r = dc('exec', '-T', 'radius_ops', 'radtest', '-t', method, username, password,
                    '127.0.0.1', '0', shared_secret, timeout=30, check=False)
+            return r.returncode == 0 and reply_has_attributes(r.stdout + r.stderr, expected)
+
+        def mschapv2_reply(shared_secret, expected, corrupt=False):
+            # Public RFC 2759 section 9.2 vector; RADIUS layout: RFC 2548 2.3.2.
+            # This fixed fixture exists only in this disposable loopback lab.
+            response = ('010021402324255e262a28295f2b3a337c7e0000000000000000'
+                        '82309ecd8d708b5ea08faa3981cd83544233114a3d85d6df')
+            if corrupt:
+                response = response[:-2] + '00'
+            attrs = ['User-Name = "User"', 'NAS-IP-Address = 127.0.0.1',
+                     'Service-Type = Login-User',
+                     'MS-CHAP-Challenge = 0x5b5d7c7d7b3f2f3e3c2c602132262628',
+                     'MS-CHAP2-Response = 0x' + response]
+            r = dc('exec', '-T', 'radius_ops', 'radclient', '-x',
+                   '127.0.0.1:1812', 'auth', shared_secret,
+                   timeout=30, check=False, input_text='\n'.join(attrs) + '\n')
             output = r.stdout + r.stderr
-            if parsed_radtest_reply(output) != 'Access-Accept':
-                return False
-            for attribute, value in expected.items():
-                pattern = rf'(?m)^\s*{re.escape(attribute)}\s*=\s*"?{re.escape(value)}"?\s*$'
-                if not re.search(pattern, output):
-                    return False
-            return True
+            if corrupt:
+                return parsed_radtest_reply(output) == 'Access-Reject'
+            return r.returncode == 0 and reply_has_attributes(output, expected)
 
         def accounting(username, shared_secret, session_id, status, session_time=0):
             """Send one real UDP accounting packet and authenticate its response."""
@@ -412,6 +438,43 @@ def main():
                 'testadminA', password_a, secret_a,
                 {'Cisco-AVPair': 'shell:priv-lvl=15', 'Mikrotik-Group': 'full'})
             print('PASS Cisco privilege and MikroTik group attributes on UDP Access-Accept')
+
+            # Reproduce the current UI path: an account has explicit per-NAS
+            # accessRules and no legacy group_id. Change its assignment without
+            # restarting FreeRADIUS, then inspect actual replies for each method.
+            protocol_profiles = {}
+            for mt_group, privilege in (('read', 1), ('write', 7)):
+                protocol_profiles[mt_group] = api('/api/radius-ops/groups', 'POST', {
+                    'companyId': 'lab-company-a', 'name': 'Protocol ' + mt_group,
+                    'ciscoPrivilege': privilege, 'mikrotikGroup': mt_group,
+                    'enabled': True})['id']
+            protocol_profiles['full'] = group_a
+            protocol_user = api('/api/radius-ops/accounts', 'POST', {
+                'companyId': 'lab-company-a', 'username': 'User', 'label': 'Protocol fixture',
+                'password': 'clientPass', 'enabled': True,
+                'accessRules': [{'collectionId': collection_a,
+                                 'profileId': protocol_profiles['read']}]})['id']
+            for mt_group, privilege in (('read', 1), ('full', 15), ('write', 7), ('read', 1)):
+                api('/api/radius-ops/accounts/' + protocol_user, 'PUT', {
+                    'companyId': 'lab-company-a', 'label': 'Protocol fixture', 'enabled': True,
+                    'accessRules': [{'collectionId': collection_a,
+                                     'profileId': protocol_profiles[mt_group]}]})
+                expected = {'Cisco-AVPair': 'shell:priv-lvl=' + str(privilege),
+                            'Mikrotik-Group': mt_group}
+                for method in ('pap', 'chap', 'mschap'):
+                    assert radtest_reply_attributes('User', 'clientPass', secret_a, expected, method), (
+                        'Incorrect authorization reply for ' + method + '/' + mt_group)
+                assert mschapv2_reply(secret_a, expected), 'Incorrect MS-CHAPv2 reply for ' + mt_group
+                print('PASS live profile change ' + mt_group + ': PAP/CHAP/MS-CHAP/MS-CHAPv2 wire attributes', flush=True)
+            assert mschapv2_reply(secret_a, {}, corrupt=True), 'Invalid MS-CHAPv2 proof must be rejected'
+            api('/api/radius-ops/accounts/' + protocol_user, 'DELETE')
+            for mt_group in ('read', 'write'):
+                api('/api/radius-ops/groups/' + protocol_profiles[mt_group], 'DELETE')
+            print('PASS invalid MS-CHAPv2 proof rejected; protocol fixtures removed', flush=True)
+            if os.environ.get('EMS_RADIUS_PROTOCOL_ONLY') == '1':
+                print('REAL DOCKER RADIUS AUTHORIZATION PROTOCOL MATRIX: PASS', flush=True)
+                return
+
             accounting_session = 'ems-lab-' + secrets.token_hex(8)
             assert accounting('testadminA', secret_a, accounting_session, 'Start')
             wait(lambda: sql(
