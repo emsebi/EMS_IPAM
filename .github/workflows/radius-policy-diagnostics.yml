@@ -1,0 +1,42 @@
+name: EMS-IPAM RADIUS Read-only Policy Diagnosis
+
+on:
+  push:
+    branches: ["work/radius-authz-diagnostics-20261028"]
+    paths:
+      - ".github/workflows/radius-policy-diagnostics.yml"
+      - "scripts/radius-policy-diagnostics.sql"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-radius-policy-diagnosis
+  cancel-in-progress: false
+
+jobs:
+  inspect-policy:
+    if: github.repository == 'emsebi/EMS_IPAM' && github.ref == 'refs/heads/work/radius-authz-diagnostics-20261028'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read installed runtime fingerprints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker inspect --format '{{.Name}} {{.State.Status}} {{.State.StartedAt}} {{.Image}}' ems-ipam-app-1 ems-ipam-radius_ops-1
+          docker exec ems-ipam-radius_ops-1 sha256sum /etc/freeradius/3.0/sites-enabled/default /opt/ems-radius/supervisor.py
+          sha256sum modules/radius-ops/freeradius/default-site modules/radius-ops/freeradius/supervisor.py
+      - name: Read only the reported authorization path
+        shell: bash
+        env:
+          EMS_DIAG_ACCOUNT_KEY: 514f1b439f404f86f77090fa9edc96ce
+          EMS_DIAG_SOURCE_KEY: 27914ceea2fcc8dc4a82dfd0e0575f2f
+        run: |
+          set -Eeuo pipefail
+          docker exec -i \
+            -e EMS_DIAG_ACCOUNT_KEY -e EMS_DIAG_SOURCE_KEY \
+            ems-ipam-db-1 sh -c \
+            'exec psql -X -A -t -q -v ON_ERROR_STOP=1 -v account_key="$EMS_DIAG_ACCOUNT_KEY" -v source_key="$EMS_DIAG_SOURCE_KEY" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            < scripts/radius-policy-diagnostics.sql
