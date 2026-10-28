@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/radius-policy-diagnostics.yml"
       - "scripts/radius-policy-diagnostics.sql"
+      - "scripts/radius-ops-docker-smoke.py"
 
 permissions:
   contents: read
@@ -18,7 +19,7 @@ jobs:
   inspect-policy:
     if: github.repository == 'emsebi/EMS_IPAM' && github.ref == 'refs/heads/work/radius-authz-diagnostics-20261028'
     runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Read installed runtime fingerprints
@@ -40,3 +41,9 @@ jobs:
             ems-ipam-db-1 sh -c \
             'exec psql -X -A -t -q -v ON_ERROR_STOP=1 -v account_key="$EMS_DIAG_ACCOUNT_KEY" -v source_key="$EMS_DIAG_SOURCE_KEY" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
             < scripts/radius-policy-diagnostics.sql
+      - name: Verify authorization protocol matrix in disposable lab
+        env:
+          EMS_RADIUS_SKIP_BROWSER: "1"
+          EMS_RADIUS_PROTOCOL_ONLY: "1"
+        shell: bash
+        run: python3 scripts/radius-ops-docker-smoke.py
