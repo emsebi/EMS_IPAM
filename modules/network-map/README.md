@@ -12,3 +12,5 @@ This increment adds an isolated, administrator-only **manual read-only discovery
 - Module tables and files are separate from IPAM and RADIUS. Registering a MAC here never enables MAB and never changes access policy.
 
 Validation in this phase uses offline parser fixtures and a PGlite-backed API scan with an injected collector. Live Cisco/MikroTik compatibility and production PostgreSQL/Docker deployment remain separate acceptance gates.
+
+CI also runs the module migration, encrypted settings, explicit manual scan, snapshot archive and restart persistence against an isolated PostgreSQL 16 service. This validates the production database driver and SQL types without contacting network equipment. Full Docker Compose installation on the dedicated VM and live Cisco/MikroTik compatibility remain separate acceptance gates.
