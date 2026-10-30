@@ -30,8 +30,17 @@ chmod 777 "$EMS_STATE_DIR/backups"
 
 compose(){ docker compose --project-name "$PROJECT_NAME" -f "$PROJECT_ROOT/compose.yml" -f "$PROJECT_ROOT/modules/network-map/tests/compose.ssh-fixture.yml" "$@"; }
 cleanup(){
+  local status=$?
   compose down -v --remove-orphans >/dev/null 2>&1 || true
-  [[ "$TEST_ROOT" == /tmp/ems-ipam-map-test.* ]] && rm -rf "$TEST_ROOT"
+  if [[ "$TEST_ROOT" == /tmp/ems-ipam-map-test.* ]]; then
+    # Snapshot directories are created by the non-host UID used in the app
+    # container. Normalize only this disposable test root before removing it.
+    docker run --rm --network none --user 0:0 --entrypoint sh \
+      -v "$TEST_ROOT:/cleanup" ems-ipam-base:1.7.0-rc.3 \
+      -c 'chmod -R a+rwX /cleanup' >/dev/null 2>&1 || true
+    rm -rf -- "$TEST_ROOT" || status=1
+  fi
+  return "$status"
 }
 trap cleanup EXIT
 
