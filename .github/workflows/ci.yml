@@ -69,3 +69,47 @@ jobs:
             docs/test-results/*.png
             docs/test-results/browser-result.json
           retention-days: 14
+
+  network-map-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ems_test
+          POSTGRES_PASSWORD: ems_test_password
+          POSTGRES_DB: ems_ipam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ems_test -d ems_ipam_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: docker-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run network-map PostgreSQL gate
+        env:
+          EMS_TEST_POSTGRES_URL: postgresql://ems_test:ems_test_password@127.0.0.1:5432/ems_ipam_test
+        run: node --test tests/network-map-postgres.mjs
+
+  network-map-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run full Docker Compose map smoke with synthetic SSH
+        run: bash scripts/network-map-docker-smoke.sh

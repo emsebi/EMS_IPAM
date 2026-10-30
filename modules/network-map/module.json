@@ -1,7 +1,7 @@
 {
   "id": "network-map",
   "name": "Network Map",
-  "version": "0.1.0",
+  "version": "0.2.0-lab.1",
   "apiVersion": 1,
   "enabled": true,
   "roles": [
@@ -12,5 +12,6 @@
     "network-map.write"
   ],
   "backend": "backend/index.mjs",
-  "description": "Manual topology snapshot foundation; no automated discovery or device configuration."
+  "navigation": {"label":"Smart Network Map","labels":{"en":"Smart Network Map","fa":"نقشه هوشمند شبکه"},"icon":"◇","order":40,"panel":true},
+  "description": "Manual read-only SSH discovery, device ports, topology impact, MAC trace and floor plans."
 }

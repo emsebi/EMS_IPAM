@@ -383,7 +383,7 @@ async function loadModuleUi(id) {
   const ui = createUi({ state,$,page,isModuleInstalled,hasClientModule,ensureInventory,ensureDeviceTypes,
     updateSelectors,navActive,setRoute,toast,canWrite,isAdmin,ipv4ToInt,intToIpv4,request,prepareHostEditor,
     loadSpace,escapeHtml,formatNumber,formatDateTime,translateTree,t:moduleT,coreT:t,module:info,
-    populateHostTypes,openPersonnelDialog,editPersonnel });
+    populateHostTypes,openPersonnelDialog,editPersonnel,openToolMenu });
   moduleUiCache.set(id,ui);
   return ui;
 }

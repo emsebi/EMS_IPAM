@@ -310,6 +310,22 @@ try {
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
+  await page.locator('button.module-nav-link[data-module-id="network-map"]').click();
+  await page.locator('#nmSettings').waitFor({state:'visible'});
+  await page.locator('#nmUsername').fill('browser-readonly');
+  await page.locator('#nmPassword').fill('Browser-Map-Password');
+  await page.locator('#nmTargets').fill('192.0.2.10 | cisco | Browser Core');
+  await page.locator('#nmRoot').fill('192.0.2.10');
+  await page.locator('#nmSettings [type="submit"]').click();
+  await page.locator('#nmScan').waitFor({state:'visible'});
+  const mapSettings=await api('/api/network-map/settings?companyId=test-co');
+  assert.equal(mapSettings.hasPassword,true);
+  assert.equal(JSON.stringify(mapSettings).includes('Browser-Map-Password'),false);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  assert.equal(await page.locator('.nm-canvas').count(),1);
+  check('Smart Network Map saves encrypted read-only settings without starting discovery');
+  await page.screenshot({path:path.join(outputDir,'network-map-settings.png'),fullPage:true});
+
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();
   await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/reports$/);
