@@ -192,6 +192,8 @@ try {
   await page.locator('button.module-nav-link[data-module-id="radius"]').click();
   await page.locator('.r-tabs button[data-tab="clients"]').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/radius$/);
+  await page.locator('#companySelect').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#spaceSelect').isVisible(), false);
 
   await page.locator('.r-tabs button[data-tab="collections"]').click();
   await page.locator('#rAdd').click();
@@ -247,6 +249,7 @@ try {
   await page.locator('.r-tabs button[data-tab="collections"]').click();
   const collectionRow = page.locator('.r-list tbody tr').filter({ hasText: 'Browser Hotspot' });
   await collectionRow.getByText('Browser NAS', { exact: false }).waitFor();
+  await page.screenshot({path:path.join(outputDir,'radius-1.1.0-collections.png'),fullPage:true});
 
   await page.locator('.r-tabs button[data-tab="users"]').click();
   await page.locator('#rAdd').click();
@@ -265,6 +268,7 @@ try {
   assert.equal(browserUser.accessRules[0].collectionName, 'Browser Hotspot');
   assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
+  await page.screenshot({path:path.join(outputDir,'radius-1.1.0-users.png'),fullPage:true});
   const userRow = page.locator('.r-list tbody tr').filter({ hasText: 'browseradmin' });
   await userRow.locator('.rRevealPassword').click();
   await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === '1234');
@@ -320,6 +324,7 @@ try {
   assert.equal(reportSummary.summary.radiusPolicies, 0);
   assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
   check('Reports module summarizes optional modules and shows redacted audit activity');
+  await page.locator('#companySelect').waitFor({state:'visible'});
   await page.screenshot({ path: path.join(outputDir, 'reports.png'), fullPage: true });
 
   await page.locator('#settingsButton').click();
