@@ -63,6 +63,18 @@ jobs:
             exit 1
           }
 
+      - name: Check upgrade compatibility and back up the installed database
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          backup_dir="$HOME/ems-ipam-lab/backups/$GITHUB_SHA"
+          mkdir -p "$backup_dir"
+          python3 scripts/radius-upgrade-check.py --snapshot "$backup_dir/radius-before.json"
+          docker exec ems-ipam-db-1 sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$backup_dir/database-before.sql"
+          test -s "$backup_dir/database-before.sql"
+          echo "Private pre-upgrade database backup saved."
+
       - name: Stage current branch for persistent lab deployment
         shell: bash
         run: |
@@ -78,6 +90,13 @@ jobs:
           test -f "$DEPLOY/modules/radius/module.json"
           test -f "$DEPLOY/modules/radius-ops/module.json"
 
+      - name: Build images before replacing running lab containers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$HOME/ems-ipam-lab/current"
+          docker compose --project-name ems-ipam --env-file "$HOME/.ems-ipam-lab.env" -f compose.yml -f modules/radius-ops/compose.module.yml build app radius_ops
+
       - name: Replace only EMS-IPAM lab containers
         shell: bash
         run: |
@@ -89,7 +108,7 @@ jobs:
           docker network rm ems_ipam_internal >/dev/null 2>&1 || true
           echo "Existing database volume and /var/lib/ems-ipam state were preserved."
 
-      - name: Build and start current EMS-IPAM lab
+      - name: Start current EMS-IPAM lab
         id: deploy
         continue-on-error: true
         shell: bash
@@ -99,7 +118,6 @@ jobs:
           ENV_FILE="$HOME/.ems-ipam-lab.env"
           COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f compose.yml -f modules/radius-ops/compose.module.yml)
 
-          "${COMPOSE[@]}" build app radius_ops
           "${COMPOSE[@]}" up -d
           "${COMPOSE[@]}" up -d --wait --wait-timeout 180
 
@@ -133,6 +151,12 @@ jobs:
           done
           echo "::error::EMS-IPAM panel did not become healthy on port 8888."
           exit 1
+
+      - name: Verify existing RADIUS data survived the upgrade
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/radius-upgrade-check.py --compare "$HOME/ems-ipam-lab/backups/$GITHUB_SHA/radius-before.json"
 
       - name: One-time local ali authentication probe
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[local-auth-probe]')

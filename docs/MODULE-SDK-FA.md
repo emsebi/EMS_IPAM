@@ -17,8 +17,8 @@ ctx سمت سرور دسترسی به pool، json، readBody، پاک‌سازی
 | modules/ipam | 1.7.0-rc.2 | API و صفحه Device Types؛ سایر IPAM هنوز در Core |
 | modules/radio | 2.0.0-rc.1 | UI AP/Station و Ping تکی؛ ذخیره رکورد در hosts مشترک |
 | modules/network-access | 0.1.0-rc.1 | نمایش MACهای IPAM و تب پرسنل؛ هنوز بدون RADIUS/Discovery |
-| modules/radius | 1.0.1-lab | رابط و API مدیریت RADIUS؛ سرویس اجرایی در radius-ops |
-| modules/radius-ops | 1.0.1-lab | سرویس FreeRADIUS، جدول‌ها و migrationهای اختصاصی، Compose و تست‌های مستقل |
+| modules/radius | 1.1.0-lab | رابط و API مدیریت RADIUS؛ سرویس اجرایی در radius-ops |
+| modules/radius-ops | 1.1.0-lab | سرویس FreeRADIUS، جدول‌ها و migrationهای اختصاصی، Compose و تست‌های مستقل |
 | modules/reports | 0.1.0-rc.1 | رابط و API گزارش‌های عملیاتی، کاتالوگ ترجمهٔ مستقل |
 | modules/network-map | 0.1.0 | API Snapshot و پارسر آفلاین LLDP/CDP؛ کشف زنده و رابط پیشرفته هنوز در دست توسعه |
 

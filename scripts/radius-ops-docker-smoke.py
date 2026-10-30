@@ -278,8 +278,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '12', f'Expected twelve versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-012')
+            assert count == '13', f'Expected thirteen versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-013')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -445,20 +445,35 @@ def main():
             protocol_profiles = {}
             for mt_group, privilege in (('read', 1), ('write', 7)):
                 protocol_profiles[mt_group] = api('/api/radius-ops/groups', 'POST', {
-                    'companyId': 'lab-company-a', 'name': 'Protocol ' + mt_group,
+                    'name': 'Protocol ' + mt_group,
                     'ciscoPrivilege': privilege, 'mikrotikGroup': mt_group,
                     'enabled': True})['id']
             protocol_profiles['full'] = group_a
+            protocol_secret = secrets.token_hex(16)
+            protocol_collection = api('/api/radius-ops/collections', 'POST', {
+                'name': 'Standalone protocol NAS', 'enabled': True})['id']
+            protocol_sp = api('/api/radius-ops/secret-profiles', 'POST', {
+                'name': 'Standalone protocol secret', 'secret': protocol_secret, 'enabled': True})['id']
+            protocol_nas = api('/api/radius-ops/devices', 'POST', {
+                'label': 'Standalone protocol NAS', 'nasIp': '127.30.0.2',
+                'secretProfileId': protocol_sp, 'collectionIds': [protocol_collection], 'enabled': True})['id']
             protocol_user = api('/api/radius-ops/accounts', 'POST', {
-                'companyId': 'lab-company-a', 'username': 'User', 'label': 'Protocol fixture',
+                'username': 'User', 'label': 'Protocol fixture',
                 'password': 'clientPass', 'enabled': True,
                 'accessRules': [{'collectionId': collection_a,
-                                 'profileId': protocol_profiles['read']}]})['id']
+                                 'profileId': protocol_profiles['read']},
+                                {'collectionId': protocol_collection, 'profileId': protocol_profiles['read']}]})['id']
+            assert sql("SELECT company_id IS NULL FROM radius_ops_accounts WHERE id='" + protocol_user + "'") == 't'
+            assert sql("SELECT company_id IS NULL FROM radius_ops_devices WHERE id='" + protocol_nas + "'") == 't'
+            wait(lambda: nas_udp('127.30.0.2','127.30.0.2','User','clientPass',protocol_secret,'Access-Accept'),
+                 'standalone Company-free NAS authorization', seconds=35)
+            print('PASS Company-free NAS, secret, profile, account and explicit collection authorization', flush=True)
             for mt_group, privilege in (('read', 1), ('full', 15), ('write', 7), ('read', 1)):
                 api('/api/radius-ops/accounts/' + protocol_user, 'PUT', {
-                    'companyId': 'lab-company-a', 'label': 'Protocol fixture', 'enabled': True,
+                    'label': 'Protocol fixture', 'enabled': True,
                     'accessRules': [{'collectionId': collection_a,
-                                     'profileId': protocol_profiles[mt_group]}]})
+                                     'profileId': protocol_profiles[mt_group]},
+                                    {'collectionId': protocol_collection, 'profileId': protocol_profiles[mt_group]}]})
                 expected = {'Cisco-AVPair': 'shell:priv-lvl=' + str(privilege),
                             'Mikrotik-Group': mt_group}
                 for method in ('pap', 'chap', 'mschap'):
@@ -468,6 +483,9 @@ def main():
                 print('PASS live profile change ' + mt_group + ': PAP/CHAP/MS-CHAP/MS-CHAPv2 wire attributes', flush=True)
             assert mschapv2_reply(secret_a, {}, corrupt=True), 'Invalid MS-CHAPv2 proof must be rejected'
             api('/api/radius-ops/accounts/' + protocol_user, 'DELETE')
+            api('/api/radius-ops/devices/' + protocol_nas, 'DELETE')
+            api('/api/radius-ops/secret-profiles/' + protocol_sp, 'DELETE')
+            api('/api/radius-ops/collections/' + protocol_collection, 'DELETE')
             for mt_group in ('read', 'write'):
                 api('/api/radius-ops/groups/' + protocol_profiles[mt_group], 'DELETE')
             print('PASS invalid MS-CHAPv2 proof rejected; protocol fixtures removed', flush=True)
@@ -594,7 +612,7 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '12'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '13'
             print('PASS persistent data and migration ledger after restart')
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
@@ -619,7 +637,7 @@ def main():
         except Exception:
             print('Diagnostic logs (test-only values redacted):', file=sys.stderr)
             sensitive = [
-                secret_a, secret_b, password_a, password_b,
+                secret_a, secret_b, password_a, password_b, locals().get("protocol_secret", ""),
                 env.get('POSTGRES_PASSWORD',''), env.get('EMS_ADMIN_PASSWORD',''),
             ]
             def redact_log(value):

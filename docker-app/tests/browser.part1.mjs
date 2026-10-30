@@ -192,10 +192,12 @@ try {
   await page.locator('button.module-nav-link[data-module-id="radius"]').click();
   await page.locator('.r-tabs button[data-tab="clients"]').waitFor({ state: 'visible' });
   assert.match(page.url(), /#\/module\/radius$/);
+  await page.locator('#companySelect').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#spaceSelect').isVisible(), false);
 
   await page.locator('.r-tabs button[data-tab="collections"]').click();
   await page.locator('#rAdd').click();
-  await page.locator('#rCollectionForm [name="companyId"]').selectOption('test-co');
+  assert.equal(await page.locator('#rCollectionForm [name="companyId"]').count(), 0);
   await page.locator('#rCollectionForm [name="name"]').fill('Browser Hotspot');
   assert.equal(await page.locator('#rCollectionForm [name="members"]').count(), 0);
   await page.locator('#rCollectionForm [type=submit]').click();
@@ -203,7 +205,7 @@ try {
 
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('#rSecretsOpen').click();
-  await page.locator('#rSecretForm [name="companyId"]').selectOption('test-co');
+  assert.equal(await page.locator('#rSecretForm [name="companyId"]').count(), 0);
   await page.locator('#rSecretForm [name="name"]').fill('Browser Shared Secret');
   await page.locator('#rSecretForm [name="secret"]').fill('shortsec');
   await page.locator('#rSecretForm [type=submit]').click();
@@ -220,7 +222,7 @@ try {
   await page.locator('#rSecretClose').click();
 
   await page.locator('#rAdd').click();
-  await page.locator('#rClientForm [name="companyId"]').selectOption('test-co');
+  assert.equal(await page.locator('#rClientForm [name="companyId"]').count(), 0);
   await page.locator('#rClientForm [name="label"]').fill('Browser NAS');
   await page.locator('#rClientForm [name="nasIp"]').fill('192.0.2.200');
   await page.locator('#rClientForm [name="secretProfileId"]').selectOption({ label: 'Browser Shared Secret' });
@@ -230,14 +232,14 @@ try {
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   const radiusDevices = await api('/api/radius-ops/devices');
   const browserNas = radiusDevices.items.find((item) => item.label === 'Browser NAS');
-  assert.ok(browserNas); assert.equal(browserNas.nasIp, '192.0.2.200');
+  assert.equal(browserNas.companyId, null); assert.ok(browserNas); assert.equal(browserNas.nasIp, '192.0.2.200');
   assert.equal(browserNas.secretProfileName, 'Browser Shared Secret');
   assert.deepEqual(browserNas.collectionNames, ['Browser Hotspot']);
   assert.equal(Object.hasOwn(browserNas, 'secret'), false);
 
   await page.locator('.r-tabs button[data-tab="groups"]').click();
   await page.locator('#rAdd').click();
-  await page.locator('#rGroupForm [name="companyId"]').selectOption('test-co');
+  assert.equal(await page.locator('#rGroupForm [name="companyId"]').count(), 0);
   await page.locator('#rGroupForm [name="name"]').fill('Network Admin');
   await page.locator('#rGroupForm [name="ciscoPrivilege"]').fill('15');
   await page.locator('#rGroupForm [name="mikrotikPreset"]').selectOption('full');
@@ -247,10 +249,11 @@ try {
   await page.locator('.r-tabs button[data-tab="collections"]').click();
   const collectionRow = page.locator('.r-list tbody tr').filter({ hasText: 'Browser Hotspot' });
   await collectionRow.getByText('Browser NAS', { exact: false }).waitFor();
+  await page.screenshot({path:path.join(outputDir,'radius-1.1.0-collections.png'),fullPage:true});
 
   await page.locator('.r-tabs button[data-tab="users"]').click();
   await page.locator('#rAdd').click();
-  await page.locator('#rUserForm [name="companyId"]').selectOption('test-co');
+  assert.equal(await page.locator('#rUserForm [name="companyId"]').count(), 0);
   await page.locator('#rUserForm [name="username"]').fill('browseradmin');
   await page.locator('#rUserForm [name="label"]').fill('Browser Admin');
   await page.locator('#rUserForm [name="password"]').fill('1234');
@@ -261,10 +264,11 @@ try {
   await page.locator('.r-list').getByText('browseradmin', { exact: true }).waitFor();
   const radiusUsers = await api('/api/radius-ops/accounts');
   const browserUser = radiusUsers.items.find((item) => item.username === 'browseradmin');
-  assert.ok(browserUser); assert.equal(browserUser.accessRules.length, 1);
+  assert.equal(browserUser.companyId, null); assert.ok(browserUser); assert.equal(browserUser.accessRules.length, 1);
   assert.equal(browserUser.accessRules[0].collectionName, 'Browser Hotspot');
   assert.equal(browserUser.accessRules[0].profileName, 'Network Admin');
   assert.equal(Object.hasOwn(browserUser, 'password'), false);
+  await page.screenshot({path:path.join(outputDir,'radius-1.1.0-users.png'),fullPage:true});
   const userRow = page.locator('.r-list tbody tr').filter({ hasText: 'browseradmin' });
   await userRow.locator('.rRevealPassword').click();
   await page.waitForFunction(() => document.querySelector('#rCredentialValue')?.value === '1234');
@@ -320,6 +324,7 @@ try {
   assert.equal(reportSummary.summary.radiusPolicies, 0);
   assert.equal((await page.locator('#reportsAuditBody').textContent()).includes('do-not-return'), false);
   check('Reports module summarizes optional modules and shows redacted audit activity');
+  await page.locator('#companySelect').waitFor({state:'visible'});
   await page.screenshot({ path: path.join(outputDir, 'reports.png'), fullPage: true });
 
   await page.locator('#settingsButton').click();
