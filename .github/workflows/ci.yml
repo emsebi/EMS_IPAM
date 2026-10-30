@@ -104,3 +104,12 @@ jobs:
         env:
           EMS_TEST_POSTGRES_URL: postgresql://ems_test:ems_test_password@127.0.0.1:5432/ems_ipam_test
         run: node --test tests/network-map-postgres.mjs
+
+  network-map-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run full Docker Compose map smoke with synthetic SSH
+        run: bash scripts/network-map-docker-smoke.sh
