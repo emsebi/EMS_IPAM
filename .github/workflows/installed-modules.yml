@@ -1,0 +1,30 @@
+name: EMS-IPAM Installed Modules Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, work/map-installed-check-20261101]
+    paths:
+      - scripts/installed-modules-check.py
+      - scripts/tests/installed_modules_test.py
+      - .github/workflows/installed-modules.yml
+
+permissions:
+  contents: read
+
+# Serialize with deployment without cancelling it. This job performs no deployment.
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify-installed:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test read-only health verifier
+        run: python3 -m unittest discover -s scripts/tests -p 'installed_modules_test.py'
+      - name: Verify installed modules without discovery or restart
+        run: python3 scripts/installed-modules-check.py
