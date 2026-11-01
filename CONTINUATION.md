@@ -8,7 +8,7 @@ Browser coverage uses synthetic embedded database records, not API mocks or real
 
 ## Exact next step
 
-1. Follow this branch/PR CI; remote run IDs will be recorded after publication. Fix any failing browser assertion using the actual result. Do not deploy while tests are pending or failed.
+1. PR #9: https://github.com/emsebi/EMS_IPAM/pull/9. Initial CI 41355085007 / 41355080933 failed the pre-existing Radio mobile-width assertion (395 > 390 pixels), before reaching map tests; Core/API, PostgreSQL and Docker/SSH passed. Runs 41355217689 / 41355213667 cover the intermediate address-space-label change. The latest fix creates overlapping inventory through the real API only at the map test stage, keeping earlier module fixtures unchanged; Radio code and assertions are unchanged. This suspected fixture interference is not yet proven resolved. Follow the newest PR-head CI and record its run ID/outcome; do not deploy while tests are pending or failed.
 2. When the exact head passes Core/API/RADIUS, browser, PostgreSQL and Docker/SSH gates, merge with expected SHA and stage through the existing EMS-IPAM Lab Deploy. Preserve backup, volumes, credentials, port 8888 and all accepted modules. Record the actual deployment run and inspect completed data-preservation, installed-module and signed-reply checks; never equate queued with success.
 3. Keep live-device discovery out of scope until explicit target addresses are supplied; no TOTP, radio redesign or router push in this increment.
 

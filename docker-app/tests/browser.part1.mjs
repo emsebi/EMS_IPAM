@@ -314,6 +314,11 @@ try {
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
+  // Keep map-only overlapping inventory out of earlier module layout fixtures.
+  const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/25'},201);
+  await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
+  await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
+  await page.reload();
   await page.locator('button.module-nav-link[data-module-id="network-map"]').click();
   await page.locator('#nmSettings').waitFor({state:'visible'});
   await page.locator('#nmUsername').fill('browser-readonly');
