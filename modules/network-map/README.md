@@ -1,4 +1,10 @@
-# Smart Network Map — 0.2.0-lab.1
+# Smart Network Map — 0.2.0-lab.2
+
+## Saved IPv4 trace API
+
+Administrator-only `GET /api/network-map/trace-ip?companyId=…&ip=192.0.2.50` reuses active IPAM host records and saved MAC forwarding tables. Optional `spaceId` disambiguates overlapping address spaces inside the selected Company; records from other Companies and archived hosts/spaces are excluded. The existing MAC trace API and UI are unchanged; UI integration is the next increment.
+
+The result contains bounded inventory `records` (up to 100) and `matches` with a MAC trace for each distinct valid MAC. `recordUpdatedAt` describes an inventory edit, **not** a network observation; inventory `observedAt` is null. Switch observations retain their own source/time/staleness. Resolution is `not-found`, `missing-mac`, `ambiguous` or `inventory-match`; overall confidence remains `uncertain` because no observed ARP binding is available. Missing switch observation times are stale. This endpoint never performs ARP, SSH, ping, discovery or automatic MAC refresh. IPv6 lookup is not included in this increment.
 
 This increment adds an isolated, administrator-only **manual read-only discovery** flow. It does not push configuration and does not poll automatically.
 

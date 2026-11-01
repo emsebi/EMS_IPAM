@@ -57,6 +57,15 @@ test('network-map migration and manual discovery persist on PostgreSQL 16',async
   assert.equal(state.body.job.status,'completed');
   assert.equal(collects,1);
   assert.equal(state.body.topology.nodes[0].hostname,'pg-core');
+  await pool.query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES('map-pg-space','map-pg-co','Saved IP test','192.0.2.0/24')");
+  await pool.query("INSERT INTO hosts(id,space_id,ip,mac) VALUES('map-pg-host','map-pg-space','192.0.2.50','00:11:22:33:44:55')");
+  const savedIp=(await call(module,'GET','/trace-ip?ip=192.0.2.50&spaceId=map-pg-space')).body;
+  assert.equal(savedIp.resolution,'inventory-match');
+  assert.equal(savedIp.confidence,'uncertain');
+  assert.equal(savedIp.records[0].observedAt,null);
+  assert.ok(savedIp.records[0].recordUpdatedAt);
+  assert.equal(savedIp.matches[0].trace.observations[0].port,'Gi1/0/1');
+  assert.equal(collects,1,'IP lookup must reuse saved evidence without collection');
   assert.equal((await pool.query("SELECT count(*)::int AS count FROM network_map_snapshots WHERE company_id='map-pg-co'")).rows[0].count,1);
 
   module=createModule(context);
