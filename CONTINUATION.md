@@ -1,3 +1,19 @@
+# Current work — saved IP trace UI, 2026-11-02 (Tehran)
+
+Fresh main `62654e23aad649fb6d04b8062b698cbcdd46cc8a` and API merge `ea9045f` both have successful CI (41339820329 / 41339777691). PR #8 is merged. Installed release is still `d1c712a`; API and UI increments are not yet installed. RADIUS real-device login remains OPEN / unverified.
+
+Branch `work/map-ip-trace-ui-20261102` completes the saved-data search UI on the existing module (version 0.2.0-lab.3). An explicit MAC/IPv4 selector preserves the existing MAC route. IP results display all candidates, address-space identity, inventory edit timestamps and unobserved/uncertain IP bindings. Clicking a candidate opens the existing saved MAC/port/VLAN evidence with its own source/time/staleness. Result requests are guarded against stale responses after search/company changes or clearing. No discovery, device probe or configuration push is added.
+
+Browser coverage uses synthetic embedded database records, not API mocks or real devices: overlapping IP candidates, provenance, selecting a saved MAC/port, no-match, old MAC search, clear, and zero Network Map mutation requests/snapshots during lookup. Local JavaScript syntax and diff checks passed. Local browser execution was BLOCKED before browser launch because Playwright Chromium is absent; no browser pass is claimed. CI installs Chromium and is the required browser gate.
+
+## Exact next step
+
+1. Follow this branch/PR CI; remote run IDs will be recorded after publication. Fix any failing browser assertion using the actual result. Do not deploy while tests are pending or failed.
+2. When the exact head passes Core/API/RADIUS, browser, PostgreSQL and Docker/SSH gates, merge with expected SHA and stage through the existing EMS-IPAM Lab Deploy. Preserve backup, volumes, credentials, port 8888 and all accepted modules. Record the actual deployment run and inspect completed data-preservation, installed-module and signed-reply checks; never equate queued with success.
+3. Keep live-device discovery out of scope until explicit target addresses are supplied; no TOTP, radio redesign or router push in this increment.
+
+---
+
 # Current work — saved IPv4 trace API, 2026-11-01
 
 Fresh main: `a51503ec1a219489f9498c2eddb346d7e6cdbe55`. Its CI 41334494387, PR #7 merge CI 41334450553 and installed-module recheck 41334450509 all completed SUCCESS. PR #6, #4 and #7 are merged. Installed functional release remains `d1c712a`, with verified deployment 41329218765 and all seven modules available. Real RouterOS login remains OPEN / unverified.

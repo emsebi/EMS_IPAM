@@ -32,4 +32,13 @@ INSERT INTO hosts(id,space_id,ip,name,type,radio_mode,radio_parent_host_id,ssid)
  ('st1','test-space','192.0.2.11','Station One','Radio','station','ap1','Office'),
  ('st2','test-space','192.0.2.21','Station Two','Radio','station','ap2','Warehouse'),
  ('st3','test-space','192.0.2.31','Station Three','Radio','station','ap3','Remote');`);
+await db.exec(`INSERT INTO address_spaces(id,company_id,name,cidr) VALUES('trace-space','test-co','Overlapping fixture','192.0.2.0/25');
+INSERT INTO hosts(id,space_id,ip,name,mac) VALUES
+ ('trace-a','test-space','192.0.2.60','Trace candidate A','02:00:00:00:00:60'),
+ ('trace-b','trace-space','192.0.2.60','Trace candidate B','02:00:00:00:00:61');`);
+await db.query('INSERT INTO network_map_state(company_id,topology) VALUES($1,$2::jsonb)', ['test-co',JSON.stringify({
+ nodes:[{id:'192.0.2.10',address:'192.0.2.10',name:'Saved fixture switch',platform:'cisco',status:'online',collectedAt:'2020-01-01T00:00:00Z',
+  ports:[{name:'Gi1',status:'up',mode:'access',vlan:'10'},{name:'Gi2',status:'up',mode:'access',vlan:'20'}],
+  macs:[{mac:'02:00:00:00:00:60',port:'Gi1',vlan:'10'},{mac:'02:00:00:00:00:61',port:'Gi2',vlan:'20'}]}],links:[],updatedAt:'2020-01-01T00:00:00Z'
+})]);
 console.log('TEST_FIXTURES_READY');
