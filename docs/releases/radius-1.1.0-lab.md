@@ -10,6 +10,8 @@ Local validation: 16 Chromium browser/API scenarios, 191 Core/API tests (includi
 
 This release also adds Message-Authenticator to every RADIUS authentication reply and strict signature regression coverage for RouterOS clients. The real-device incident still requires a successful new login to close. SQL selected full/15 and isolated protocol tests passed, but effective authorization on the user's router still needs router-side evidence; see [incident record](../test-results/radius-authorization-2026-10-28.md).
 
+Reply-signature head `83d1922` passed CI [41304146335](https://github.com/emsebi/EMS_IPAM/actions/runs/41304146335) and real lab [41304142213](https://github.com/emsebi/EMS_IPAM/actions/runs/41304142213). Installed reply checks can use an explicit temporary loopback-only NAS/account when no existing loopback account is authorized. They remove those exact records and compare configuration fingerprints; existing credentials are neither printed nor reset. The same check is exercised against disposable containers before use on the installed VM.
+
 ## Screenshots and test evidence
 
 Synthetic test data only; the screenshots do not contain the installed lab's credentials. Core Company/space selectors are hidden while RADIUS is open and return when navigating to IPAM/other modules.

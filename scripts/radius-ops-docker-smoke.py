@@ -633,6 +633,17 @@ def main():
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
             assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '13'
             print('PASS persistent data and migration ledger after restart')
+            # Exercise the exact post-deployment probe against real containers,
+            # including its temporary /32, client reload and complete cleanup.
+            installed_check = run([
+                sys.executable, str(ROOT/'scripts/radius-installed-reply-check.py'),
+                '--require-signed', '--temporary-loopback-fixture',
+                '--db-container', dc('ps','-q','db').stdout.strip(),
+                '--radius-container', dc('ps','-q','radius_ops').stdout.strip(),
+            ], timeout=100)
+            print(installed_check.stdout, end='', flush=True)
+            wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'),
+                 'Existing NAS works after temporary installed-check fixture cleanup', seconds=45)
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
             dc('stop', 'db', timeout=60)
