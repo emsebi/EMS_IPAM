@@ -10,10 +10,12 @@ The existing deployment only required HTTP 200 from /health; a disabled module c
 
 The new `EMS-IPAM Installed Modules Check` workflow runs this read-only check on the dedicated VM without reinstalling or restarting containers. It shares the deployment concurrency group without cancelling a running deployment. The existing Lab Deploy also invokes this gate for future releases. This change does not alter app code, stored settings, credentials or volumes.
 
-## Exact next step
+## Verified gates and exact next step
 
-1. Follow Installed Modules Check and CI for branch `work/map-installed-check-20261101`; the remote run IDs will be recorded once created. Require actual completed success before claiming installed Network Map availability.
-2. Merge this diagnostic-only change with expected head SHA after its CI and installed check pass. No new deployment is needed just to run this read-only gate; installed functional release remains `d1c712a`.
+1. [Installed Modules Check 41334302858](https://github.com/emsebi/EMS_IPAM/actions/runs/41334302858) completed SUCCESS on `4d1f13bab5cda8a72317f1dd3f60d80735bf93f3`: the installed VM reports database ready and all seven modules loaded (including Network Map). Job `124930748508` passed four verifier tests and the fixed loopback GET without discovery or restart. PR #7 contains this gate. Follow PR CI [41334309419](https://github.com/emsebi/EMS_IPAM/actions/runs/41334309419) and push CI [41334302668](https://github.com/emsebi/EMS_IPAM/actions/runs/41334302668); both completed SUCCESS on the exact PR head `4d1f13b`. PR #7 was merged with that expected SHA after both CI and the installed check passed.
+Merge commit: `e0442a6a28ecc282edd957b909224136eeebe7c1`. Its automatic CI [41334450553](https://github.com/emsebi/EMS_IPAM/actions/runs/41334450553) and installed recheck [41334450509](https://github.com/emsebi/EMS_IPAM/actions/runs/41334450509) were in progress at this final checkpoint; follow their actual outcomes next run. The merge tree exactly matches tested PR head `4d1f13b`; this follow-up changes documentation/checksums only.
+
+2. No new deployment is needed for this diagnostic-only change: installed functional release remains `d1c712a`. The check is now available for future use, and future Lab Deploy runs require module readiness. Do not repeatedly redeploy or re-run completed verification without a new change or failure.
 3. Next independent map milestone: extend existing MAC Trace toward IP lookup from saved evidence, with source/time/uncertainty and tests. Do not add background collection. Live Cisco/MikroTik compatibility still requires an explicit device scope; do not scan a real network or push router configuration.
 
 Preserve administrator RADIUS Show/Copy/Hide and Shared Secret reveal, explicit NAS Collections without Company, credentials/memberships/Inventory links, Core Company and MAB/NAC boundaries, port 8888 and existing modules. TOTP remains deferred.
