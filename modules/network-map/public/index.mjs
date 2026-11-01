@@ -2,7 +2,7 @@ export function createUi(ctx) {
   const {state,page,request,escapeHtml:esc,toast,formatDateTime:date,openToolMenu}=ctx;
   const L=(en,fa)=>state.language==='fa'?fa:en;
   let company='',tab='settings',settings={},hasPassword=false,topology={nodes:[],links:[]},layout={positions:{},background:''},records=[],types=[],job=null;
-  let selected='',selectedPort='',trace=null,impactResult=null,highlightLinks=new Set(),highlightNodes=new Set(),monitor=false,timer=null,poll=null,generation=0,zoom=1;
+  let selected='',selectedPort='',trace=null,ipTrace=null,traceSequence=0,impactResult=null,highlightLinks=new Set(),highlightNodes=new Set(),monitor=false,timer=null,poll=null,generation=0,zoom=1;
   const active=()=>state.currentModuleId==='network-map'&&state.view==='module';
   const api=(path,method='GET',body)=>request(`/api/network-map${path}${path.includes('?')?'&':'?'}companyId=${encodeURIComponent(company)}`,{method,...(body===undefined?{}:{body})});
   const status=n=>n.reachability==='unreachable'?'unreachable':n.status||'unknown';
@@ -30,7 +30,7 @@ export function createUi(ctx) {
       <div class="nm-stats"><article><b>${topology.nodes.length}</b><span>${L('Devices','تجهیزات')}</span></article><article><b>${topology.links.length}</b><span>${L('Connections','اتصالات')}</span></article><article class="nm-green"><b>${online}</b><span>${L('Collected / reachable','اطلاعات دریافت‌شده')}</span></article><article class="nm-red"><b>${down}</b><span>${L('No response','بدون پاسخ')}</span></article><article class="nm-time"><span>${L('Last map collection','آخرین دریافت نقشه')}</span><strong>${esc(when(topology.updatedAt))}</strong></article></div>
       <nav class="nm-tabs" aria-label="${L('Network map sections','بخش‌های نقشه')}">${[['settings',L('Connection settings','تنظیمات اتصال')],['map',L('Network & devices','نقشه و تجهیزات')],['archive',L('Saved files','فایل‌های ذخیره‌شده')]].map(([id,label])=>`<button class="btn ${tab===id?'primary':''}" data-nm-tab="${id}">${label}</button>`).join('')}</nav>
       <div id="nmJob"></div><div id="nmBody"></div></div>`;
-    listen('#nmCompany','change',async e=>{stop();company=e.target.value;state.currentCompanyId=company;monitor=false;trace=null;impactResult=null;selected='';highlightLinks.clear();highlightNodes.clear();if(await load()){tab=hasPassword?'map':'settings';render();scheduleJob();}});
+    listen('#nmCompany','change',async e=>{stop();company=e.target.value;state.currentCompanyId=company;monitor=false;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';highlightLinks.clear();highlightNodes.clear();if(await load()){tab=hasPassword?'map':'settings';render();scheduleJob();}});
     page.querySelectorAll('[data-nm-tab]').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.nmTab;render();}));jobBanner();
   }
   function jobBanner(){
@@ -69,14 +69,14 @@ export function createUi(ctx) {
   async function startScan(deviceId){await api('/scan','POST',deviceId?{deviceId}:{});const s=await api('/state');job=s.job;jobBanner();scheduleJob();}
   function scheduleJob(){
     clearTimeout(poll);if(job?.status!=='running'||!active())return;const token=generation;
-    poll=setTimeout(async()=>{try{if(!active()||token!==generation)return;const data=await api('/state');if(token!==generation)return;job=data.job;jobBanner();if(job?.status==='running')scheduleJob();else{topology=data.topology;trace=null;highlightLinks.clear();highlightNodes.clear();if(tab==='map')render();}}catch(e){toast(e.message);}},1500);
+    poll=setTimeout(async()=>{try{if(!active()||token!==generation)return;const data=await api('/state');if(token!==generation)return;job=data.job;jobBanner();if(job?.status==='running')scheduleJob();else{topology=data.topology;trace=null;ipTrace=null;traceSequence++;highlightLinks.clear();highlightNodes.clear();if(tab==='map')render();}}catch(e){toast(e.message);}},1500);
   }
   async function refreshHealth(){const token=generation,data=await api('/health','POST',{});if(token!==generation||!active())return;topology=data.topology;if(tab==='map'){drawGraph();renderDetail();}}
   function scheduleMonitor(){clearTimeout(timer);if(!monitor||!active())return;timer=setTimeout(async()=>{if(!active()){monitor=false;return;}try{if(job?.status!=='running')await refreshHealth();}catch(e){toast(e.message);}scheduleMonitor();},30000);}
   function renderMap(){
     page.querySelector('#nmBody').innerHTML=`<div class="nm-toolbar"><button id="nmScan" class="btn primary" ${hasPassword?'':'disabled'}>${L('Create / refresh map','ایجاد / به‌روزرسانی نقشه')}</button><button id="nmHealth" class="btn">${L('Check reachability','بررسی اتصال تجهیزات')}</button><label class="nm-check"><input id="nmMonitor" type="checkbox" ${monitor?'checked':''}>${L('Reachability every 30s','بررسی اتصال هر ۳۰ ثانیه')}</label></div>
       <p class="nm-muted">${L('Port and MAC tables update only when you explicitly refresh the map or device. Reachability checks use ICMP / TCP only.','اطلاعات پورت و MAC فقط با رفرش دستی نقشه یا دستگاه به‌روزرسانی می‌شود. پایش اتصال فقط ICMP / TCP را بررسی می‌کند.')}</p>
-      <form id="nmTraceForm" class="nm-search"><span>⌕</span><input id="nmMac" class="ltr mono" list="nmSuggestions" autocomplete="off" placeholder="${L('Search a MAC address or choose a saved record','MAC را بنویسید یا از پیشنهادها انتخاب کنید')}"><datalist id="nmSuggestions"></datalist><button class="btn primary" type="submit">${L('Trace MAC','ردیابی MAC')}</button><button id="nmAddMac" class="btn" type="button">＋ ${L('Register MAC','ثبت MAC')}</button><button id="nmClearTrace" class="btn" type="button">${L('Clear','پاک کردن')}</button></form>
+      <form id="nmTraceForm" class="nm-search"><span>⌕</span><select id="nmTraceKind" aria-label="${L('Search type','نوع جست‌وجو')}"><option value="mac">MAC</option><option value="ip">IPv4</option></select><input id="nmMac" class="ltr mono" list="nmSuggestions" autocomplete="off" placeholder="${L('Enter a MAC or IPv4 address','MAC یا آدرس IPv4 را وارد کنید')}"><datalist id="nmSuggestions"></datalist><button class="btn primary" type="submit">${L('Trace saved data','ردیابی اطلاعات ذخیره‌شده')}</button><button id="nmAddMac" class="btn" type="button">＋ ${L('Register MAC','ثبت MAC')}</button><button id="nmClearTrace" class="btn" type="button">${L('Clear','پاک کردن')}</button></form>
       <div id="nmTraceResult"></div><div class="nm-map-grid"><section class="panel nm-map-panel"><div class="nm-map-tools"><input id="nmFindDevice" placeholder="${L('Find a device…','یافتن تجهیز…')}" aria-label="${L('Find a device','یافتن تجهیز')}"><label class="btn nm-file">${L('Floor plan image','تصویر پس‌زمینه')}<input type="file" id="nmBackground" accept="image/png,image/jpeg,image/webp"></label><button id="nmRemoveBackground" class="btn sm">${L('Remove image','حذف تصویر')}</button><button id="nmSaveLayout" class="btn sm">${L('Save positions','ذخیره چیدمان')}</button><button id="nmZoomOut" class="btn sm" aria-label="Zoom out">−</button><button id="nmZoomIn" class="btn sm" aria-label="Zoom in">＋</button><button id="nmFit" class="btn sm">${L('Fit','نمای کامل')}</button></div>
       <div class="nm-canvas"><svg id="nmGraph" viewBox="0 0 2000 1200" role="img" aria-label="${L('Network topology','نقشه اتصالات شبکه')}"></svg>${topology.nodes.length?'':`<div class="nm-empty-overlay"><b>${L('Your network starts here','نقشه شبکه از اینجا شروع می‌شود')}</b><p>${L('Save the connection settings, then select Create map.','تنظیمات اتصال را ذخیره کنید و «ایجاد نقشه» را بزنید.')}</p></div>`}</div>
       <div class="nm-legend">${[['online',L('Collected','اطلاعات دریافت‌شده')],['unreachable',L('No response','بدون پاسخ')],['partial',L('Incomplete / login issue','ناقص / خطای ورود')],['unknown',L('Unknown / stale','نامشخص / قدیمی')]].map(([s,l])=>`<span><i class="nm-dot ${s}"></i>${l}</span>`).join('')}<span>━ ${L('Port up','پورت متصل')}</span><span>┄ ${L('Unverified link','لینک تاییدنشده')}</span></div>
@@ -84,9 +84,16 @@ export function createUi(ctx) {
       <dialog id="nmMacDialog" class="nm-dialog"></dialog>`;
     listen('#nmScan','click',()=>startScan());listen('#nmHealth','click',refreshHealth);
     listen('#nmMonitor','change',e=>{monitor=e.target.checked;scheduleMonitor();});
-    listen('#nmTraceForm','submit',async e=>{e.preventDefault();trace=await api('/trace?mac='+encodeURIComponent(page.querySelector('#nmMac').value.trim()));highlightLinks=new Set(trace.paths.flatMap(p=>p.links||[]));highlightNodes=new Set(trace.observations.map(o=>o.nodeId));impactResult=null;drawGraph();renderTrace();if(trace.candidates.length===1){selected=trace.candidates[0].nodeId;selectedPort=trace.candidates[0].port;renderDetail();}});
-    listen('#nmMac','input',updateSuggestions);listen('#nmAddMac','click',()=>macDialog(page.querySelector('#nmMac').value));
-    listen('#nmClearTrace','click',()=>{trace=null;highlightNodes.clear();highlightLinks.clear();page.querySelector('#nmMac').value='';renderTrace();drawGraph();});
+    listen('#nmTraceForm','submit',async e=>{e.preventDefault();const query=page.querySelector('#nmMac').value.trim();
+      if(page.querySelector('#nmTraceKind').value==='mac'){ipTrace=null;return showMacTrace(query);}
+      const token=generation,sequence=++traceSequence;trace=null;ipTrace=null;highlightLinks.clear();highlightNodes.clear();renderTrace();drawGraph();
+      const result=await api('/trace-ip?ip='+encodeURIComponent(query));if(token!==generation||sequence!==traceSequence||!active())return;
+      ipTrace=result;impactResult=null;selected='';selectedPort='';
+      highlightLinks=new Set(result.matches.flatMap(m=>m.trace.paths.flatMap(p=>p.links||[])));
+      highlightNodes=new Set(result.matches.flatMap(m=>m.trace.observations.map(o=>o.nodeId)));renderTrace();drawGraph();renderDetail();});
+    listen('#nmTraceKind','change',()=>{traceSequence++;trace=null;ipTrace=null;highlightLinks.clear();highlightNodes.clear();renderTrace();drawGraph();});
+    listen('#nmMac','input',updateSuggestions);listen('#nmAddMac','click',()=>macDialog(page.querySelector('#nmTraceKind').value==='ip'?'':page.querySelector('#nmMac').value));
+    listen('#nmClearTrace','click',()=>{traceSequence++;trace=null;ipTrace=null;highlightNodes.clear();highlightLinks.clear();page.querySelector('#nmMac').value='';renderTrace();drawGraph();});
     listen('#nmSaveLayout','click',async()=>{await api('/layout','PUT',layout);toast(L('Map positions saved.','چیدمان نقشه ذخیره شد.'));});
     listen('#nmRemoveBackground','click',async()=>{layout.background='';await api('/layout','PUT',layout);drawGraph();});
     listen('#nmBackground','change',async e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>3*1024*1024)throw new Error(L('Maximum image size is 3 MB.','حداکثر اندازه تصویر ۳ مگابایت است.'));
@@ -132,11 +139,28 @@ export function createUi(ctx) {
     el.querySelectorAll('[data-port]').forEach(b=>b.addEventListener('click',()=>{selectedPort=b.dataset.port;renderDetail();}));
     const p=n.ports?.find(p=>p.name===selectedPort);if(p)page.querySelector('#nmPortDetail').innerHTML=`<h4 class="ltr">${esc(p.name)}</h4><dl class="nm-facts">${Object.entries(p).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v||'—')}</dd></div>`).join('')}</dl><p class="nm-muted">${L('A = access · T = trunk · ? = unknown. Green = up, gray = down, amber = administratively disabled.','A = اکسس · T = ترانک · ? = نامشخص. سبز = متصل، خاکستری = بدون لینک، نارنجی = خاموش مدیریتی.')}</p>`;
   }
+  async function showMacTrace(mac){
+    const token=generation,sequence=++traceSequence;
+    const result=await api('/trace?mac='+encodeURIComponent(mac));if(token!==generation||sequence!==traceSequence||!active())return;
+    trace=result;highlightLinks=new Set(trace.paths.flatMap(p=>p.links||[]));highlightNodes=new Set(trace.observations.map(o=>o.nodeId));impactResult=null;
+    selected=trace.candidates.length===1?trace.candidates[0].nodeId:'';selectedPort=trace.candidates.length===1?trace.candidates[0].port:'';
+    drawGraph();renderTrace();renderDetail();
+  }
+  function ipTraceHtml(){
+    if(!ipTrace)return '';
+    const label=({'not-found':L('No saved IP record','رکورد IP یافت نشد'),'missing-mac':L('No valid saved MAC','MAC معتبر ثبت نشده'),ambiguous:L('Multiple or incomplete matches','چند نتیجه یا اطلاعات ناقص'),'inventory-match':L('Inventory match','تطبیق با فهرست تجهیزات')})[ipTrace.resolution];
+    return `<section class="panel nm-ip-result"><h3 class="ltr">${esc(ipTrace.ip)}</h3><b>${esc(label)} · ${L('Uncertain','نامطمئن')}</b><p>${L('Saved inventory assignments are not live ARP observations. Choose a MAC to inspect its saved switch evidence.','این تخصیص ثبت‌شده در فهرست تجهیزات است، نه مشاهده زنده ARP. برای دیدن اطلاعات ذخیره‌شده سوئیچ، یک MAC را انتخاب کنید.')}</p>
+      ${ipTrace.truncated?`<p class="nm-notice">${L('Only the first 100 records are shown. Results are incomplete.','فقط ۱۰۰ رکورد نخست نمایش داده می‌شود؛ نتیجه کامل نیست.')}</p>`:''}
+      <div class="nm-trace-observations">${ipTrace.records.map(r=>`<article class="nm-observation nm-ip-record"><b>${esc(r.name||r.hostId)}</b><code>${esc(r.mac||'—')}</code><span>${L('Address space','فضای آدرس')}: ${esc((state.bootstrap.spaces||[]).find(s=>s.id===r.spaceId)?.name||r.spaceId)}</span><small>${esc(r.source)} · ${L('Inventory updated','ویرایش رکورد')}: ${esc(when(r.recordUpdatedAt))}</small><small>${L('IP/MAC observation: not collected','مشاهده IP/MAC: دریافت نشده')}</small></article>`).join('')}</div>
+      <div class="nm-actions">${ipTrace.matches.map(m=>`<button class="btn" type="button" data-ip-mac="${esc(m.mac)}">${L('View saved MAC path','نمایش مسیر ذخیره‌شده MAC')} · <span class="ltr mono">${esc(m.mac)}</span></button>`).join('')}</div></section>`;
+  }
+  function bindIpMatches(el){el.querySelectorAll('[data-ip-mac]').forEach(b=>b.addEventListener('click',()=>showMacTrace(b.dataset.ipMac).catch(e=>toast(e.message))));}
   function renderTrace(){
-    const el=page.querySelector('#nmTraceResult');if(!el)return;if(!trace){el.innerHTML='';return;}
-    el.innerHTML=`<section class="panel nm-trace-result"><div class="nm-detail-head"><b class="ltr mono">${esc(trace.mac)}</b><span>${esc(trace.record?.name||L('Not registered','ثبت نشده'))}</span><button id="nmTraceRegister" class="btn sm">${trace.record?L('Edit record','ویرایش اطلاعات'):L('+ Register','+ ثبت')}</button></div><p>${L('Manufacturer','سازنده')}: ${esc(trace.vendor.name|| (trace.vendor.kind==='locally-administered'?L('Private / randomized MAC','MAC خصوصی / تصادفی'):L('Unknown','نامشخص')))} <small class="nm-muted">${L('OUI identifies the interface manufacturer, not the exact device model.','OUI سازنده رابط را نشان می‌دهد؛ مدل دقیق تجهیز از آن مشخص نمی‌شود.')}</small></p>
+    const el=page.querySelector('#nmTraceResult');if(!el)return;if(!trace){el.innerHTML=ipTraceHtml();bindIpMatches(el);return;}
+    el.innerHTML=ipTraceHtml()+`<section class="panel nm-trace-result"><div class="nm-detail-head"><b class="ltr mono">${esc(trace.mac)}</b><span>${esc(trace.record?.name||L('Not registered','ثبت نشده'))}</span><button id="nmTraceRegister" class="btn sm">${trace.record?L('Edit record','ویرایش اطلاعات'):L('+ Register','+ ثبت')}</button></div><p>${L('Manufacturer','سازنده')}: ${esc(trace.vendor.name|| (trace.vendor.kind==='locally-administered'?L('Private / randomized MAC','MAC خصوصی / تصادفی'):L('Unknown','نامشخص')))} <small class="nm-muted">${L('OUI identifies the interface manufacturer, not the exact device model.','OUI سازنده رابط را نشان می‌دهد؛ مدل دقیق تجهیز از آن مشخص نمی‌شود.')}</small></p>
       ${trace.observations.length?`<div class="nm-trace-observations">${trace.observations.map(o=>`<button class="nm-observation ${o.candidate?'candidate':''}" data-trace-node="${esc(o.nodeId)}" data-trace-port="${esc(o.port)}"><b>${esc(o.nodeName)} · ${esc(o.port)}</b><span>VLAN ${esc(o.vlan||'?')} · ${o.candidate?L('Possible endpoint','محل احتمالی تجهیز'):L('Transit / uplink','مسیر عبور / بالادست')}</span><small>${esc(o.source)} · ${esc(when(o.observedAt))}${o.stale?' · '+L('stale','قدیمی'):''}</small></button>`).join('')}</div>`:`<p>${L('No observation in saved MAC tables. Refresh the relevant devices to collect new data.','در جدول‌های ذخیره‌شده دیده نشده؛ برای دریافت اطلاعات جدید، تجهیزات مربوط را رفرش کنید.')}</p>`}
       <small class="nm-muted">${L('Highlighted paths follow the known physical topology. Unmanaged switches, multiple VLANs or old tables can make the endpoint uncertain.','مسیر برجسته بر اساس اتصالات شناخته‌شده است؛ سوئیچ غیرمدیریتی، چند VLAN یا جدول قدیمی می‌تواند محل نهایی را نامطمئن کند.')}</small></section>`;
+    bindIpMatches(el);
     listen('#nmTraceRegister','click',()=>macDialog(trace.mac,trace.record));
     el.querySelectorAll('[data-trace-node]').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.traceNode;selectedPort=b.dataset.tracePort;renderDetail();drawGraph();}));
   }

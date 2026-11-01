@@ -314,6 +314,12 @@ try {
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
+  // Keep map-only overlapping inventory out of earlier module layout fixtures.
+  const inventoryBeforeTrace=(await api('/api/inventory')).items.map(h=>h.id).sort();
+  const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/23'},201);
+  await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
+  await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
+  await page.reload();
   await page.locator('button.module-nav-link[data-module-id="network-map"]').click();
   await page.locator('#nmSettings').waitFor({state:'visible'});
   await page.locator('#nmUsername').fill('browser-readonly');
@@ -329,6 +335,44 @@ try {
   assert.equal(await page.locator('.nm-canvas').count(),1);
   check('Smart Network Map saves encrypted read-only settings without starting discovery');
   await page.screenshot({path:path.join(outputDir,'network-map-settings.png'),fullPage:true});
+
+  const traceMutations=[];
+  const traceRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')traceMutations.push(req.url());};
+  page.on('request',traceRequest);
+  await page.locator('#nmTraceKind').selectOption('ip');
+  await page.locator('#nmMac').fill('192.0.2.60');
+  await page.locator('#nmTraceForm [type=submit]').click();
+  await page.locator('.nm-ip-record').first().waitFor();
+  assert.equal(await page.locator('.nm-ip-record').count(),2);
+  assert.equal(await page.locator('[data-ip-mac]').count(),2);
+  const ipText=await page.locator('.nm-ip-result').textContent();
+  assert.match(ipText,/Test LAN/);assert.match(ipText,/Overlapping fixture/);assert.match(ipText,/نامطمئن/);assert.match(ipText,/ویرایش رکورد/);assert.match(ipText,/مشاهده IP\/MAC: دریافت نشده/);
+  await page.locator('[data-ip-mac="02:00:00:00:00:60"]').click();
+  await page.locator('.nm-trace-result').waitFor();
+  assert.match(await page.locator('.nm-trace-result').textContent(),/mac-address-table/);
+  assert.match(await page.locator('.nm-trace-result').textContent(),/قدیمی/);
+  assert.match(await page.locator('#nmPortDetail').textContent(),/Gi1/);
+  await page.locator('#nmMac').fill('192.0.2.99');
+  await page.locator('#nmTraceForm [type=submit]').click();
+  await page.locator('.nm-ip-result').getByText(/رکورد IP یافت نشد/).waitFor();
+  assert.equal(await page.locator('[data-ip-mac]').count(),0);
+  await page.locator('#nmTraceKind').selectOption('mac');
+  await page.locator('#nmMac').fill('02:00:00:00:00:61');
+  await page.locator('#nmTraceForm [type=submit]').click();
+  await page.locator('.nm-trace-result').waitFor();
+  assert.match(await page.locator('#nmPortDetail').textContent(),/Gi2/);
+  assert.equal(await page.locator('.nm-ip-result').count(),0);
+  await page.locator('#nmClearTrace').click();
+  assert.equal(await page.locator('#nmTraceResult').textContent(),'');
+  page.off('request',traceRequest);assert.deepEqual(traceMutations,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('IP trace shows every candidate and provenance; MAC trace preserved; no collection writes');
+
+  // Restore the inventory fixture before unrelated module and viewer checks.
+  await api('/api/hosts/test-space/192.0.2.60','DELETE');
+  await api(`/api/hosts/${traceSpace.id}/192.0.2.60`,'DELETE');
+  await api(`/api/spaces/${traceSpace.id}`,'DELETE');
+  assert.deepEqual((await api('/api/inventory')).items.map(h=>h.id).sort(),inventoryBeforeTrace);
 
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();
   await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
