@@ -1,0 +1,23 @@
+services:
+  ssh_fixture:
+    image: ems-ipam-base:1.7.0-rc.3
+    command: ["node", "/app/network-map-ssh-fixture.mjs"]
+    volumes:
+      - ./modules/network-map/tests/ssh-fixture.mjs:/app/network-map-ssh-fixture.mjs:ro
+    expose:
+      - "2222"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('node:net').connect(2222,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    restart: "no"
+    networks:
+      - ems_ipam_internal

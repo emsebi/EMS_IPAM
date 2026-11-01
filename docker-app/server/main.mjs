@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import ssh2 from "ssh2";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -1884,7 +1885,8 @@ for (const module of [...installedModules]) {
     if (!entry.startsWith(moduleRoot + path.sep)) throw new Error("Invalid module backend path");
     const { createModule } = await import(pathToFileURL(entry).href);
     const handler = createModule({ pool,json,readBody,cleanText,validColor,requireAdmin,audit,broadcast,
-      requireModuleAccess,canAccessSpace,pingMany,storePingResults });
+      requireModuleAccess,canAccessSpace,pingMany,storePingResults,
+      createSshClient: () => new ssh2.Client(), backupDir: BACKUP_DIR });
     if (typeof handler.match !== "function" || typeof handler.handle !== "function") throw new Error("Invalid module contract");
     moduleHandlers.push(handler);
   } catch (error) {

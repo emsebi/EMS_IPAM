@@ -1,7 +1,7 @@
 // Pure, offline parser for Cisco IOS LLDP/CDP detail output.
 // No network connections are made by this module.
 const trim = (value, limit = 160) => String(value ?? "").trim().slice(0, limit);
-const normalizePort = (value) => trim(value).replace(/^(GigabitEthernet)/i, "Gi").replace(/^(TenGigabitEthernet)/i, "Te").replace(/^(FastEthernet)/i, "Fa").replace(/^(Ethernet)/i, "Eth");
+export const normalizePort = (value) => trim(value).replace(/^(TwentyFiveGigE)/i, "Twe").replace(/^(FortyGigabitEthernet)/i, "Fo").replace(/^(HundredGigE)/i, "Hu").replace(/^(GigabitEthernet)/i, "Gi").replace(/^(TenGigabitEthernet)/i, "Te").replace(/^(FastEthernet)/i, "Fa").replace(/^(Ethernet)/i, "Eth").replace(/^(Port-channel)/i, "Po");
 // Chassis id belongs to the same LLDP record as its local interface.
 const splitBlocks = (text) => String(text ?? "").split(/\r?\n(?=(?:Device ID:|Local Intf:|Local Interface:))/i);
 
