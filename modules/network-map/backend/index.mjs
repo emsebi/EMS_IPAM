@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {fail,text,normalizeMac,settingsInput,expandScopes,emptyTopology,buildTopology,impact,traceMac,layoutInput} from './model.mjs';
+import {fail,text,normalizeMac,settingsInput,expandScopes,emptyTopology,buildTopology,impact,traceMac,lookupIp,traceSavedIp,layoutInput} from './model.mjs';
 import {vault} from './vault.mjs';
 import {collectDevice,probeTcp} from '../discovery/ssh.mjs';
 
@@ -131,6 +131,15 @@ export function createModule(ctx) {
       if(typeId&&!(await pool.query('SELECT id FROM device_types WHERE id=$1',[typeId])).rowCount)throw fail('Device type was not found.');
       const result=await pool.query(`INSERT INTO network_mac_registry(id,company_id,mac,name,device_type_id,owner,notes) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(company_id,mac) DO UPDATE SET name=excluded.name,device_type_id=excluded.device_type_id,owner=excluded.owner,notes=excluded.notes,updated_at=now() RETURNING id`,[crypto.randomUUID(),c,mac,name,typeId,text(b.owner),text(b.notes,1000)]);
       await audit(user,'network-map.mac.save','network_mac',result.rows[0].id,{companyId:c});return json(res,200,{ok:true,id:result.rows[0].id});
+    }
+    if(route==='/trace-ip'&&method==='GET'){
+      const ip=lookupIp(url.searchParams.get('ip')),spaceId=text(url.searchParams.get('spaceId'),100);
+      const rows=(await pool.query(`SELECT h.id,h.space_id AS "spaceId",h.name,h.mac,h.updated_at AS "recordUpdatedAt"
+        FROM hosts h JOIN address_spaces s ON s.id=h.space_id
+        WHERE s.company_id=$1 AND h.ip=$2 AND ($3::text='' OR s.id=$3)
+          AND h.deleted_at IS NULL AND s.deleted_at IS NULL ORDER BY h.space_id,h.id LIMIT 101`,[c,ip,spaceId])).rows;
+      const {topology}=await readState(c),record=await readSettings(c);
+      return json(res,200,{ok:true,...traceSavedIp(topology,ip,rows,record?.settings.rootId)});
     }
     if(route==='/trace'&&method==='GET'){
       const mac=normalizeMac(url.searchParams.get('mac')),{topology}=await readState(c),record=await readSettings(c);

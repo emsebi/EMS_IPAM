@@ -1,3 +1,23 @@
+# Current work — saved IPv4 trace API, 2026-11-01
+
+Fresh main: `a51503ec1a219489f9498c2eddb346d7e6cdbe55`. Its CI 41334494387, PR #7 merge CI 41334450553 and installed-module recheck 41334450509 all completed SUCCESS. PR #6, #4 and #7 are merged. Installed functional release remains `d1c712a`, with verified deployment 41329218765 and all seven modules available. Real RouterOS login remains OPEN / unverified.
+
+## This increment
+
+Branch `work/map-saved-ip-trace-20261101` adds administrator-only `GET /api/network-map/trace-ip?companyId=…&ip=192.0.2.50`, optionally restricted by `spaceId`. It reads active IPAM inventory assignments only within the selected Company and joins each distinct valid MAC to the existing saved forwarding-table trace. No ARP, ping, SSH, automatic discovery or MAC refresh occurs. No migration or RADIUS changes are included.
+
+Inventory edit time is `recordUpdatedAt`, never a claimed network observation (`observedAt=null`). Switch evidence retains separate source/time/staleness. Missing/invalid MAC, multiple candidate MACs, archived records and a 100-row limit are handled explicitly. Overall IP-to-MAC confidence stays uncertain because no observed ARP binding is available. Missing switch collection time now correctly counts as stale.
+
+Module version is 0.2.0-lab.2. This is an API increment; the existing MAC UI is unchanged. Tests cover scoped IP lookup, duplicate IPs, excluded archived/other-Company records, admin enforcement, no collection/probe, evidence bounds and missing timestamps. The PostgreSQL gate now exercises the new route against saved inventory and checks that the collector count does not change.
+
+## Exact next step
+
+1. Follow CI for this branch/PR, including the real PostgreSQL gate and Docker/SSH fixture; run IDs will be recorded after publication. Do not deploy or claim CI success while pending.
+2. After successful checks, continue the same implementation with an IP/MAC search UI: render every candidate and clearly separate inventory edit time from switch observation time. Preserve the MAC route and saved-password features. Add browser coverage before staging this user-facing increment through the existing Lab Deploy workflow.
+3. Do not scan live equipment without an explicit scope, push router configuration, enable TOTP or close the real-device RADIUS incident based on server ACCEPT.
+
+---
+
 # Current checkpoint — map deployed; installed-module gate, 2026-11-01
 
 Fresh main was `58881b3512f85a2f5307d31edcba524774a50d0b`. PR #6 and PR #4 are merged. [Lab Deploy 41329218765](https://github.com/emsebi/EMS_IPAM/actions/runs/41329218765) for `d1c712af0f809144472cde7f0498aa31639bd1cc` is now **completed / success**, not pending. The exact installed commit includes Smart Network Map and signed, Company-free RADIUS. Merge CI [41329180890](https://github.com/emsebi/EMS_IPAM/actions/runs/41329180890), deployment-branch CI [41329218685](https://github.com/emsebi/EMS_IPAM/actions/runs/41329218685), and checkpoint CI [41329331100](https://github.com/emsebi/EMS_IPAM/actions/runs/41329331100) also passed.

@@ -107,11 +107,30 @@ export function traceMac(topology,mac,root) {
     const uplink=topology.links.some(l=>(l.source===n.id&&l.sourcePort===normalizePort(row.port))||(l.target===n.id&&l.targetPort===normalizePort(row.port)));
     const port=n.ports?.find(p=>normalizePort(p.name)===normalizePort(row.port));
     observations.push({...row,nodeId:n.id,nodeName:n.name,observedAt:n.collectedAt,source:n.platform==='mikrotik'?'bridge-host':'mac-address-table',
-      candidate:!uplink&&port?.mode!=='trunk',stale:!['online','partial'].includes(n.status)||Date.now()-Date.parse(n.collectedAt)>300000});
+      candidate:!uplink&&port?.mode!=='trunk',stale:!['online','partial'].includes(n.status)||!Number.isFinite(Date.parse(n.collectedAt))||Date.now()-Date.parse(n.collectedAt)>300000});
   }
   const candidates=observations.filter(o=>o.candidate);
   return {mac,observations,candidates,paths:candidates.map(o=>({nodeId:o.nodeId,port:o.port,links:shortest(topology,root,o.nodeId)})),
     confidence:candidates.length===1&&!candidates[0].stale?'candidate':'uncertain'};
+}
+export function lookupIp(value) {
+  const ip=String(value??'').trim();
+  if(net.isIP(ip)!==4)throw fail('Enter a single IPv4 address for saved-record lookup.');
+  return ip;
+}
+export function traceSavedIp(topology,ip,rows,root) {
+  ip=lookupIp(ip);
+  const truncated=rows.length>100,records=rows.slice(0,100).map(row=>{
+    let mac=null;try{mac=normalizeMac(row.mac);}catch{}
+    return {hostId:row.id,spaceId:row.spaceId,name:row.name,ip,mac,source:'ipam-inventory',
+      recordUpdatedAt:row.recordUpdatedAt||null,observedAt:null};
+  });
+  const macs=[...new Set(records.map(row=>row.mac).filter(Boolean))];
+  const resolution=!records.length?'not-found':!macs.length?'missing-mac':
+    truncated||macs.length>1||records.some(row=>!row.mac)?'ambiguous':'inventory-match';
+  return {ip,resolution,confidence:'uncertain',truncated,records,
+    note:'Inventory IP-to-MAC assignments are saved records, not observed ARP bindings. MAC forwarding evidence has its own source and collection time.',
+    matches:macs.map(mac=>({mac,trace:traceMac(topology,mac,root)}))};
 }
 export function layoutInput(body) {
   if(!body||typeof body.positions!=='object'||Array.isArray(body.positions)||!body.positions)throw fail('Invalid map layout.');
