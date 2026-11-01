@@ -57,6 +57,14 @@ def reply_has_attributes(output, expected):
     return True
 
 
+def reply_has_message_authenticator(output):
+    if not parsed_radtest_reply(output):
+        return False
+    response = re.split(r'(?m)^Received Access-(?:Accept|Reject|Challenge) ', output, maxsplit=1)[1]
+    values = re.findall(r'(?m)^\s*Message-Authenticator\s*=\s*0x([0-9a-fA-F]{32})\s*$', response)
+    return len(values) == 1 and values[0] != '0' * 32
+
+
 def port(protocol):
     kind = socket.SOCK_DGRAM if protocol == 'udp' else socket.SOCK_STREAM
     with socket.socket(socket.AF_INET, kind) as s:
@@ -175,7 +183,8 @@ def main():
             raise AssertionError(f'Timeout: {label}{suffix}')
 
         def nas_udp(source, claimed, username, password, shared_secret, expected,
-                    nas_identifier='', calling_station_id='', framed_ip=''):
+                    nas_identifier='', calling_station_id='', framed_ip='', method='pap',
+                    mikrotik_group='', cisco_privilege=None):
             # The socket is bound to the *actual* NAS source, not merely the
             # NAS-IP-Address attribute. All traffic remains in the disposable
             # radius_ops container on the 127/8 loopback interface.
@@ -185,6 +194,9 @@ def main():
             if nas_identifier: args += ['--nas-identifier',nas_identifier]
             if calling_station_id: args += ['--calling-station-id',calling_station_id]
             if framed_ip: args += ['--framed-ip',framed_ip]
+            args += ['--method',method]
+            if mikrotik_group: args += ['--expect-mikrotik-group',mikrotik_group]
+            if cisco_privilege is not None: args += ['--expect-cisco-privilege',str(cisco_privilege)]
             r = dc(*args, timeout=30, check=False)
             return r.returncode == 0 and r.stdout.strip() == expected
 
@@ -216,7 +228,7 @@ def main():
                 raise ValueError('Unsupported test authentication method')
             r = dc('exec', '-T', 'radius_ops', 'radtest', '-t', method, username, password,
                    '127.0.0.1', '0', shared_secret, timeout=30, check=False)
-            return r.returncode == 0 and reply_has_attributes(r.stdout + r.stderr, expected)
+            return r.returncode == 0 and reply_has_attributes(r.stdout + r.stderr, expected) and reply_has_message_authenticator(r.stdout + r.stderr)
 
         def mschapv2_reply(shared_secret, expected, corrupt=False):
             # Public RFC 2759 section 9.2 vector; RADIUS layout: RFC 2548 2.3.2.
@@ -234,8 +246,8 @@ def main():
                    timeout=30, check=False, input_text='\n'.join(attrs) + '\n')
             output = r.stdout + r.stderr
             if corrupt:
-                return parsed_radtest_reply(output) == 'Access-Reject'
-            return r.returncode == 0 and reply_has_attributes(output, expected)
+                return parsed_radtest_reply(output) == 'Access-Reject' and reply_has_message_authenticator(output)
+            return r.returncode == 0 and reply_has_attributes(output, expected) and reply_has_message_authenticator(output)
 
         def accounting(username, shared_secret, session_id, status, session_time=0):
             """Send one real UDP accounting packet and authenticate its response."""
@@ -262,6 +274,7 @@ def main():
 
         try:
             dc('config', '--quiet', timeout=30)
+            print('STAGE build disposable images', flush=True)
             dc('build', 'app', 'radius_ops', timeout=600)
             dc('up', '-d', '--wait', 'db', 'app', timeout=300)
             wait(lambda: api('/health')['ok'], 'Core API healthy')
@@ -278,8 +291,8 @@ def main():
                  ('lab-host-a','lab-space-a','127.0.0.1','Lab NAS A'),
                  ('lab-host-b','lab-space-b','127.0.0.2','Lab NAS B');""")
             count = sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'")
-            assert count == '12', f'Expected twelve versioned migrations, found {count}'
-            print('PASS PostgreSQL migrations 001-012')
+            assert count == '13', f'Expected thirteen versioned migrations, found {count}'
+            print('PASS PostgreSQL migrations 001-013')
             inventory = api('/api/radius-ops/inventory')['items']
             assert {x['id'] for x in inventory} >= {'lab-host-a', 'lab-host-b'}
             assert all('vendor' in x for x in inventory)
@@ -445,31 +458,55 @@ def main():
             protocol_profiles = {}
             for mt_group, privilege in (('read', 1), ('write', 7)):
                 protocol_profiles[mt_group] = api('/api/radius-ops/groups', 'POST', {
-                    'companyId': 'lab-company-a', 'name': 'Protocol ' + mt_group,
+                    'name': 'Protocol ' + mt_group,
                     'ciscoPrivilege': privilege, 'mikrotikGroup': mt_group,
                     'enabled': True})['id']
             protocol_profiles['full'] = group_a
+            protocol_secret = secrets.token_hex(16)
+            protocol_collection = api('/api/radius-ops/collections', 'POST', {
+                'name': 'Standalone protocol NAS', 'enabled': True})['id']
+            protocol_sp = api('/api/radius-ops/secret-profiles', 'POST', {
+                'name': 'Standalone protocol secret', 'secret': protocol_secret, 'enabled': True})['id']
+            protocol_nas = api('/api/radius-ops/devices', 'POST', {
+                'label': 'Standalone protocol NAS', 'nasIp': '127.30.0.2',
+                'secretProfileId': protocol_sp, 'collectionIds': [protocol_collection], 'enabled': True})['id']
             protocol_user = api('/api/radius-ops/accounts', 'POST', {
-                'companyId': 'lab-company-a', 'username': 'User', 'label': 'Protocol fixture',
+                'username': 'User', 'label': 'Protocol fixture',
                 'password': 'clientPass', 'enabled': True,
                 'accessRules': [{'collectionId': collection_a,
-                                 'profileId': protocol_profiles['read']}]})['id']
+                                 'profileId': protocol_profiles['read']},
+                                {'collectionId': protocol_collection, 'profileId': protocol_profiles['read']}]})['id']
+            assert sql("SELECT company_id IS NULL FROM radius_ops_accounts WHERE id='" + protocol_user + "'") == 't'
+            assert sql("SELECT company_id IS NULL FROM radius_ops_devices WHERE id='" + protocol_nas + "'") == 't'
+            wait(lambda: nas_udp('127.30.0.2','127.30.0.2','User','clientPass',protocol_secret,'Access-Accept'),
+                 'standalone Company-free NAS authorization', seconds=35)
+            print('PASS Company-free NAS, secret, profile, account and explicit collection authorization', flush=True)
             for mt_group, privilege in (('read', 1), ('full', 15), ('write', 7), ('read', 1)):
                 api('/api/radius-ops/accounts/' + protocol_user, 'PUT', {
-                    'companyId': 'lab-company-a', 'label': 'Protocol fixture', 'enabled': True,
+                    'label': 'Protocol fixture', 'enabled': True,
                     'accessRules': [{'collectionId': collection_a,
-                                     'profileId': protocol_profiles[mt_group]}]})
+                                     'profileId': protocol_profiles[mt_group]},
+                                    {'collectionId': protocol_collection, 'profileId': protocol_profiles[mt_group]}]})
                 expected = {'Cisco-AVPair': 'shell:priv-lvl=' + str(privilege),
                             'Mikrotik-Group': mt_group}
                 for method in ('pap', 'chap', 'mschap'):
                     assert radtest_reply_attributes('User', 'clientPass', secret_a, expected, method), (
                         'Incorrect authorization reply for ' + method + '/' + mt_group)
                 assert mschapv2_reply(secret_a, expected), 'Incorrect MS-CHAPv2 reply for ' + mt_group
+                for method in ('pap','chap','mschapv2'):
+                    assert nas_udp('127.30.0.2','127.30.0.2','User','clientPass',protocol_secret,
+                                   'Access-Accept',method=method,mikrotik_group=mt_group,cisco_privilege=privilege), (
+                        'Invalid signed reply or permission attributes for ' + method + '/' + mt_group)
+                print('PASS required Message-Authenticator and Response Authenticator verified for PAP/CHAP/MS-CHAPv2', flush=True)
                 print('PASS live profile change ' + mt_group + ': PAP/CHAP/MS-CHAP/MS-CHAPv2 wire attributes', flush=True)
             assert mschapv2_reply(secret_a, {}, corrupt=True), 'Invalid MS-CHAPv2 proof must be rejected'
             api('/api/radius-ops/accounts/' + protocol_user, 'DELETE')
+            api('/api/radius-ops/devices/' + protocol_nas, 'DELETE')
+            api('/api/radius-ops/secret-profiles/' + protocol_sp, 'DELETE')
+            api('/api/radius-ops/collections/' + protocol_collection, 'DELETE')
             for mt_group in ('read', 'write'):
                 api('/api/radius-ops/groups/' + protocol_profiles[mt_group], 'DELETE')
+            wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'), 'client reload after protocol fixture cleanup', seconds=35)
             print('PASS invalid MS-CHAPv2 proof rejected; protocol fixtures removed', flush=True)
             if os.environ.get('EMS_RADIUS_PROTOCOL_ONLY') == '1':
                 print('REAL DOCKER RADIUS AUTHORIZATION PROTOCOL MATRIX: PASS', flush=True)
@@ -594,8 +631,19 @@ def main():
             dc('restart', 'app', 'radius_ops', timeout=90)
             wait(lambda: api('/api/radius-ops/health').get('running'), 'Services healthy after restart')
             assert sql("SELECT count(*) FROM radius_ops_accounts WHERE username='testadminA'") == '1'
-            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '12'
+            assert sql("SELECT count(*) FROM schema_migrations WHERE module_id='radius-ops'") == '13'
             print('PASS persistent data and migration ledger after restart')
+            # Exercise the exact post-deployment probe against real containers,
+            # including its temporary /32, client reload and complete cleanup.
+            installed_check = run([
+                sys.executable, str(ROOT/'scripts/radius-installed-reply-check.py'),
+                '--require-signed', '--temporary-loopback-fixture',
+                '--db-container', dc('ps','-q','db').stdout.strip(),
+                '--radius-container', dc('ps','-q','radius_ops').stdout.strip(),
+            ], timeout=100)
+            print(installed_check.stdout, end='', flush=True)
+            wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'),
+                 'Existing NAS works after temporary installed-check fixture cleanup', seconds=45)
             # A database outage must stop the UDP listener, not merely set a
             # dashboard warning.  This only stops a disposable Compose DB.
             dc('stop', 'db', timeout=60)
@@ -619,7 +667,7 @@ def main():
         except Exception:
             print('Diagnostic logs (test-only values redacted):', file=sys.stderr)
             sensitive = [
-                secret_a, secret_b, password_a, password_b,
+                secret_a, secret_b, password_a, password_b, locals().get("protocol_secret", ""),
                 env.get('POSTGRES_PASSWORD',''), env.get('EMS_ADMIN_PASSWORD',''),
             ]
             def redact_log(value):

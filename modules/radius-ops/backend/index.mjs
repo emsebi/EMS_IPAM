@@ -86,6 +86,17 @@ async function assertAccessNoConflict(c,accountId=null){
  if(r.rowCount)throw fail(`Conflicting permission profiles for NAS ${r.rows[0].label} (${r.rows[0].nas_ip})`,409);
 }
 async function ensureRadiusDefaults(c,companyId=null){
+ if(companyId===null){
+  // An empty RADIUS installation needs no Core Company to become usable.
+  await c.query(`INSERT INTO radius_ops_collections(id,company_id,name,description,enabled)
+    SELECT $1,NULL,$2,'Default NAS group for first-time setup',true
+    WHERE NOT EXISTS(SELECT 1 FROM radius_ops_collections) ON CONFLICT DO NOTHING`,[crypto.randomUUID(),DEFAULT_COLLECTION_NAME]);
+  await c.query(`INSERT INTO radius_ops_groups(id,company_id,name,description,cisco_privilege,mikrotik_group,enabled)
+    SELECT $1,NULL,$2,'Safe default permission profile',1,'read',true
+    WHERE NOT EXISTS(SELECT 1 FROM radius_ops_groups) ON CONFLICT DO NOTHING`,[crypto.randomUUID(),DEFAULT_PROFILE_NAME]);
+  return;
+ }
+
  const params=companyId?[companyId]:[];
  const scope=companyId?' AND c.id=$1':'';
  await c.query(`INSERT INTO radius_ops_collections(id,company_id,name,description,enabled)
@@ -109,7 +120,7 @@ async function ensureRadiusDefaults(c,companyId=null){
 }
 async function defaultCollectionId(c,companyId){
  await ensureRadiusDefaults(c,companyId);
- const row=(await c.query('SELECT id FROM radius_ops_collections WHERE company_id=$1 AND enabled ORDER BY (name=$2) DESC,created_at,id LIMIT 1',[companyId,DEFAULT_COLLECTION_NAME])).rows[0];
+ const row=(await c.query('SELECT col.id FROM radius_ops_collections col LEFT JOIN companies c ON c.id=col.company_id WHERE ($1::text IS NULL OR col.company_id=$1) AND col.enabled AND (col.company_id IS NULL OR (c.id IS NOT NULL AND c.deleted_at IS NULL)) ORDER BY (col.name=$2) DESC,col.created_at,col.id LIMIT 1',[companyId,DEFAULT_COLLECTION_NAME])).rows[0];
  if(!row)throw fail('Default NAS collection is unavailable',409);
  return row.id;
 }
@@ -119,8 +130,9 @@ async function syncDeviceCollections(c,deviceId,companyId,ids){
  if(!selected.length)selected=[await defaultCollectionId(c,companyId)];
  await c.query('DELETE FROM radius_ops_collection_devices WHERE device_id=$1',[deviceId]);
  for(const collectionId of selected){
-  const ok=(await c.query('SELECT 1 FROM radius_ops_collections WHERE id=$1 AND company_id=$2 AND enabled',[collectionId,companyId])).rowCount;
-  if(!ok)throw fail('NAS collection does not belong to this company or is disabled',409);
+  const col=(await c.query('SELECT company_id FROM radius_ops_collections WHERE id=$1 AND enabled',[collectionId])).rows[0];
+  if(!col)throw fail('NAS collection is unavailable or disabled',409);
+  await checkCompany(c,col.company_id);
   await c.query('INSERT INTO radius_ops_collection_devices(id,collection_id,device_id) VALUES($1,$2,$3)',
     [crypto.randomUUID(),collectionId,deviceId]);
  }
@@ -131,10 +143,10 @@ async function syncAccessRules(c,accountId,companyId,rules){
  await c.query('DELETE FROM radius_ops_access_rules WHERE account_id=$1',[accountId]);
  for(const r of rules){
   const check=(await c.query(`SELECT
-    EXISTS(SELECT 1 FROM radius_ops_collections WHERE id=$1 AND company_id=$3) AS collection_ok,
-    EXISTS(SELECT 1 FROM radius_ops_groups WHERE id=$2 AND company_id=$3) AS profile_ok`,
-    [r.collectionId,r.profileId,companyId])).rows[0];
-  if(!check?.collection_ok||!check?.profile_ok)throw fail('Access collection/profile does not belong to this company',409);
+    EXISTS(SELECT 1 FROM radius_ops_collections col LEFT JOIN companies c ON c.id=col.company_id WHERE col.id=$1 AND (col.company_id IS NULL OR (c.id IS NOT NULL AND c.deleted_at IS NULL))) AS collection_ok,
+    EXISTS(SELECT 1 FROM radius_ops_groups g LEFT JOIN companies c ON c.id=g.company_id WHERE g.id=$2 AND (g.company_id IS NULL OR (c.id IS NOT NULL AND c.deleted_at IS NULL))) AS profile_ok`,
+    [r.collectionId,r.profileId])).rows[0];
+  if(!check?.collection_ok||!check?.profile_ok)throw fail('Access collection/profile is unavailable',409);
   await c.query('INSERT INTO radius_ops_access_rules(id,account_id,collection_id,profile_id,enabled) VALUES($1,$2,$3,$4,true)',
     [crypto.randomUUID(),accountId,r.collectionId,r.profileId]);
  }
@@ -142,6 +154,7 @@ async function syncAccessRules(c,accountId,companyId,rules){
 }
 
 async function ensureLegacyFullAccessRule(c,companyId,profileId){
+ if(!companyId)throw fail('Select NAS Collections and a permission profile explicitly',409);
  const g=(await c.query('SELECT id FROM radius_ops_groups WHERE id=$1 AND company_id=$2',[profileId,companyId])).rows[0];
  if(!g)throw fail('RADIUS group does not belong to this company',409);
  let col=(await c.query("SELECT id FROM radius_ops_collections WHERE company_id=$1 AND name='All registered NAS'",[companyId])).rows[0];
@@ -156,9 +169,9 @@ async function ensureLegacyFullAccessRule(c,companyId,profileId){
 }
 
 async function transaction(pool,fn){const c=await pool.connect();try{await c.query('BEGIN');const r=await fn(c);await c.query('COMMIT');return r;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}}
-async function checkCompany(c,id){if(!(await c.query('SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL',[id])).rowCount)throw fail('Company not found',404);}
+async function checkCompany(c,id){if(id===null)return;if(!(await c.query('SELECT 1 FROM companies WHERE id=$1 AND deleted_at IS NULL',[id])).rowCount)throw fail('Legacy record is archived or unavailable',404);}
 async function checkNasDuplicate(c,source,id=null){const r=await c.query('SELECT id,label,nas_ip::text AS "nasIp" FROM radius_ops_devices WHERE nas_ip=$1::inet AND ($2::uuid IS NULL OR id<>$2::uuid) LIMIT 1',[source,id]);if(r.rowCount)throw fail(`NAS IP/CIDR is already registered by ${r.rows[0].label} (${r.rows[0].nasIp})`,409);}
-async function secretProfile(c,id,companyId,requireEnabled=true){const p=(await c.query('SELECT * FROM radius_ops_secret_profiles WHERE id=$1',[id])).rows[0];if(!p||p.company_id!==companyId)throw fail('Secret profile does not belong to this company',409);if(requireEnabled&&!p.enabled)throw fail('Secret profile is disabled',409);return p;}
+async function secretProfile(c,id,companyId,requireEnabled=true){const p=(await c.query('SELECT * FROM radius_ops_secret_profiles WHERE id=$1',[id])).rows[0];if(!p)throw fail('Secret profile is unavailable',409);await checkCompany(c,p.company_id);if(requireEnabled&&!p.enabled)throw fail('Secret profile is disabled',409);return p;}
 async function inlineSecretProfile(c,companyId,label,value){const id=crypto.randomUUID(),profileName=(String(label||'NAS').slice(0,92)+' Secret '+id.slice(0,8));await c.query('INSERT INTO radius_ops_secret_profiles(id,company_id,name,secret,enabled) VALUES($1,$2,$3,$4,true)',[id,companyId,profileName,secret(value)]);return id;}
 async function nasSync(c,d){const short='ems_'+d.id.replaceAll('-','');await c.query('DELETE FROM nas WHERE shortname=$1',[short]);let value=d.secret;if(d.secret_profile_id){const p=(await c.query('SELECT secret FROM radius_ops_secret_profiles WHERE id=$1',[d.secret_profile_id])).rows[0];if(p?.secret)value=p.secret;}if(!value)throw fail('NAS shared secret is unavailable',409);/*
  Keep every registered NAS in the FreeRADIUS client radix tree, even while the
@@ -206,10 +219,10 @@ async function macSync(c,m){await macClear(c,m.id);if(!m.enabled)return;for(cons
 }}
 function fields(b,kind){
  if(kind==='devices')return {label:name(b.label),vendor:b.vendor===undefined?null:checkVendor(b.vendor),nasIp:nasSource(b.nasIp),companyId:b.companyId?key(b.companyId):null,hostId:b.hostId?key(b.hostId):null,enabled:active(b.enabled),secret:b.secret?secret(b.secret):null,secretProfileId:b.secretProfileId?uid(b.secretProfileId):null,collectionIds:collectionIds(b.collectionIds)};
- if(kind==='accounts')return {label:name(b.label||b.username),companyId:key(b.companyId),groupId:b.groupId?uid(b.groupId):null,vendor:checkAccountVendor(b.vendor||'generic'),privilege:priv(b.privilege??1),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled),password:b.password?password(b.password):null,accessRules:accessRules(b.accessRules)};
- if(kind==='groups')return {name:name(b.name),description:text(b.description,500),companyId:key(b.companyId),ciscoPrivilege:priv(b.ciscoPrivilege),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled)};
- if(kind==='collections')return {name:name(b.name),description:text(b.description,500),companyId:key(b.companyId),enabled:active(b.enabled)};
- if(kind==='secret-profiles')return {name:name(b.name),companyId:key(b.companyId),secret:b.secret?secret(b.secret):null,enabled:active(b.enabled)};
+ if(kind==='accounts')return {label:name(b.label||b.username),companyId:b.companyId?key(b.companyId):null,groupId:b.groupId?uid(b.groupId):null,vendor:checkAccountVendor(b.vendor||'generic'),privilege:priv(b.privilege??1),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled),password:b.password?password(b.password):null,accessRules:accessRules(b.accessRules)};
+ if(kind==='groups')return {name:name(b.name),description:text(b.description,500),companyId:b.companyId?key(b.companyId):null,ciscoPrivilege:priv(b.ciscoPrivilege),mikrotikGroup:checkGroup(b.mikrotikGroup||'read'),enabled:active(b.enabled)};
+ if(kind==='collections')return {name:name(b.name),description:text(b.description,500),companyId:b.companyId?key(b.companyId):null,enabled:active(b.enabled)};
+ if(kind==='secret-profiles')return {name:name(b.name),companyId:b.companyId?key(b.companyId):null,secret:b.secret?secret(b.secret):null,enabled:active(b.enabled)};
  return {label:name(b.label),mac:mac(b.mac),companyId:key(b.companyId),vlan:vid(b.vlan),enabled:active(b.enabled)};
 }
 
@@ -254,11 +267,11 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
    return json(res,200,{ok:true,devices:d.rows[0],groups:g.rows[0],accounts:a.rows[0],macs:macs.rows[0],events:events.rows[0]});
   }
   if(m==='GET'&&p===base+'/inventory'){const r=await pool.query(`SELECT h.id,h.name,h.ip,h.type AS vendor,s.company_id AS "companyId",c.name AS "companyName" FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id WHERE h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL ORDER BY c.name,h.name LIMIT 3000`);return json(res,200,{ok:true,items:r.rows});}
-  if(m==='GET'&&p===base+'/devices'){const r=await pool.query(`SELECT d.id,d.host_id AS "hostId",d.company_id AS "companyId",CASE WHEN masklen(d.nas_ip)=32 THEN host(d.nas_ip) ELSE d.nas_ip::text END AS "nasIp",d.label,d.vendor,d.enabled,d.secret_profile_id AS "secretProfileId",p.name AS "secretProfileName",h.name AS "hostName",c.name AS "companyName",COALESCE((SELECT json_agg(cd.collection_id ORDER BY col.name) FROM radius_ops_collection_devices cd JOIN radius_ops_collections col ON col.id=cd.collection_id WHERE cd.device_id=d.id),'[]'::json) AS "collectionIds",COALESCE((SELECT json_agg(col.name ORDER BY col.name) FROM radius_ops_collection_devices cd JOIN radius_ops_collections col ON col.id=cd.collection_id WHERE cd.device_id=d.id),'[]'::json) AS "collectionNames" FROM radius_ops_devices d LEFT JOIN radius_ops_secret_profiles p ON p.id=d.secret_profile_id LEFT JOIN hosts h ON h.id=d.host_id JOIN companies c ON c.id=d.company_id ORDER BY d.label`);return json(res,200,{ok:true,items:r.rows});}
-  if(m==='GET'&&p===base+'/secret-profiles'){const r=await pool.query(`SELECT p.id,p.company_id AS "companyId",c.name AS "companyName",p.name,p.enabled,count(d.id)::int AS "assignedDevices",true AS "hasSecret" FROM radius_ops_secret_profiles p JOIN companies c ON c.id=p.company_id LEFT JOIN radius_ops_devices d ON d.secret_profile_id=p.id GROUP BY p.id,c.name ORDER BY c.name,p.name`);return json(res,200,{ok:true,items:r.rows});}
-  if(m==='GET'&&p===base+'/groups'){const r=await pool.query(`SELECT g.id,g.company_id AS "companyId",c.name AS "companyName",g.name,g.description,g.cisco_privilege AS "ciscoPrivilege",g.mikrotik_group AS "mikrotikGroup",g.enabled,(g.name=$1) AS "isDefault",count(DISTINCT ar.account_id)::int AS members FROM radius_ops_groups g JOIN companies c ON c.id=g.company_id LEFT JOIN radius_ops_access_rules ar ON ar.profile_id=g.id GROUP BY g.id,c.name ORDER BY c.name,(g.name=$1) DESC,g.name`,[DEFAULT_PROFILE_NAME]);return json(res,200,{ok:true,items:r.rows});}
-  if(m==='GET'&&p===base+'/collections'){const r=await pool.query(`SELECT col.id,col.company_id AS "companyId",c.name AS "companyName",col.name,col.description,col.enabled,(col.name=$1) AS "isDefault",COALESCE(json_agg(json_build_object('id',d.id,'label',d.label,'nasIp',CASE WHEN masklen(d.nas_ip)=32 THEN host(d.nas_ip) ELSE d.nas_ip::text END) ORDER BY d.label) FILTER(WHERE d.id IS NOT NULL),'[]'::json) AS members,count(DISTINCT ar.account_id)::int AS "assignedUsers" FROM radius_ops_collections col JOIN companies c ON c.id=col.company_id LEFT JOIN radius_ops_collection_devices cd ON cd.collection_id=col.id LEFT JOIN radius_ops_devices d ON d.id=cd.device_id LEFT JOIN radius_ops_access_rules ar ON ar.collection_id=col.id GROUP BY col.id,c.name ORDER BY c.name,(col.name=$1) DESC,col.name`,[DEFAULT_COLLECTION_NAME]);return json(res,200,{ok:true,items:r.rows});}
-  if(m==='GET'&&p===base+'/accounts'){const r=await pool.query(`SELECT a.id,a.username,a.label,a.enabled,a.company_id AS "companyId",c.name AS "companyName",a.group_id AS "groupId",legacy.name AS "groupName",legacy.cisco_privilege AS "ciscoPrivilege",legacy.mikrotik_group AS "mikrotikGroup",COALESCE(json_agg(json_build_object('collectionId',ar.collection_id,'profileId',ar.profile_id,'collectionName',col.name,'profileName',g.name) ORDER BY col.name) FILTER(WHERE ar.id IS NOT NULL),'[]'::json) AS "accessRules" FROM radius_ops_accounts a JOIN companies c ON c.id=a.company_id LEFT JOIN radius_ops_groups legacy ON legacy.id=a.group_id LEFT JOIN radius_ops_access_rules ar ON ar.account_id=a.id LEFT JOIN radius_ops_collections col ON col.id=ar.collection_id LEFT JOIN radius_ops_groups g ON g.id=ar.profile_id GROUP BY a.id,c.name,legacy.id ORDER BY c.name,a.username`);return json(res,200,{ok:true,items:r.rows});}
+  if(m==='GET'&&p===base+'/devices'){const r=await pool.query(`SELECT d.id,d.host_id AS "hostId",d.company_id AS "companyId",CASE WHEN masklen(d.nas_ip)=32 THEN host(d.nas_ip) ELSE d.nas_ip::text END AS "nasIp",d.label,d.vendor,d.enabled,d.secret_profile_id AS "secretProfileId",p.name AS "secretProfileName",h.name AS "hostName",c.name AS "companyName",COALESCE((SELECT json_agg(cd.collection_id ORDER BY col.name) FROM radius_ops_collection_devices cd JOIN radius_ops_collections col ON col.id=cd.collection_id WHERE cd.device_id=d.id),'[]'::json) AS "collectionIds",COALESCE((SELECT json_agg(col.name ORDER BY col.name) FROM radius_ops_collection_devices cd JOIN radius_ops_collections col ON col.id=cd.collection_id WHERE cd.device_id=d.id),'[]'::json) AS "collectionNames" FROM radius_ops_devices d LEFT JOIN radius_ops_secret_profiles p ON p.id=d.secret_profile_id LEFT JOIN hosts h ON h.id=d.host_id LEFT JOIN companies c ON c.id=d.company_id ORDER BY d.label`);return json(res,200,{ok:true,items:r.rows});}
+  if(m==='GET'&&p===base+'/secret-profiles'){const r=await pool.query(`SELECT p.id,p.company_id AS "companyId",c.name AS "companyName",p.name,p.enabled,count(d.id)::int AS "assignedDevices",true AS "hasSecret" FROM radius_ops_secret_profiles p LEFT JOIN companies c ON c.id=p.company_id LEFT JOIN radius_ops_devices d ON d.secret_profile_id=p.id GROUP BY p.id,c.name ORDER BY c.name,p.name`);return json(res,200,{ok:true,items:r.rows});}
+  if(m==='GET'&&p===base+'/groups'){const r=await pool.query(`SELECT g.id,g.company_id AS "companyId",c.name AS "companyName",g.name,g.description,g.cisco_privilege AS "ciscoPrivilege",g.mikrotik_group AS "mikrotikGroup",g.enabled,(g.name=$1) AS "isDefault",count(DISTINCT ar.account_id)::int AS members FROM radius_ops_groups g LEFT JOIN companies c ON c.id=g.company_id LEFT JOIN radius_ops_access_rules ar ON ar.profile_id=g.id GROUP BY g.id,c.name ORDER BY c.name,(g.name=$1) DESC,g.name`,[DEFAULT_PROFILE_NAME]);return json(res,200,{ok:true,items:r.rows});}
+  if(m==='GET'&&p===base+'/collections'){const r=await pool.query(`SELECT col.id,col.company_id AS "companyId",c.name AS "companyName",col.name,col.description,col.enabled,(col.name=$1) AS "isDefault",COALESCE(json_agg(json_build_object('id',d.id,'label',d.label,'nasIp',CASE WHEN masklen(d.nas_ip)=32 THEN host(d.nas_ip) ELSE d.nas_ip::text END) ORDER BY d.label) FILTER(WHERE d.id IS NOT NULL),'[]'::json) AS members,count(DISTINCT ar.account_id)::int AS "assignedUsers" FROM radius_ops_collections col LEFT JOIN companies c ON c.id=col.company_id LEFT JOIN radius_ops_collection_devices cd ON cd.collection_id=col.id LEFT JOIN radius_ops_devices d ON d.id=cd.device_id LEFT JOIN radius_ops_access_rules ar ON ar.collection_id=col.id GROUP BY col.id,c.name ORDER BY c.name,(col.name=$1) DESC,col.name`,[DEFAULT_COLLECTION_NAME]);return json(res,200,{ok:true,items:r.rows});}
+  if(m==='GET'&&p===base+'/accounts'){const r=await pool.query(`SELECT a.id,a.username,a.label,a.enabled,a.company_id AS "companyId",c.name AS "companyName",a.group_id AS "groupId",legacy.name AS "groupName",legacy.cisco_privilege AS "ciscoPrivilege",legacy.mikrotik_group AS "mikrotikGroup",COALESCE(json_agg(json_build_object('collectionId',ar.collection_id,'profileId',ar.profile_id,'collectionName',col.name,'profileName',g.name) ORDER BY col.name) FILTER(WHERE ar.id IS NOT NULL),'[]'::json) AS "accessRules" FROM radius_ops_accounts a LEFT JOIN companies c ON c.id=a.company_id LEFT JOIN radius_ops_groups legacy ON legacy.id=a.group_id LEFT JOIN radius_ops_access_rules ar ON ar.account_id=a.id LEFT JOIN radius_ops_collections col ON col.id=ar.collection_id LEFT JOIN radius_ops_groups g ON g.id=ar.profile_id GROUP BY a.id,c.name,legacy.id ORDER BY c.name,a.username`);return json(res,200,{ok:true,items:r.rows});}
   // Explicit administrator action; normal lists never include credential values.
   // The shared module/admin and Core CSRF checks run before these handlers.
   {
@@ -300,6 +313,13 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
   const auditDetail={operation:m};
 
   await transaction(pool,async c=>{
+   // Omitted Company is not a request to rewrite legacy metadata during editing.
+   if(m==='PUT'&&kind!=='macs'&&!Object.prototype.hasOwnProperty.call(b,'companyId')){
+    const table={devices:'radius_ops_devices',accounts:'radius_ops_accounts',groups:'radius_ops_groups',collections:'radius_ops_collections','secret-profiles':'radius_ops_secret_profiles'}[kind];
+    const old=(await c.query(`SELECT company_id FROM ${table} WHERE id=$1 FOR UPDATE`,[id])).rows[0];
+    if(old)f.companyId=old.company_id;
+   }
+
    if(kind==='secret-profiles'){
     if(m==='POST'){await checkCompany(c,f.companyId);if(!f.secret)throw fail('Shared secret is required');await c.query('INSERT INTO radius_ops_secret_profiles(id,company_id,name,secret,enabled) VALUES($1,$2,$3,$4,$5)',[id,f.companyId,f.name,f.secret,f.enabled]);}
     else{const old=(await c.query('SELECT * FROM radius_ops_secret_profiles WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!old)throw fail('Secret profile not found',404);
@@ -310,7 +330,7 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
     if(m==='POST'){
      let companyId=f.companyId,hostId=f.hostId;
      if(hostId){const r=(await c.query(`SELECT h.id,s.company_id AS "companyId" FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id WHERE h.id=$1 AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL FOR UPDATE OF h`,[hostId])).rows[0];if(!r)throw fail('Inventory host not found',404);if(companyId&&companyId!==r.companyId)throw fail('Inventory host belongs to another company',409);companyId=r.companyId;}
-     if(!companyId)throw fail('Company is required');await checkCompany(c,companyId);await ensureRadiusDefaults(c,companyId);await checkNasDuplicate(c,f.nasIp);let profileId=f.secretProfileId;if(!profileId){if(!f.secret)throw fail('Secret profile is required');profileId=await inlineSecretProfile(c,companyId,f.label,f.secret);}const p=await secretProfile(c,profileId,companyId);const d=(await c.query('INSERT INTO radius_ops_devices(id,host_id,company_id,nas_ip,label,vendor,secret,secret_profile_id,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[id,hostId,companyId,f.nasIp,f.label,f.vendor||'other',p.secret,profileId,f.enabled])).rows[0];await syncDeviceCollections(c,id,companyId,f.collectionIds||[]);await nasSync(c,d);
+     await checkCompany(c,companyId);await ensureRadiusDefaults(c,companyId);await checkNasDuplicate(c,f.nasIp);let profileId=f.secretProfileId;if(!profileId){if(!f.secret)throw fail('Secret profile is required');profileId=await inlineSecretProfile(c,companyId,f.label,f.secret);}const p=await secretProfile(c,profileId,companyId);const d=(await c.query('INSERT INTO radius_ops_devices(id,host_id,company_id,nas_ip,label,vendor,secret,secret_profile_id,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[id,hostId,companyId,f.nasIp,f.label,f.vendor||'other',p.secret,profileId,f.enabled])).rows[0];await syncDeviceCollections(c,id,companyId,f.collectionIds||[]);await nasSync(c,d);
     }else{const old=(await c.query('SELECT * FROM radius_ops_devices WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!old)throw fail('NAS not found',404);
      if(m==='DELETE'){await c.query('DELETE FROM nas WHERE shortname=$1',['ems_'+id.replaceAll('-','')]);await c.query('DELETE FROM radius_ops_devices WHERE id=$1',[id]);}
      else{let companyId=f.companyId||old.company_id,hostId=Object.prototype.hasOwnProperty.call(b,'hostId')?f.hostId:old.host_id;if(hostId){const r=(await c.query(`SELECT h.id,s.company_id AS "companyId" FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id WHERE h.id=$1 AND h.deleted_at IS NULL AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,[hostId])).rows[0];if(!r)throw fail('Inventory host not found',404);if(companyId!==r.companyId)throw fail('Inventory host belongs to another company',409);}await checkCompany(c,companyId);await ensureRadiusDefaults(c,companyId);await checkNasDuplicate(c,f.nasIp,id);let profileId=f.secretProfileId||old.secret_profile_id;if(f.secret)profileId=await inlineSecretProfile(c,companyId,f.label,f.secret);const p=await secretProfile(c,profileId,companyId);const d=(await c.query('UPDATE radius_ops_devices SET host_id=$2,company_id=$3,nas_ip=$4,label=$5,vendor=$6,secret=$7,secret_profile_id=$8,enabled=$9 WHERE id=$1 RETURNING *',[id,hostId,companyId,f.nasIp,f.label,f.vendor||old.vendor,p.secret,profileId,f.enabled])).rows[0];await syncDeviceCollections(c,id,companyId,f.collectionIds);await nasSync(c,d);}
@@ -319,7 +339,7 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
     if(m==='POST'){await checkCompany(c,f.companyId);const g=(await c.query('INSERT INTO radius_ops_groups(id,company_id,name,description,cisco_privilege,mikrotik_group,enabled) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[id,f.companyId,f.name,f.description,f.ciscoPrivilege,f.mikrotikGroup,f.enabled])).rows[0];await groupSync(c,g);}
     else{const old=(await c.query('SELECT * FROM radius_ops_groups WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!old)throw fail('RADIUS group not found',404);
      if(m==='DELETE'){const members=(await c.query('SELECT count(*)::int n FROM radius_ops_accounts WHERE group_id=$1',[id])).rows[0].n;const assigned=(await c.query('SELECT count(*)::int n FROM radius_ops_access_rules WHERE profile_id=$1',[id])).rows[0].n;if(members||assigned){
-      const replacement=(await c.query(`SELECT * FROM radius_ops_groups WHERE company_id=$1 AND id<>$2
+      const replacement=(await c.query(`SELECT * FROM radius_ops_groups WHERE company_id IS NOT DISTINCT FROM $1 AND id<>$2
        AND cisco_privilege=$3 AND mikrotik_group=$4 AND enabled=$5
        ORDER BY (name=$6) DESC,created_at,id LIMIT 1 FOR UPDATE`,
        [old.company_id,id,old.cisco_privilege,old.mikrotik_group,old.enabled,DEFAULT_PROFILE_NAME])).rows[0];
@@ -341,7 +361,7 @@ export function createModule(ctx){const {pool,json,readBody,requireAdmin,require
      if(m==='DELETE'){
       if((await c.query('SELECT 1 FROM radius_ops_access_rules WHERE collection_id=$1 LIMIT 1',[id])).rowCount){
        const replacement=(await c.query(`SELECT col.id FROM radius_ops_collections col
-        WHERE col.company_id=$1 AND col.id<>$2 AND col.enabled=$3
+        WHERE col.company_id IS NOT DISTINCT FROM $1 AND col.id<>$2 AND col.enabled=$3
         AND NOT EXISTS(
          (SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=$2
           EXCEPT SELECT device_id FROM radius_ops_collection_devices WHERE collection_id=col.id)

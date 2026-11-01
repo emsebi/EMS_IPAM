@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "timestamp": "2026-10-30T09:46:28.456Z",
+  "database": "PGlite test adapter; production pg driver not exercised",
+  "browser": "153.0.8010.0",
+  "checks": [
+    "database health and unauthenticated API protection",
+    "real login and application bootstrap",
+    "standalone Device Types creation",
+    "IP/device creation, type selection, MAC/VLAN storage and edit",
+    "duplicate IP create is rejected without overwriting the existing device",
+    "MIK link, IP-only default target, selectable fallback, client guide and ZIP download",
+    "type rename propagates; used type deletion blocked; unused type deletion works",
+    "AP selection shows only its stations; parent retained; responsive widths and mobile submenu",
+    "MAC and Personnel tabs; name-only personnel create; refresh, search and export",
+    "Admin can reveal, copy and hide saved RADIUS credentials without changing unsaved edits; responses are not cached",
+    "RADIUS simple client/group/user flow persists and manual config is generated",
+    "Reports module summarizes optional modules and shows redacted audit activity",
+    "Settings opens; device shortcuts navigate to Inventory and Device Types; Personnel remains standalone",
+    "Donation addresses, wallet links, bundled QRs, copy/fallback, English/Persian labels and responsive About dialog",
+    "viewer can read assigned inventory; cannot mutate hosts/types or list personnel",
+    "no uncaught browser errors throughout tested flows"
+  ]
+}

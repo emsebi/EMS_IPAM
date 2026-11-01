@@ -2,7 +2,7 @@ services:
   radius_ops:
     build:
       context: ./modules/radius-ops/freeradius
-    image: ems-ipam-radius-ops:1.0.0-lab
+    image: ems-ipam-radius-ops:1.1.0-lab
     environment:
       PGHOST: db
       PGPORT: "5432"

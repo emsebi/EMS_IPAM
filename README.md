@@ -2,7 +2,7 @@
 
 پنل مدیریت شبکه با **Core + IPAM، فهرست تجهیزات، Radio و RADIUS Device Access**، رابط فارسی و انگلیسی و کلاینت اتصال ویندوز. این نسخه RC است؛ کشف کامل خودکار شبکه، MAC Trace و اعمال 802.1X هنوز تکمیل نشده‌اند.
 
-[اصلاح نمایش رمز RADIUS 1.0.1-lab](docs/releases/radius-1.0.1-lab.md) · [تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
+[RADIUS 1.1.0-lab؛ گروه‌بندی با NAS Collections و بدون Company](docs/releases/radius-1.1.0-lab.md) · [تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
 
 ## دانلود و نصب با یک دستور
 
@@ -99,7 +99,7 @@ ZIP را استخراج و `Install.cmd` را با کاربر خودتان اج�
 
 ![دانلود و راه‌اندازی کلاینت ویندوز](docs/test-results/client-guide.png)
 
-![RADIUS؛ مدیریت تجهیزات و دسترسی](docs/test-results/radius.png)
+![RADIUS؛ مدیریت تجهیزات و دسترسی](docs/test-results/radius-1.1.0-nas.png)
 
 ![گزارش‌های عملیاتی](docs/test-results/reports.png)
 

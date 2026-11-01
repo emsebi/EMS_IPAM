@@ -1,3 +1,25 @@
+# Active correction — signed RADIUS replies, 2026-11-01
+
+Head 83d192264b173f2e0a043c6414ff5648fe596286 passed CI 41304146335 / 41304142214 and the full real lab 41304142213. The old installed server had no existing loopback-authorized account, so its read-only probe was skipped, not passed. The deployment check now supports an explicit temporary loopback-only /32 fixture with random credentials, exact cleanup and before/after configuration fingerprints; the real lab exercises it before it is used on the installed VM. Do not claim the old server's signing status until that actual probe returns. The hourly task "پیشرفت مرحله‌ای EMS-IPAM" was freshly created and enabled on November 1 after the old task failed again; verify subsequent runs rather than guaranteeing continuity.
+
+PR #6 now includes response signing for RouterOS require-message-auth=yes-for-request-resp, in addition to removing Company. User evidence is server ACCEPT/Full but RouterOS Accepts=0, Bad Replies=11, Timeouts=15. Do not mistake the server event for a successful login or repeat the earlier unverified exclude-groups hypothesis. See the updated incident record. Preserve all credentials and assignments. Installed release is still 051f77be until deployment succeeds.
+
+Company-free head 59ae4a6471c4de16bcb0f5e9fdaedec4a03f2df5 passed CI 41036116303 and real PostgreSQL/FreeRADIUS/Chromium 41036108311. The new reply-signature changes require a fresh final-head gate before deployment. PR #4 advanced to ffd30b88283da52de48259a951fe07d8b5795212 with successful full Docker/SSH fixture CI 41078690244; integrate it after PR #6. The automation again recorded failed and disabled after producing that map change. Its reported result does not explain the scheduling failure.
+
+---
+
+# Current work — RADIUS 1.1.0-lab, 2026-10-30
+
+Branch `work/radius-collections-only-20261029` removes Company from RADIUS operator forms and API requirements. NAS Collections and explicit permission-profile assignments are the device-access boundary. See [release notes](docs/releases/radius-1.1.0-lab.md). This checkpoint is under test, not yet deployed; installed functional release remains `051f77be2f89bfd1bad90c2a80a495173088f48d` until a successful Lab Deploy is recorded.
+
+Keep administrator Show/Copy/Hide, existing passwords/Shared Secrets, NAS membership, access rules and Inventory links. Migration 013 does not rewrite existing rows. Core IPAM/Inventory Company data and MAB/NAC policy are unchanged.
+
+PR #5 was merged at `327fc335fe135ca6c3983036d82a7166031aea49`; protocol tests do not resolve the separate real RouterOS Full-to-Read incident. PR #4 Smart Network Map is next: head `3dd9ba5e453a1930452c4a344511cea69938ef8a` has PostgreSQL 16 coverage and successful CI 40929415085; full Docker smoke and integration/deployment remain. Continue that work without rebuilding the module.
+
+The hourly automation was resumed on October 29, performed a bounded PR #4 test change, then was recorded failed and disabled again at 18:20 UTC. The task result does not explain the failure or prove continuous operation. Verify actual task state and run history before reporting it as active. No completion date is verified.
+
+---
+
 # Current continuation — RADIUS 1.0.1-lab
 
 Functional release `051f77be2f89bfd1bad90c2a80a495173088f48d` is merged into main and deployed to the dedicated VM. CI 40233050436 and Lab Deploy 40233050403 succeeded, including real PostgreSQL/FreeRADIUS credential reveal, UDP authentication/accounting and outage recovery. Separate Real Lab run 40233050453 was preparing Chromium at this documentation checkpoint; follow its actual result. Documentation-only follow-ups can have a newer SHA than the deployed functional release.

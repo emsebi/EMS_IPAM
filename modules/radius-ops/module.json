@@ -1,7 +1,7 @@
 {
   "id": "radius-ops",
   "name": "RADIUS Operations",
-  "version": "1.0.1-lab",
+  "version": "1.1.0-lab",
   "apiVersion": 1,
   "enabled": true,
   "roles": [
