@@ -12,8 +12,8 @@ Module version is 0.2.0-lab.2. This is an API increment; the existing MAC UI is 
 
 ## Exact next step
 
-1. Follow CI for this branch/PR, including the real PostgreSQL gate and Docker/SSH fixture; run IDs will be recorded after publication. Do not deploy or claim CI success while pending.
-2. After successful checks, continue the same implementation with an IP/MAC search UI: render every candidate and clearly separate inventory edit time from switch observation time. Preserve the MAC route and saved-password features. Add browser coverage before staging this user-facing increment through the existing Lab Deploy workflow.
+1. PR #8 head `cb907e01e1080d306c9b6e0f0ce70b60d5204d0c` has PR CI [41339657655](https://github.com/emsebi/EMS_IPAM/actions/runs/41339657655) and push CI [41339654845](https://github.com/emsebi/EMS_IPAM/actions/runs/41339654845). The PostgreSQL 16 job `124946766268` passed the new saved-IP lookup without collection. Local results: all 5 discovery/API tests and 4 parser tests passed; syntax/diff checks passed. Both full CI runs completed SUCCESS on the exact PR head, including Core/API/RADIUS, browser, PostgreSQL and Docker/SSH jobs. PR #8 was merged with expected head SHA as `ea9045fb792bc3861c3fc2963dfdc07d4cd77d0c`. This API increment has not been deployed. Automatic merge CI [41339777691](https://github.com/emsebi/EMS_IPAM/actions/runs/41339777691) was in progress at this checkpoint; follow its outcome next run. The merge tree matches the tested PR tree; this continuation follow-up changes only documentation/checksums.
+2. Continue from the merged API with an IP/MAC search UI: render every candidate and clearly separate inventory edit time from switch observation time. Preserve the MAC route and saved-password features. Add browser coverage before staging this user-facing increment through the existing Lab Deploy workflow.
 3. Do not scan live equipment without an explicit scope, push router configuration, enable TOTP or close the real-device RADIUS incident based on server ACCEPT.
 
 ---
