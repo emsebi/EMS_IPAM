@@ -12,6 +12,12 @@ server default {
   }
 
   authorize {
+    # Sign every response, including policy rejects, for NAS clients requiring
+    # Message-Authenticator (RouterOS yes-for-request-resp). FreeRADIUS fills
+    # the actual HMAC during packet encoding; never disable client validation.
+    update reply {
+      Message-Authenticator := 0x00
+    }
     preprocess
     if (!&User-Name) {
       reject
@@ -19,7 +25,7 @@ server default {
     if (&User-Name !~ /^[A-Za-z0-9_.:@-]{1,64}$/) {
       reject
     }
-    # Actual UDP packet source is matched to the NAS and company in PostgreSQL.
+    # Actual UDP packet source is matched to the registered NAS and explicit access rules in PostgreSQL.
     if ("%{sql:SELECT CASE WHEN radius_ops_identity_allowed('%{User-Name}', '%{Packet-Src-IP-Address}'::inet) THEN 1 ELSE 0 END}" != "1") {
       reject
     }
@@ -27,8 +33,8 @@ server default {
     mschap
     sql
     # Device-admin authorization is resolved from the actual UDP packet
-    # source.  The most-specific NAS collection member wins; ambiguous
-    # equal-prefix profiles fail closed in radius_ops_resolve_access().
+    # source. The most-specific registered NAS wins; conflicting collection
+    # profiles fail closed in radius_ops_resolve_access().
     if ("%{sql:SELECT count(*) FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}" == "1") {
       update reply {
         Cisco-AVPair := "shell:priv-lvl=%{sql:SELECT cisco_privilege FROM radius_ops_resolve_access('%{User-Name}','%{Packet-Src-IP-Address}'::inet)}"

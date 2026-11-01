@@ -8,7 +8,7 @@ Administrator Show / Copy / Hide for saved account passwords and Shared Secrets 
 
 Local validation: 16 Chromium browser/API scenarios, 191 Core/API tests (including three Company-free CRUD/upgrade tests) and 42 module tests passed. GitHub CI and real Docker/PostgreSQL/FreeRADIUS/Chromium runs are required before deployment. The dedicated lab workflow saves a private database backup, builds images before stopping containers, and compares existing RADIUS rows after migration. Deployment and real-run links will be recorded after completion.
 
-This release does not close the separate RouterOS Full-to-Read incident. SQL selected full/15 and isolated protocol tests passed, but effective authorization on the user's router still needs router-side evidence; see [incident record](../test-results/radius-authorization-2026-10-28.md).
+This release also adds Message-Authenticator to every RADIUS authentication reply and strict signature regression coverage for RouterOS clients. The real-device incident still requires a successful new login to close. SQL selected full/15 and isolated protocol tests passed, but effective authorization on the user's router still needs router-side evidence; see [incident record](../test-results/radius-authorization-2026-10-28.md).
 
 ## Screenshots and test evidence
 

@@ -158,6 +158,9 @@ jobs:
           set -Eeuo pipefail
           python3 scripts/radius-upgrade-check.py --compare "$HOME/ems-ipam-lab/backups/$GITHUB_SHA/radius-before.json"
 
+      - name: Verify installed signed replies and assigned permissions
+        run: python3 scripts/radius-installed-reply-check.py --require-signed
+
       - name: One-time local ali authentication probe
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[local-auth-probe]')
         shell: bash

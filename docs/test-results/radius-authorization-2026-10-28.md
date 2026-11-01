@@ -1,6 +1,14 @@
 # RADIUS authorization investigation — 2026-10-28
 
-Status: server-side checks passed; the reported RouterOS permission problem is still open.
+Status update, 2026-11-01: the user's RouterOS screenshot shows zero accepted replies, 11 bad replies and 15 timeouts while the server logs Access-Accept with Full. This is a response-validation incident; previous authorization-only checks did not establish successful login. The screenshot has require-message-auth=yes-for-request-resp. Do not publish the screenshot: it contains a credential.
+
+The default virtual server did not explicitly add Message-Authenticator. The UDP test verifier checked HMAC only when that attribute happened to be present, so it could accept a reply rejected by strict RouterOS clients. The pending correction adds Message-Authenticator before any authorization rejection and verifies its presence and cryptographic validity in real UDP replies. Missing/forged signatures are regression cases. An installed loopback probe reports only signature and permission booleans before/after deployment; no existing credential is changed or logged.
+
+A mismatched shared secret can also produce MS-CHAP server Accept plus RouterOS Bad Replies. The supplied screenshot's profile label alone does not prove the stored value matches. Keep the real-device incident open until a new login succeeds. Do not disable RouterOS reply validation as a workaround.
+
+References: [FreeRADIUS response signing](https://www.freeradius.org/security/), [RouterOS RADIUS client](https://manual.mikrotik.com/docs/authentication-authorization-accounting/radius/), [RFC 3579 response HMAC](https://www.freeradius.org/rfc/rfc3579.html).
+
+## Previous investigation (before the Bad Replies screenshot)
 
 The user reports that an account assigned Full/Write is accepted through MS-CHAP but receives read access on the home lab router. This is an authorization incident, not a saved-password display issue.
 

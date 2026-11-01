@@ -57,6 +57,14 @@ def reply_has_attributes(output, expected):
     return True
 
 
+def reply_has_message_authenticator(output):
+    if not parsed_radtest_reply(output):
+        return False
+    response = re.split(r'(?m)^Received Access-(?:Accept|Reject|Challenge) ', output, maxsplit=1)[1]
+    values = re.findall(r'(?m)^\s*Message-Authenticator\s*=\s*0x([0-9a-fA-F]{32})\s*$', response)
+    return len(values) == 1 and values[0] != '0' * 32
+
+
 def port(protocol):
     kind = socket.SOCK_DGRAM if protocol == 'udp' else socket.SOCK_STREAM
     with socket.socket(socket.AF_INET, kind) as s:
@@ -175,7 +183,8 @@ def main():
             raise AssertionError(f'Timeout: {label}{suffix}')
 
         def nas_udp(source, claimed, username, password, shared_secret, expected,
-                    nas_identifier='', calling_station_id='', framed_ip=''):
+                    nas_identifier='', calling_station_id='', framed_ip='', method='pap',
+                    mikrotik_group='', cisco_privilege=None):
             # The socket is bound to the *actual* NAS source, not merely the
             # NAS-IP-Address attribute. All traffic remains in the disposable
             # radius_ops container on the 127/8 loopback interface.
@@ -185,6 +194,9 @@ def main():
             if nas_identifier: args += ['--nas-identifier',nas_identifier]
             if calling_station_id: args += ['--calling-station-id',calling_station_id]
             if framed_ip: args += ['--framed-ip',framed_ip]
+            args += ['--method',method]
+            if mikrotik_group: args += ['--expect-mikrotik-group',mikrotik_group]
+            if cisco_privilege is not None: args += ['--expect-cisco-privilege',str(cisco_privilege)]
             r = dc(*args, timeout=30, check=False)
             return r.returncode == 0 and r.stdout.strip() == expected
 
@@ -216,7 +228,7 @@ def main():
                 raise ValueError('Unsupported test authentication method')
             r = dc('exec', '-T', 'radius_ops', 'radtest', '-t', method, username, password,
                    '127.0.0.1', '0', shared_secret, timeout=30, check=False)
-            return r.returncode == 0 and reply_has_attributes(r.stdout + r.stderr, expected)
+            return r.returncode == 0 and reply_has_attributes(r.stdout + r.stderr, expected) and reply_has_message_authenticator(r.stdout + r.stderr)
 
         def mschapv2_reply(shared_secret, expected, corrupt=False):
             # Public RFC 2759 section 9.2 vector; RADIUS layout: RFC 2548 2.3.2.
@@ -234,8 +246,8 @@ def main():
                    timeout=30, check=False, input_text='\n'.join(attrs) + '\n')
             output = r.stdout + r.stderr
             if corrupt:
-                return parsed_radtest_reply(output) == 'Access-Reject'
-            return r.returncode == 0 and reply_has_attributes(output, expected)
+                return parsed_radtest_reply(output) == 'Access-Reject' and reply_has_message_authenticator(output)
+            return r.returncode == 0 and reply_has_attributes(output, expected) and reply_has_message_authenticator(output)
 
         def accounting(username, shared_secret, session_id, status, session_time=0):
             """Send one real UDP accounting packet and authenticate its response."""
@@ -262,6 +274,7 @@ def main():
 
         try:
             dc('config', '--quiet', timeout=30)
+            print('STAGE build disposable images', flush=True)
             dc('build', 'app', 'radius_ops', timeout=600)
             dc('up', '-d', '--wait', 'db', 'app', timeout=300)
             wait(lambda: api('/health')['ok'], 'Core API healthy')
@@ -480,6 +493,11 @@ def main():
                     assert radtest_reply_attributes('User', 'clientPass', secret_a, expected, method), (
                         'Incorrect authorization reply for ' + method + '/' + mt_group)
                 assert mschapv2_reply(secret_a, expected), 'Incorrect MS-CHAPv2 reply for ' + mt_group
+                for method in ('pap','chap','mschapv2'):
+                    assert nas_udp('127.30.0.2','127.30.0.2','User','clientPass',protocol_secret,
+                                   'Access-Accept',method=method,mikrotik_group=mt_group,cisco_privilege=privilege), (
+                        'Invalid signed reply or permission attributes for ' + method + '/' + mt_group)
+                print('PASS required Message-Authenticator and Response Authenticator verified for PAP/CHAP/MS-CHAPv2', flush=True)
                 print('PASS live profile change ' + mt_group + ': PAP/CHAP/MS-CHAP/MS-CHAPv2 wire attributes', flush=True)
             assert mschapv2_reply(secret_a, {}, corrupt=True), 'Invalid MS-CHAPv2 proof must be rejected'
             api('/api/radius-ops/accounts/' + protocol_user, 'DELETE')
@@ -488,6 +506,7 @@ def main():
             api('/api/radius-ops/collections/' + protocol_collection, 'DELETE')
             for mt_group in ('read', 'write'):
                 api('/api/radius-ops/groups/' + protocol_profiles[mt_group], 'DELETE')
+            wait(lambda: radtest('testadminA',password_a,secret_a,'Access-Accept'), 'client reload after protocol fixture cleanup', seconds=35)
             print('PASS invalid MS-CHAPv2 proof rejected; protocol fixtures removed', flush=True)
             if os.environ.get('EMS_RADIUS_PROTOCOL_ONLY') == '1':
                 print('REAL DOCKER RADIUS AUTHORIZATION PROTOCOL MATRIX: PASS', flush=True)

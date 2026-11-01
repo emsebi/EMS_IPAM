@@ -11,6 +11,7 @@ on:
       - "modules/radius-ops/**"
       - "scripts/radius-ops-docker-smoke.py"
       - "scripts/radius-upgrade-check.py"
+      - "scripts/radius-installed-reply-check.py"
       - "docker-app/tests/radius-real-backend.mjs"
       - ".github/workflows/radius-ops-real.yml"
 
@@ -51,6 +52,9 @@ jobs:
 
       - name: Check installed data compatibility without changing it
         run: python3 scripts/radius-upgrade-check.py
+
+      - name: Inspect installed reply compatibility without changing configuration
+        run: python3 scripts/radius-installed-reply-check.py
 
       - name: Start isolated Chromium runtime
         shell: bash

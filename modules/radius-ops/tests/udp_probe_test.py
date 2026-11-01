@@ -51,10 +51,13 @@ class RadiusProbeTest(unittest.TestCase):
         header = struct.pack('!BBH', 2, 77, 20)
         digest = hashlib.md5(header + request_auth + secret).digest()
         packet = header + digest
-        self.assertEqual(probe.verify_response(packet, request_auth, secret, 77), 'Access-Accept')
+        self.assertEqual(probe.verify_response(packet, request_auth, secret, 77, require_message_authenticator=False), 'Access-Accept')
         reject_header = struct.pack('!BBH', 3, 77, 20)
         reject = reject_header + hashlib.md5(reject_header + request_auth + secret).digest()
-        self.assertEqual(probe.verify_response(reject, request_auth, secret, 77), 'Access-Reject')
+        self.assertEqual(probe.verify_response(reject, request_auth, secret, 77, require_message_authenticator=False), 'Access-Reject')
+        for unsigned in (packet, reject):
+            with self.assertRaisesRegex(ValueError, 'Missing required'):
+                probe.verify_response(unsigned, request_auth, secret, 77)
         with self.assertRaises(ValueError):
             probe.verify_response(packet, request_auth, b'wrong-secret', 77)
         with self.assertRaises(ValueError):
@@ -104,8 +107,10 @@ class RadiusProbeTest(unittest.TestCase):
                 packet, addr = server.recvfrom(4096)
                 seen['source'] = addr[0]
                 seen['claimed'] = packet[20:].find(probe.attr(4, socket.inet_aton('127.0.0.1'))) >= 0
-                header = struct.pack('!BBH', 2, packet[1], 20)
-                response = header + hashlib.md5(header + packet[4:20] + secret).digest()
+                header = struct.pack('!BBH', 2, packet[1], 38)
+                signed = hmac.new(secret, header + packet[4:20] + probe.attr(80, b'\0'*16), hashlib.md5).digest()
+                attributes = probe.attr(80, signed)
+                response = header + hashlib.md5(header + packet[4:20] + attributes + secret).digest() + attributes
                 server.sendto(response, addr)
 
             worker = threading.Thread(target=answer, daemon=True)
@@ -115,6 +120,27 @@ class RadiusProbeTest(unittest.TestCase):
                                           secret.decode(), destination_port=port), 'Access-Accept')
             worker.join(timeout=4)
             self.assertEqual(seen, {'source': '127.10.20.2', 'claimed': True})
+
+    def test_chap_and_mschapv2_requests_have_valid_message_authenticators(self):
+        secret = b'fixture-secret'
+        for method in ('chap', 'mschapv2'):
+            packet, _ = probe.request_packet('User', 'clientPass', secret, '127.0.0.1', method=method)
+            self.assertEqual(packet[-18:-16], probe.attr(80, b'0'*16)[:2])
+            self.assertEqual(packet[-16:], hmac.new(secret, packet[:-16] + bytes(16), hashlib.md5).digest())
+            self.assertNotIn(b'clientPass', packet)
+        with self.assertRaises(ValueError):
+            probe.request_packet('real-user', 'not-the-fixture', secret, '127.0.0.1', method='mschapv2')
+
+    def test_signed_reject_and_challenge_are_accepted_but_wrong_secret_is_not(self):
+        secret, req_auth = b'fixture-secret', bytes(range(16))
+        for code, expected in ((3, 'Access-Reject'), (11, 'Access-Challenge')):
+            header = struct.pack('!BBH', code, 8, 38)
+            mac = hmac.new(secret, header + req_auth + probe.attr(80, bytes(16)), hashlib.md5).digest()
+            attrs = probe.attr(80, mac)
+            packet = header + hashlib.md5(header + req_auth + attrs + secret).digest() + attrs
+            self.assertEqual(probe.verify_response(packet, req_auth, secret, 8), expected)
+            with self.assertRaises(ValueError):
+                probe.verify_response(packet, req_auth, b'wrong-secret', 8)
 
     def test_probe_cannot_send_to_real_network_or_unapproved_sources(self):
         with patch.object(probe.socket, 'socket') as mocked:
