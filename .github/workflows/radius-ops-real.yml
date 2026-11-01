@@ -5,10 +5,13 @@ on:
   push:
     branches:
       - work/i18n-personnel-foundation
+      - work/radius-collections-only-20261029
     paths:
       - "modules/radius/**"
       - "modules/radius-ops/**"
       - "scripts/radius-ops-docker-smoke.py"
+      - "scripts/radius-upgrade-check.py"
+      - "scripts/radius-installed-reply-check.py"
       - "docker-app/tests/radius-real-backend.mjs"
       - ".github/workflows/radius-ops-real.yml"
 
@@ -47,13 +50,19 @@ jobs:
           cache: npm
           cache-dependency-path: docker-app/package-lock.json
 
+      - name: Check installed data compatibility without changing it
+        run: python3 scripts/radius-upgrade-check.py
+
       - name: Start isolated Chromium runtime
         shell: bash
         run: |
           set -euo pipefail
           cd docker-app
           npm ci --ignore-scripts
-          docker pull "$EMS_RADIUS_BROWSER_IMAGE"
+          if ! docker image inspect "$EMS_RADIUS_BROWSER_IMAGE" >/dev/null 2>&1; then
+            timeout 300 docker pull "$EMS_RADIUS_BROWSER_IMAGE"
+          fi
+          docker image inspect --format 'Chromium runtime: {{.Id}}' "$EMS_RADIUS_BROWSER_IMAGE"
           docker rm -f ems-radius-browser >/dev/null 2>&1 || true
           token="$(openssl rand -hex 24)"
           echo "::add-mask::$token"
@@ -77,6 +86,9 @@ jobs:
       - name: Run real Docker PostgreSQL FreeRADIUS smoke
         shell: bash
         run: python3 scripts/radius-ops-docker-smoke.py
+
+      - name: Inspect installed replies with a temporary loopback fixture
+        run: python3 scripts/radius-installed-reply-check.py --temporary-loopback-fixture
 
       - name: Stop isolated Chromium runtime
         if: always()
