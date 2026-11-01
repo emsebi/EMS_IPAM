@@ -340,7 +340,7 @@ try {
   assert.equal(await page.locator('.nm-ip-record').count(),2);
   assert.equal(await page.locator('[data-ip-mac]').count(),2);
   const ipText=await page.locator('.nm-ip-result').textContent();
-  assert.match(ipText,/نامطمئن/);assert.match(ipText,/ویرایش رکورد/);assert.match(ipText,/مشاهده IP\/MAC: دریافت نشده/);
+  assert.match(ipText,/Test LAN/);assert.match(ipText,/Overlapping fixture/);assert.match(ipText,/نامطمئن/);assert.match(ipText,/ویرایش رکورد/);assert.match(ipText,/مشاهده IP\/MAC: دریافت نشده/);
   await page.locator('[data-ip-mac="02:00:00:00:00:60"]').click();
   await page.locator('.nm-trace-result').waitFor();
   assert.match(await page.locator('.nm-trace-result').textContent(),/mac-address-table/);
