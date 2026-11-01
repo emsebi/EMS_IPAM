@@ -152,6 +152,9 @@ jobs:
           echo "::error::EMS-IPAM panel did not become healthy on port 8888."
           exit 1
 
+      - name: Verify installed module availability without discovery
+        run: python3 scripts/installed-modules-check.py
+
       - name: Verify existing RADIUS data survived the upgrade
         shell: bash
         run: |
