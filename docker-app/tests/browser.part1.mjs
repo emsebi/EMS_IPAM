@@ -315,7 +315,7 @@ try {
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
   // Keep map-only overlapping inventory out of earlier module layout fixtures.
-  const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/25'},201);
+  const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/23'},201);
   await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
   await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
   await page.reload();

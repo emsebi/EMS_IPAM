@@ -1,5 +1,13 @@
 # Current work — saved IP trace UI, 2026-11-02 (Tehran)
 
+## Browser fixture correction — 2026-11-02
+
+Fresh main remains `62654e23aad649fb6d04b8062b698cbcdd46cc8a`; PR #6 and #4 are merged. PR #9 head `f5c5d39751b26539afacd1f97c4fa1f824bf7625` CI 41355473173 / 41355469465 completed FAILURE. Browser job 124994464376 confirms the Radio mobile assertion now PASSES, together with RADIUS password reveal/copy/hide. It then rejects the map fixture's POST /api/spaces with HTTP 400 because root CIDRs only allow /16 through /24.
+
+The fixture now uses overlapping `192.0.2.0/23` alongside `192.0.2.0/24`, keeping distinct address spaces and the same duplicate-IP scenario. No production validation or previous assertion was weakened. Local real HTTP verification passed: authenticated space/host creation, two ambiguous IP records, two saved MAC traces and zero snapshots. Syntax check passed. Full browser verification still requires CI (local Chromium is absent).
+
+Next: inspect CI for the new PR #9 head; its run IDs will be recorded in the PR body. Require all four CI jobs to pass, then merge with a fresh expected head and use the existing Lab Deploy workflow. Do not deploy a failed or pending head. Installed release remains `d1c712a`; the real RouterOS login incident remains OPEN.
+
 Fresh main `62654e23aad649fb6d04b8062b698cbcdd46cc8a` and API merge `ea9045f` both have successful CI (41339820329 / 41339777691). PR #8 is merged. Installed release is still `d1c712a`; API and UI increments are not yet installed. RADIUS real-device login remains OPEN / unverified.
 
 Branch `work/map-ip-trace-ui-20261102` completes the saved-data search UI on the existing module (version 0.2.0-lab.3). An explicit MAC/IPv4 selector preserves the existing MAC route. IP results display all candidates, address-space identity, inventory edit timestamps and unobserved/uncertain IP bindings. Clicking a candidate opens the existing saved MAC/port/VLAN evidence with its own source/time/staleness. Result requests are guarded against stale responses after search/company changes or clearing. No discovery, device probe or configuration push is added.
