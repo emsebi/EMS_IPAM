@@ -1,4 +1,22 @@
-# Active correction — signed RADIUS replies, 2026-11-01
+# Current checkpoint — map merged; staged deployment running, 2026-11-01
+
+This checkpoint supersedes the historical status below. Fresh main was `3fc3676a835ea45f1542cc23c121fd9f406bdf02`. PR #6 is merged and RADIUS 1.1.0 was successfully deployed in [Lab Deploy 41305578638](https://github.com/emsebi/EMS_IPAM/actions/runs/41305578638), completed at 12:26 UTC. The job saved a private database backup, preserved existing rows/credentials, verified port 8888, and checked the installed listener: `assigned_permissions_match=true`, `required_message_authenticator_valid=true`, `response_authenticator_valid=true`. The temporary loopback fixture was removed with existing configuration unchanged. Real Docker RADIUS smoke also passed. This does not prove a successful login on the user's actual RouterOS device; that incident remains OPEN.
+
+PR #4 had already incorporated that main at `48c13a5069a9a14bb02ded7c0b97247fbe2a8711`; no rebuild or repeated conflict resolution was needed. [Integrated CI 41305917876](https://github.com/emsebi/EMS_IPAM/actions/runs/41305917876) passed all four jobs: Core/API/RADIUS, browser, PostgreSQL 16, and full Docker Compose with synthetic SSH. The Docker log verifies manual Create Map, LLDP/CDP port-to-port data, port/VLAN/MAC evidence, redacted snapshots and persistence after restart, with no scan on settings save.
+
+PR #4 is now merged as `d1c712af0f809144472cde7f0498aa31639bd1cc`, using the expected PR head. Its tree `911e5b2e5035f6cb10246d42037d88089608a5c6` exactly matches the tested integration head. The existing deployment branch was fast-forwarded with expected SHA from `3fc3676` to `d1c712a`; no force or workflow changes were used.
+
+## Exact next step
+
+1. Follow [Lab Deploy 41329218765](https://github.com/emsebi/EMS_IPAM/actions/runs/41329218765), target `d1c712af0f809144472cde7f0498aa31639bd1cc`. It was **in_progress**, not successful, at this checkpoint. Do not queue another deployment while it runs. Also follow merge CI [41329180890](https://github.com/emsebi/EMS_IPAM/actions/runs/41329180890) and deployment-branch CI [41329218685](https://github.com/emsebi/EMS_IPAM/actions/runs/41329218685).
+2. Require completed success, private backup/data-preservation checks, port 8888 health, installed signed replies and real RADIUS smoke before recording this map release as successfully deployed. On failure inspect the failed step and record the actual running version; do not infer rollback. Last **completed verified deployment** remains RADIUS `3fc3676` until the new run succeeds.
+3. After deployment, verify installed Network Map module availability without calling scan or health-probe endpoints on real equipment. A live Cisco/MikroTik scan requires an explicit device scope. Keep MAC collection and discovery manual; do not push router configuration or enable TOTP.
+
+Preserve administrator RADIUS Show/Copy/Hide and Shared Secret reveal, explicit NAS Collection assignments without Company, credentials/memberships/Inventory links, Core Company and MAB/NAC boundaries, volumes and existing modules. The code and this continuation are saved in GitHub; no local checkout is required to resume.
+
+---
+
+# Historical correction — signed RADIUS replies, 2026-11-01
 
 Head 83d192264b173f2e0a043c6414ff5648fe596286 passed CI 41304146335 / 41304142214 and the full real lab 41304142213. The old installed server had no existing loopback-authorized account, so its read-only probe was skipped, not passed. The deployment check now supports an explicit temporary loopback-only /32 fixture with random credentials, exact cleanup and before/after configuration fingerprints; the real lab exercises it before it is used on the installed VM. Do not claim the old server's signing status until that actual probe returns. The hourly task "پیشرفت مرحله‌ای EMS-IPAM" was freshly created and enabled on November 1 after the old task failed again; verify subsequent runs rather than guaranteeing continuity.
 

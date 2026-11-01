@@ -1,5 +1,11 @@
 # RADIUS authorization investigation — 2026-10-28
 
+## Installed correction verified — 2026-11-01; device incident OPEN
+
+[Lab Deploy 41305578638](https://github.com/emsebi/EMS_IPAM/actions/runs/41305578638) successfully installed `3fc3676a835ea45f1542cc23c121fd9f406bdf02`. At 12:21:52 UTC its installed-listener check reported Access-Accept with `assigned_permissions_match=true`, `required_message_authenticator_valid=true` and `response_authenticator_valid=true`. The temporary loopback fixture was removed; existing configuration and credentials were unchanged. The database backup, upgrade-preservation check and subsequent real Docker RADIUS smoke passed; the job completed at 12:26 UTC.
+
+This proves the installed server's corrected signed response, not the affected MikroTik's acceptance of a new session. Keep the incident OPEN until the actual device accepts a new login with the intended access. No router configuration was changed and no real-device scan was started. The pending-correction wording below is historical.
+
 Status update, 2026-11-01: the user's RouterOS screenshot shows zero accepted replies, 11 bad replies and 15 timeouts while the server logs Access-Accept with Full. This is a response-validation incident; previous authorization-only checks did not establish successful login. The screenshot has require-message-auth=yes-for-request-resp. Do not publish the screenshot: it contains a credential.
 
 The default virtual server did not explicitly add Message-Authenticator. The UDP test verifier checked HMAC only when that attribute happened to be present, so it could accept a reply rejected by strict RouterOS clients. The pending correction adds Message-Authenticator before any authorization rejection and verifies its presence and cryptographic validity in real UDP replies. Missing/forged signatures are regression cases. An installed loopback probe reports only signature and permission booleans before/after deployment; no existing credential is changed or logged.

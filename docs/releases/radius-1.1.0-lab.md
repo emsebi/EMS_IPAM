@@ -1,5 +1,9 @@
 # RADIUS 1.1.0-lab — NAS Collections without Company
 
+## Verified deployment — 2026-11-01
+
+PR #6 merged as `3fc3676a835ea45f1542cc23c121fd9f406bdf02`. [Lab Deploy 41305578638](https://github.com/emsebi/EMS_IPAM/actions/runs/41305578638) completed successfully at 12:26 UTC: private database backup, existing-data preservation, port 8888 health, installed reply signatures/permissions, temporary-fixture cleanup and real Docker RADIUS smoke all passed. [Real Lab 41305578586](https://github.com/emsebi/EMS_IPAM/actions/runs/41305578586) also succeeded. The installed listener returned valid Message-Authenticator and Response Authenticator with matching assigned permissions. Successful login and effective access on the actual RouterOS device remain unverified; the incident is not closed. This supersedes the pre-deployment status in the original release notes below.
+
 RADIUS device administration now uses explicit NAS Collections and permission profiles without asking for a Company. NAS, Shared Secret profiles, permission profiles, collections and user accounts can be created in a database with no Company at all. Existing Core IPAM/Inventory Company data is unchanged.
 
 Migration 013 retains all existing rows, credentials, access rules and inventory links. Legacy Company IDs remain internal compatibility metadata; archived legacy records remain denied. New records have no Company ID. Existing MAB/NAC policy is unchanged. A preflight rejects malformed legacy cross-Company access links so an upgrade cannot silently activate previously denied assignments.
