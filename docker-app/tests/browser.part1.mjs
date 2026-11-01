@@ -315,6 +315,7 @@ try {
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
   // Keep map-only overlapping inventory out of earlier module layout fixtures.
+  const inventoryBeforeTrace=(await api('/api/inventory')).items.map(h=>h.id).sort();
   const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/23'},201);
   await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
   await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
@@ -366,6 +367,12 @@ try {
   page.off('request',traceRequest);assert.deepEqual(traceMutations,[]);
   assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
   check('IP trace shows every candidate and provenance; MAC trace preserved; no collection writes');
+
+  // Restore the inventory fixture before unrelated module and viewer checks.
+  await api('/api/hosts/test-space/192.0.2.60','DELETE');
+  await api(`/api/hosts/${traceSpace.id}/192.0.2.60`,'DELETE');
+  await api(`/api/spaces/${traceSpace.id}`,'DELETE');
+  assert.deepEqual((await api('/api/inventory')).items.map(h=>h.id).sort(),inventoryBeforeTrace);
 
   await page.locator('button.module-nav-link[data-module-id="reports"]').click();
   await page.locator('#reportsMetrics').waitFor({ state: 'visible' });
