@@ -1,8 +1,8 @@
 {
   "id": "radio",
   "name": "Radio Management",
-  "version": "2.0.0-rc.1",
-  "description": "Select an AP to display its stations. Shared IPAM records; manual ping only.",
+  "version": "2.1.0-lab.1",
+  "description": "Documentation-first AP > Station map with inventory uplink, offline MAC vendor hints and manual ping.",
   "enabled": true,
   "permissions": [
     "radio.read",
