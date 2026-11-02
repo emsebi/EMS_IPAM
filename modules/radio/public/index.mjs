@@ -1,4 +1,4 @@
-import { renderRadioTopology } from './topology.mjs';
+import { renderRadioTopology, radioUplinkSaved } from './topology.mjs';
 
 export function createUi(ctx) {
 const { state, $, page, isModuleInstalled, hasClientModule, ensureInventory, updateSelectors, navActive, setRoute, toast, canWrite, ipv4ToInt, intToIpv4, request, prepareHostEditor, loadSpace, escapeHtml, formatNumber, formatDateTime, translateTree, t } = ctx;
@@ -141,7 +141,7 @@ function renderRadios() {
       }});
       uplinkCache.set(selected.id,result.link||null);
       renderRadios();
-      toast(document.documentElement.lang==='fa'?'اتصال ذخیره شد.':'Uplink saved.');
+      toast(radioUplinkSaved(document.documentElement.lang));
     } catch(error) { button.disabled=false; toast(error.message); }
   });
   syncMode(); translateTree(page);
