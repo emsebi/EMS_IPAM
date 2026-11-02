@@ -1,4 +1,4 @@
-# Current work — offline failure-impact regression, 2026-11-02 (Tehran)
+# Current checkpoint — failure-impact regression merged, 2026-11-02 (Tehran)
 
 Fresh main: `0fdf5f4796f70ff344913babf6121626b17a7221`; checkpoint CI 41381047520 completed SUCCESS. PR #6, #4 and #9 are merged. Installed functional release remains `588ba9f86a1731ee12c5308ddef2e755131352dc`, with successful Lab Deploy 41360114772. Actual RouterOS login remains OPEN / unverified.
 
@@ -6,7 +6,7 @@ Branch `work/map-impact-regression-20261102` adds six offline production-model s
 
 ## Exact next step
 
-1. Follow this branch's exact-head CI (run IDs recorded in its PR), then merge with fresh main and expected head after all gates pass. This increment changes tests, this checkpoint and checksums only; do not redeploy the VM for it.
+1. PR #10 merged with expected head as `35b99d29bb343ef9bd64852dda0b0f4bd969fd4d`. Its final head `fa3d363d1e27cf44c7896c0010f9b1264ab58b3e` passed all four gates in CI [41385945088](https://github.com/emsebi/EMS_IPAM/actions/runs/41385945088) / [41385921446](https://github.com/emsebi/EMS_IPAM/actions/runs/41385921446); the merge tree matches that tested head. Follow merge CI [41386061955](https://github.com/emsebi/EMS_IPAM/actions/runs/41386061955) (in_progress) and the documentation checkpoint CI next. This increment changes tests, this checkpoint and checksums only; do not redeploy the VM.
 2. Next bounded UI improvement: distinguish a missing saved MAC path (`links=null`) from a valid zero-hop path (`links=[]`, endpoint at the root). The existing model preserves the port observation even when its root path is disconnected; the UI should state that no saved path is available rather than leaving the distinction implicit. Cover missing root, disconnected endpoint and endpoint-at-root with browser behavior tests; preserve source/time, uncertainty and manual collection.
 3. Do not scan real devices without explicit targets, push router configuration, enable TOTP or close the actual-device RADIUS incident based on server ACCEPT.
 
