@@ -1,4 +1,20 @@
-# Current checkpoint — failure-impact regression merged, 2026-11-02 (Tehran)
+# Current work — explicit saved MAC path status, 2026-11-02 (Tehran)
+
+Fresh main `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`, CI 41386136552 and PR #10 merge CI 41386061955 all verified SUCCESS. PR #6, #4, #9 and #10 are merged. Installed functional release remains `588ba9f` (Lab Deploy 41360114772); actual RouterOS login remains OPEN / unverified.
+
+Branch `work/map-path-status-20261102` advances Network Map to 0.2.0-lab.4. Saved MAC candidate observations now distinguish root not configured, selected root absent from the saved map, no saved root path, and observation on the root itself (zero inter-switch links). No-path explicitly does not confirm a live outage; port/source/time/staleness remain visible. Changing the root invalidates old trace/impact results and highlights, preventing a path for the previous root being relabelled as current.
+
+The browser scenario uses the existing real HTTP/PGlite fixture, with a synthetic disconnected switch and no API mocks. It covers each status, root-change invalidation, IP-selected MAC results, preserved port evidence, screenshots and zero collection writes/snapshots during search. Local syntax/diff checks passed; Chromium is absent locally, so the full browser gate must pass in CI before merge or deployment.
+
+## Exact next step
+
+1. Follow the exact-head PR CI (IDs recorded in the PR body), inspect actual failures, and merge with fresh main/expected SHA only after all four gates pass. Then stage the tested merge through existing EMS-IPAM Lab Deploy and record its run; do not wait indefinitely or claim queued deployment succeeded.
+2. Check backup, unchanged RADIUS data/credentials/assignments, port 8888, all installed modules and signed replies after deployment. Preserve Core/MAB Company boundaries and existing accepted UI features. No new migration or router configuration is included.
+3. Live discovery needs explicit targets; actual RouterOS login remains open. TOTP and Radio redesign remain out of scope.
+
+---
+
+# Historical checkpoint — failure-impact regression merged, 2026-11-02 (Tehran)
 
 Fresh main: `0fdf5f4796f70ff344913babf6121626b17a7221`; checkpoint CI 41381047520 completed SUCCESS. PR #6, #4 and #9 are merged. Installed functional release remains `588ba9f86a1731ee12c5308ddef2e755131352dc`, with successful Lab Deploy 41360114772. Actual RouterOS login remains OPEN / unverified.
 

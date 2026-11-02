@@ -324,7 +324,7 @@ try {
   await page.locator('#nmSettings').waitFor({state:'visible'});
   await page.locator('#nmUsername').fill('browser-readonly');
   await page.locator('#nmPassword').fill('Browser-Map-Password');
-  await page.locator('#nmTargets').fill('192.0.2.10 | cisco | Browser Core');
+  await page.locator('#nmTargets').fill('192.0.2.10 | cisco | Browser Core\n192.0.2.12 | cisco | Disconnected fixture\n192.0.2.13 | cisco | Uncollected root');
   await page.locator('#nmRoot').fill('192.0.2.10');
   await page.locator('#nmSettings [type="submit"]').click();
   await page.locator('#nmScan').waitFor({state:'visible'});
@@ -352,6 +352,7 @@ try {
   assert.match(await page.locator('.nm-trace-result').textContent(),/mac-address-table/);
   assert.match(await page.locator('.nm-trace-result').textContent(),/قدیمی/);
   assert.match(await page.locator('#nmPortDetail').textContent(),/Gi1/);
+  assert.equal(await page.locator('.nm-path-status').getAttribute('data-path-status'),'at-root');
   await page.locator('#nmMac').fill('192.0.2.99');
   await page.locator('#nmTraceForm [type=submit]').click();
   await page.locator('.nm-ip-result').getByText(/رکورد IP یافت نشد/).waitFor();
@@ -367,6 +368,46 @@ try {
   page.off('request',traceRequest);assert.deepEqual(traceMutations,[]);
   assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
   check('IP trace shows every candidate and provenance; MAC trace preserved; no collection writes');
+
+  const pathWrites=[];
+  const pathRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')pathWrites.push(req.url());};
+  const tracePath=async(mac,status)=>{
+    await page.locator('#nmMac').fill(mac);
+    const reply=page.waitForResponse(r=>{const u=new URL(r.url());return u.pathname==='/api/network-map/trace'&&u.searchParams.get('mac')===mac;});
+    await page.locator('#nmTraceForm [type=submit]').click();
+    assert.equal((await reply).status(),200);
+    await page.locator(`.nm-path-status[data-path-status="${status}"]`).waitFor();
+  };
+  const setTraceRoot=async(root)=>{
+    page.off('request',pathRequest);
+    await page.locator('[data-nm-tab="settings"]').click();
+    await page.locator('#nmRoot').fill(root);
+    await page.locator('#nmSettings [type=submit]').click();
+    await page.locator('#nmScan').waitFor({state:'visible'});
+    assert.equal(await page.locator('#nmTraceResult').textContent(),'','changing root invalidates paths calculated for the previous root');
+    page.on('request',pathRequest);
+  };
+  page.on('request',pathRequest);
+  await tracePath('02:00:00:00:00:60','at-root');
+  assert.match(await page.locator('.nm-path-status').textContent(),/مشاهده روی سوئیچ ریشه/);
+  await tracePath('02:00:00:00:00:62','no-path');
+  assert.match(await page.locator('.nm-path-status').textContent(),/قطعی زنده تأیید نشده/);
+  assert.match(await page.locator('.nm-trace-result').textContent(),/mac-address-table/);
+  assert.match(await page.locator('.nm-trace-result').textContent(),/قدیمی/);
+  assert.match(await page.locator('#nmPortDetail').textContent(),/Gi9/);
+  await page.screenshot({path:path.join(outputDir,'network-map-missing-path.png'),fullPage:true});
+  await setTraceRoot('');
+  await tracePath('02:00:00:00:00:62','root-unset');
+  await setTraceRoot('192.0.2.13');
+  await tracePath('02:00:00:00:00:62','root-unavailable');
+  await setTraceRoot('192.0.2.12');
+  await tracePath('02:00:00:00:00:62','at-root');
+  await setTraceRoot('192.0.2.10');
+  await page.locator('#nmClearTrace').click();
+  page.off('request',pathRequest);
+  assert.deepEqual(pathWrites,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('MAC path distinguishes missing root, absent root, disconnected observation and root-local observation without discovery');
 
   // Restore the inventory fixture before unrelated module and viewer checks.
   await api('/api/hosts/test-space/192.0.2.60','DELETE');

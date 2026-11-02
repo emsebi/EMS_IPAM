@@ -1,4 +1,6 @@
-# Smart Network Map — 0.2.0-lab.3
+# Smart Network Map — 0.2.0-lab.4
+
+MAC observations now explicitly distinguish an unset root, a root absent from the saved map, no saved path from the root, and an observation on the root itself (zero inter-switch links). A missing saved path does not claim a live outage or discard the port/source/time evidence. These labels apply equally to direct MAC searches and MAC candidates selected from IPv4 results. Collection remains manual.
 
 The search form now offers MAC or IPv4 lookup. IPv4 results show every saved inventory candidate, its address space and inventory edit time, and explicitly mark the binding uncertain/unobserved. Selecting a MAC opens its saved switch/port/VLAN evidence with separate observation source/time and stale status. Searching, choosing a candidate and clearing results perform no collection. The original MAC lookup and registration remain available.
 
