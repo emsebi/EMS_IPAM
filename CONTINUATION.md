@@ -1,4 +1,20 @@
-# Current work — saved IP trace UI, 2026-11-02 (Tehran)
+# Current checkpoint — saved IP/MAC trace deployed, 2026-11-02 (Tehran)
+
+Installed functional release: `588ba9f86a1731ee12c5308ddef2e755131352dc` (PR #9 merge, Network Map 0.2.0-lab.3). Fresh main was this same SHA at verification. PR #6, #4, #7, #8 and #9 are merged; no open PR was found. This checkpoint supersedes the pending/failure notes below.
+
+[Lab Deploy 41360114772](https://github.com/emsebi/EMS_IPAM/actions/runs/41360114772) completed **SUCCESS** at 2026-11-01 23:07:52 UTC (2026-11-02 Tehran). Job `125008502913` confirms the exact SHA, private pre-upgrade database backup, preserved volumes/configuration/credentials, healthy port 8888, all seven modules loaded, unchanged RADIUS records and assignments, valid Message-Authenticator/Response Authenticator and matching permissions on the installed service. Its temporary loopback fixture was removed without changing existing data. The separate disposable Docker/FreeRADIUS smoke also passed, including protocol/profile changes, accounting, restart and database-outage recovery. Actual RouterOS login remains **OPEN / unverified**; these checks do not prove it.
+
+PR #9 final head `2f8a013a0d2a85854e168a8e91476d67072d8d16` passed all four gates in CI [41359956349](https://github.com/emsebi/EMS_IPAM/actions/runs/41359956349) / [41359952039](https://github.com/emsebi/EMS_IPAM/actions/runs/41359952039), including all 18 browser/API scenarios. The merge tree matches that tested head. Merge CI 41360097707 and deployment-branch CI 41360114813 also completed SUCCESS. Radio, RADIUS Show/Copy/Hide, viewer authorization, Personnel, Client and Donation checks remain intact. See [release notes](docs/releases/network-map-0.2.0-lab.3.md).
+
+## Exact next step
+
+1. Follow the CI attached to this documentation/checksum checkpoint; no application code changed, so do not redeploy or repeat completed VM tests merely for the documentation SHA.
+2. Next bounded map increment: add offline regression coverage for link/node failure with redundant physical paths, already-down links and nodes outside the root component. Current coverage has only a simple one-uplink impact case. Verify affected/unmapped sets and saved MAC paths; fix only a reproduced defect, preserving the topology-only uncertainty label and manual collection. Continue from the current module rather than rebuilding it.
+3. Live Cisco/MikroTik discovery needs explicit targets before any network scan. Keep the RADIUS incident open pending actual-device evidence, and preserve all accepted secrets, Collections, Inventory links and Core/MAB Company boundaries. TOTP and Radio redesign are outside this increment.
+
+---
+
+# Historical work — saved IP trace UI, 2026-11-02 (Tehran)
 
 ## Browser fixture correction — 2026-11-02
 
