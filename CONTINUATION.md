@@ -1,4 +1,18 @@
-# Current checkpoint — saved IP/MAC trace deployed, 2026-11-02 (Tehran)
+# Current work — offline failure-impact regression, 2026-11-02 (Tehran)
+
+Fresh main: `0fdf5f4796f70ff344913babf6121626b17a7221`; checkpoint CI 41381047520 completed SUCCESS. PR #6, #4 and #9 are merged. Installed functional release remains `588ba9f86a1731ee12c5308ddef2e755131352dc`, with successful Lab Deploy 41360114772. Actual RouterOS login remains OPEN / unverified.
+
+Branch `work/map-impact-regression-20261102` adds six offline production-model scenarios: redundant uplink/transit-node removal, down backup links, existing disconnected components and root removal, distinct parallel links with topology-only uncertainty, MAC paths avoiding down links, and retained MAC evidence when the root path is absent. A seventh production-handler/PGlite API scenario verifies saved impact results, admin enforcement, unchanged topology, zero snapshots and zero collector/probe calls. All 16 related API/model/parser tests pass locally. No defect was reproduced in these cases; production code, module version and deployment remain unchanged.
+
+## Exact next step
+
+1. Follow this branch's exact-head CI (run IDs recorded in its PR), then merge with fresh main and expected head after all gates pass. This increment changes tests, this checkpoint and checksums only; do not redeploy the VM for it.
+2. Next bounded UI improvement: distinguish a missing saved MAC path (`links=null`) from a valid zero-hop path (`links=[]`, endpoint at the root). The existing model preserves the port observation even when its root path is disconnected; the UI should state that no saved path is available rather than leaving the distinction implicit. Cover missing root, disconnected endpoint and endpoint-at-root with browser behavior tests; preserve source/time, uncertainty and manual collection.
+3. Do not scan real devices without explicit targets, push router configuration, enable TOTP or close the actual-device RADIUS incident based on server ACCEPT.
+
+---
+
+# Verified checkpoint — saved IP/MAC trace deployed, 2026-11-02 (Tehran)
 
 Installed functional release: `588ba9f86a1731ee12c5308ddef2e755131352dc` (PR #9 merge, Network Map 0.2.0-lab.3). Fresh main was this same SHA at verification. PR #6, #4, #7, #8 and #9 are merged; no open PR was found. This checkpoint supersedes the pending/failure notes below.
 

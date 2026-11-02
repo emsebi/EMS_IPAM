@@ -90,6 +90,26 @@ test('scope validation, impact and MAC trace are bounded and deterministic',()=>
  const trace=traceMac(topology,'0011.2233.4455','core');assert.equal(trace.candidates.length,1);assert.deepEqual(trace.paths[0].links,['uplink']);
 });
 
+test('saved impact API respects redundancy and never starts collection or changes state',async()=>{
+ const f=await fixture();try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}],rootId:'192.0.2.10'});
+  const topology={nodes:['192.0.2.10','192.0.2.20','192.0.2.30','192.0.2.40'].map(id=>({id})),links:[
+   {id:'direct',source:'192.0.2.10',target:'192.0.2.20',state:'up'},
+   {id:'backup',source:'192.0.2.10',target:'192.0.2.30',state:'up'},
+   {id:'alternate',source:'192.0.2.30',target:'192.0.2.20',state:'up'}]};
+  await f.pool.query("INSERT INTO network_map_state(company_id,topology) VALUES('map-co',$1::jsonb)",[JSON.stringify(topology)]);
+  const link=await f.call('GET','/impact?linkId=direct');
+  assert.equal(link.status,200);assert.deepEqual(link.body.affected,[]);assert.deepEqual(link.body.unmapped,['192.0.2.40']);
+  assert.equal(link.body.confidence,'topology-only');
+  const node=(await f.call('GET','/impact?nodeId=192.0.2.20')).body;
+  assert.deepEqual(node.affected,['192.0.2.20']);
+  await assert.rejects(f.call('GET','/impact?linkId=direct',null,{role:'viewer'}),/forbidden/);
+  assert.deepEqual((await f.pool.query("SELECT topology FROM network_map_state WHERE company_id='map-co'")).rows[0].topology,topology);
+  assert.equal((await f.call('GET','/snapshots')).body.items.length,0);
+  assert.equal(f.getCollects(),0);assert.equal(f.getProbes(),0);
+ }finally{await f.close();}
+});
+
 test('configuration redaction removes values instead of retaining the matching line',()=>{
  const sentinels=['ios-password-value','radius-secret-value','snmp-community-value','routeros-password-value','snmp-auth-value','snmp-priv-value','wifi-psk-value'];
  const raw=`username netread password ${sentinels[0]}\nradius server EMS key ${sentinels[1]}\nsnmp-server community ${sentinels[2]} RO\n/user add name=netread password=${sentinels[3]} group=read\nsnmp-server user monitor EMS v3 auth sha ${sentinels[4]} priv aes 128 ${sentinels[5]}\nwpa-psk ascii ${sentinels[6]}`;
