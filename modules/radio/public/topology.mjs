@@ -60,3 +60,5 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
    </aside>
   </section>`;
 }
+
+export function radioUplinkSaved(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'اتصال ذخیره شد.' : 'Uplink saved.'; }
