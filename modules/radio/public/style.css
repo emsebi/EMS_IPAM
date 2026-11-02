@@ -1,2 +1,41 @@
 .radio-master-detail{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:18px;align-items:start}.radio-ap-list{padding:10px;display:flex;flex-direction:column;gap:8px;max-height:70vh;overflow:auto}.radio-ap-choice{border:1px solid var(--line,#dce3ed);border-radius:10px;padding:14px;background:var(--panel,#fff);color:inherit;text-align:start;display:flex;flex-direction:column;gap:7px;cursor:pointer;width:100%;min-width:0;overflow-wrap:anywhere}.radio-ap-choice.selected{border-color:#2581ed;box-shadow:inset 3px 0 #2581ed;background:var(--soft,#eef5ff)}.radio-detail{min-width:0;padding:18px}.radio-detail-head{display:flex;align-items:start;justify-content:space-between;gap:14px;padding-bottom:16px;flex-wrap:wrap}.radio-station-list{display:flex;flex-direction:column}.radio-station-row{padding:14px 0;border-top:1px solid var(--line,#dce3ed);display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}.radio-station-row>div:first-child{flex:1;min-width:150px;overflow-wrap:anywhere}.radio-station-row small{display:block}.pagination{justify-content:center;margin-top:18px}.radio-register-form{flex-wrap:wrap}.radio-register-form>*{min-width:0}@media(max-width:800px){.radio-master-detail{grid-template-columns:minmax(0,1fr)}.radio-ap-list{max-height:240px}}[data-theme=dark] .radio-ap-choice{background:#172433}[data-theme=dark] .radio-ap-choice.selected{background:#173958}
 .radio-station-row .link-btn{border:0;background:none;color:var(--text,#16283f);font:inherit;padding:0;cursor:pointer;text-align:start}.radio-station-row .link-btn:hover{text-decoration:underline}
+
+/* Documentation-first Radio Topology. Scoped to this module and mobile-safe. */
+.radio-doc-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(270px,.9fr);gap:16px;margin:18px 0;min-width:0;align-items:start}
+.radio-doc-main,.radio-doc-side{background:var(--panel,#fff);border:1px solid var(--line,#dae4ee);border-radius:15px;min-width:0;padding:18px;box-shadow:0 3px 14px #162b4609}
+.radio-doc-heading{display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.radio-doc-heading h3,.radio-doc-side h3{margin:0 0 5px;font-size:1.14rem}
+.radio-doc-heading small,.radio-doc-hint,.radio-doc-edit>small{display:block;color:var(--muted,#64748b);line-height:1.6}
+.radio-doc-chip{border:1px solid #bdd7ff;color:#1864b8;background:#eff6ff;padding:5px 11px;border-radius:30px;font-size:.78rem;white-space:nowrap}
+.radio-doc-canvas{background:var(--soft,#f8fbff);border:1px dashed var(--line,#dce3ed);border-radius:14px;padding:23px 14px;margin-top:15px;min-width:0}
+.radio-doc-stage{display:flex;justify-content:center;min-width:0}.radio-doc-node{background:var(--panel,#fff);border:1px solid var(--line,#dce3ed);border-radius:13px;box-shadow:0 3px 10px #1327420e;padding:12px 14px;min-width:0;overflow-wrap:anywhere}
+.radio-doc-stage>.radio-doc-node{width:min(100%,340px)}
+.radio-doc-ap{border-color:#74b5fa;box-shadow:0 3px 14px #2581ed15}
+.radio-doc-node-title{display:flex;gap:11px;align-items:center;min-width:0;margin-bottom:10px}
+.radio-doc-node-title>div{min-width:0}.radio-doc-node-title strong,.radio-doc-node-title .radio-doc-node-link{font-size:.95rem;font-weight:700;display:block;overflow-wrap:anywhere}
+.radio-doc-node-title small{display:block;color:var(--muted,#64748b);margin-top:4px}
+.radio-doc-icon{display:grid;place-items:center;background:#e9f3ff;color:#1965b0;border-radius:11px;min-width:38px;height:38px;font-size:23px}
+.radio-doc-node-link{border:0;background:transparent;color:var(--text,#16334d);cursor:pointer;padding:0;text-align:start}
+.radio-doc-node-link:hover{text-decoration:underline}
+.radio-doc-meta{display:flex;gap:10px;justify-content:space-between;align-items:start;border-top:1px solid var(--line,#edf0f4);padding-top:7px;margin-top:7px;font-size:.79rem;min-width:0}
+.radio-doc-meta span{color:var(--muted,#64748b);flex:0 0 auto}.radio-doc-meta strong{font-weight:600;text-align:end;overflow-wrap:anywhere;min-width:0}
+.radio-doc-line{width:2px;height:29px;background:#69a8ed;margin:0 auto}
+.radio-doc-stations{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr));gap:12px;min-width:0}
+.radio-doc-station{width:100%}.radio-doc-empty{color:var(--muted,#64748b);padding:26px 12px;text-align:center}
+.radio-doc-edit{border-top:1px solid var(--line,#dce3ed);padding-top:12px;margin-top:18px}
+.radio-doc-edit h4,.radio-doc-side h4{margin:4px 0 12px}
+.radio-doc-controls{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;align-items:end;gap:10px;margin-bottom:8px}
+.radio-doc-controls label{min-width:0;font-size:.8rem;color:var(--muted,#64748b)}
+.radio-doc-controls input,.radio-doc-controls select{display:block;width:100%;min-width:0;max-width:100%;margin-top:5px;padding:9px;border:1px solid var(--line,#dce3ed);border-radius:8px;background:var(--panel,#fff);color:inherit}
+.radio-doc-side h4{margin-top:20px}.radio-doc-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}
+.radio-doc-metrics>div{background:var(--soft,#f3f7fc);border:1px solid var(--line,#e6edf4);border-radius:10px;min-width:0;padding:12px}
+.radio-doc-metrics small{display:block;color:var(--muted,#64748b);font-size:.78rem}.radio-doc-metrics strong{display:block;font-size:1.4rem;margin-top:5px}
+.radio-doc-table-wrap{max-width:100%;overflow-x:auto}.radio-doc-table{border-collapse:collapse;width:100%;font-size:.8rem}
+.radio-doc-table td,.radio-doc-table th{text-align:start;padding:10px 7px;border-bottom:1px solid var(--line,#e4e9f1);white-space:normal;overflow-wrap:anywhere}
+.radio-doc-table th{color:var(--muted,#64748b);font-weight:600}
+.radio-doc-hint{margin-top:14px}
+[data-theme=dark] .radio-doc-chip{background:#17334a;border-color:#386c96;color:#b7dcff}
+[data-theme=dark] .radio-doc-icon{background:#183652;color:#9dccf9}
+@media(max-width:1100px){.radio-doc-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.radio-doc-main,.radio-doc-side{padding:12px}.radio-doc-canvas{padding:14px 9px}.radio-doc-controls{grid-template-columns:minmax(0,1fr)}.radio-doc-controls>.btn{width:100%}.radio-doc-grid{gap:12px}.radio-doc-stations{grid-template-columns:minmax(0,1fr)}}
