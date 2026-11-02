@@ -1,0 +1,3 @@
+Radio-only VM trial approved for current radio branch.
+Replace only modules/radio; preserve DB, RADIUS and all other modules.
+Rollback old radio on failed health or consistency checks.
