@@ -1,0 +1,87 @@
+name: EMS-IPAM Radio-Only Lab Deployment
+
+on:
+  push:
+    branches:
+      - work/radio-documentation-map-20261103
+    paths:
+      - .github/radio-deploy-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  update-radio-only:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 18
+    steps:
+      - name: Checkout tested radio branch
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Back up and replace Radio module only; automatically roll back on failure
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          BEFORE="$HOME/ems-ipam-lab/radio-backups/$GITHUB_SHA"
+          test -f "$DEPLOY/compose.yml"
+          test -s "$ENV_FILE"
+          grep -qx 'EMS_HTTP_PORT=8888' "$ENV_FILE"
+          test -d "$DEPLOY/modules/radio"
+          test -f "$GITHUB_WORKSPACE/modules/radio/public/topology.mjs"
+          test -f "$GITHUB_WORKSPACE/modules/radio/backend/index.mjs"
+          test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
+          docker info >/dev/null
+          docker inspect ems-ipam-app-1 >/dev/null
+          docker inspect ems-ipam-db-1 >/dev/null
+          docker inspect ems-ipam-radius_ops-1 >/dev/null
+
+          mkdir -p "$BEFORE"
+          cp -a "$DEPLOY/modules/radio" "$BEFORE/radio"
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --snapshot "$BEFORE/radius-before.json"
+
+          RADIUS_CONTAINER_BEFORE="$(docker inspect --format '{{.Id}}' ems-ipam-radius_ops-1)"
+          DB_CONTAINER_BEFORE="$(docker inspect --format '{{.Id}}' ems-ipam-db-1)"
+          COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml")
+          ROLLBACK=1
+          rollback() {
+            code=$?
+            if [ "$ROLLBACK" -eq 1 ]; then
+              echo "::warning::Radio-only update failed (exit $code): restoring prior Radio module."
+              rm -rf "$DEPLOY/modules/radio"
+              cp -a "$BEFORE/radio" "$DEPLOY/modules/radio"
+              "${COMPOSE[@]}" restart app || true
+            fi
+          }
+          trap rollback EXIT
+
+          STAGED="$DEPLOY/modules/.radio-staged-$GITHUB_SHA"
+          mkdir -p "$STAGED"
+          cp -a "$GITHUB_WORKSPACE/modules/radio/." "$STAGED/"
+          chmod -R u+rwX "$STAGED"
+          rm -rf "$DEPLOY/modules/radio"
+          mv "$STAGED" "$DEPLOY/modules/radio"
+
+          "${COMPOSE[@]}" restart app
+          ready=0
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8888/health > "$BEFORE/health-after.json"; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          grep -q '"radio"' "$BEFORE/health-after.json"
+          curl -fsS --max-time 5 http://127.0.0.1:8888/m/radio/topology.mjs | grep -q 'renderRadioTopology'
+          python3 "$DEPLOY/scripts/installed-modules-check.py"
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BEFORE/radius-before.json"
+          test "$(docker inspect --format '{{.Id}}' ems-ipam-radius_ops-1)" = "$RADIUS_CONTAINER_BEFORE"
+          test "$(docker inspect --format '{{.Id}}' ems-ipam-db-1)" = "$DB_CONTAINER_BEFORE"
+          ROLLBACK=0
+          echo "RADIO_ONLY_DEPLOY_OK branch=$GITHUB_REF_NAME commit=$GITHUB_SHA port=8888"
+          echo "RADIUS and DB containers unchanged; old Radio backed up privately."
