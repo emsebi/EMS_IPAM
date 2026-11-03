@@ -67,6 +67,7 @@ export function createModule({pool,json,readBody,requireAdmin,requireModuleAcces
           typeof body.enabled!=='boolean')throw fail('Invalid NAS binding');
         const profile=await profileById(pool,body.profileId);
         if(body.enabled&&(!nas.enabled||!profile.enabled))throw fail('Enable the NAS and profile before enabling its draft binding',409);
+        if(body.enabled&&nas.nasIp.includes('/')&&!nas.nasIp.endsWith('/32'))throw fail('Per-switch policy needs a single source-IP NAS (/32), not a shared CIDR',409);
         const r=await pool.query('INSERT INTO nac_nas_bindings(nas_id,profile_id,enabled) VALUES($1,$2,$3) ON CONFLICT(nas_id) DO UPDATE SET profile_id=excluded.profile_id,enabled=excluded.enabled,updated_at=now() RETURNING *',[nas.id,profile.id,body.enabled]);
         await audit?.(user,'nac.nas.binding','nac_nas_binding',nas.id,{detail:{profileId:profile.id,enabled:body.enabled}});
         return json(res,200,{ok:true,binding:r.rows[0],phase:'draft-not-enforced'});
