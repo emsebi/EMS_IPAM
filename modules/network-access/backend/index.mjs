@@ -96,12 +96,12 @@ export function createModule({pool,json,readBody,requireAdmin,requireModuleAcces
         const nas=await nasById(pool,url.searchParams.get('nasId'));
         const mac=normalizeMac(url.searchParams.get('mac'));
         const [b,r,rule]=await Promise.all([
-          pool.query('SELECT b.enabled,p.* FROM nac_nas_bindings b JOIN nac_profiles p ON p.id=b.profile_id WHERE b.nas_id=$1',[nas.id]),
+          pool.query('SELECT b.enabled AS "bindingEnabled",p.* FROM nac_nas_bindings b JOIN nac_profiles p ON p.id=b.profile_id WHERE b.nas_id=$1',[nas.id]),
           pool.query('SELECT id,mac::text,company_id AS "companyId",enabled,vlan FROM radius_ops_macs WHERE mac=$1::macaddr',[mac]),
           pool.query('SELECT mode,vlan,enabled FROM nac_mac_rules WHERE nas_id=$1 AND mac=$2::macaddr',[nas.id,mac])
         ]);
         const row=b.rows[0],profile=row?profileFrom(row):null;
-        const binding=row?{enabled:row.enabled}:null;
+        const binding=row?{enabled:row.bindingEnabled}:null;
         const result=simulate({nas,profile,binding,registry:r.rows[0]||null,rule:rule.rows[0]||null});
         return json(res,200,{ok:true,phase:'draft-not-enforced',mac,nas:{id:nas.id,label:nas.label,vendor:nas.vendor},result,
           caveat:'Simulation only; existing FreeRADIUS MAC authorization and switch behavior are unchanged.'});
