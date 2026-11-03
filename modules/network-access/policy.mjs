@@ -1,6 +1,6 @@
 // NAC planning/preview engine. Never call from a live RADIUS authorize path.
 const error = message => Object.assign(new Error(message), { status: 400 });
-const uuidRe = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const validId = value => typeof value === 'string' && uuidRe.test(value);
 export function normalizeMac(value) {
   if (typeof value !== 'string') throw error('MAC must be text');
