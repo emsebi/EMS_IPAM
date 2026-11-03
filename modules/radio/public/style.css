@@ -55,3 +55,9 @@
 @media(max-width:1100px){.radio-geo-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.radio-geo-controls>label:first-child{grid-column:span 3}}
 @media(max-width:630px){.radio-geo-panel{padding:12px}.radio-geo-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.radio-geo-controls>label:first-child{grid-column:span 2}.radio-geo-controls>label:nth-child(3){grid-column:span 1}.radio-geo-controls .btn{min-width:0}.radio-geo-controls>a.btn{grid-column:span 2}#radioGeoFrame{height:300px}}
 @media(max-width:360px){.radio-geo-controls{grid-template-columns:minmax(0,1fr)}.radio-geo-controls>label:first-child,.radio-geo-controls>label:nth-child(3),.radio-geo-controls>a.btn{grid-column:auto}}
+
+/* Physical-distance index; complements labelled AP-to-Station lines on the map. */
+.radio-geo-distances{border-top:1px solid var(--line,#dce3ed);padding-top:12px;margin-top:13px;min-width:0}
+.radio-geo-distances>strong{display:block;font-size:.91rem;margin-bottom:8px}
+.radio-geo-distances>div{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;max-height:115px;overflow:auto}
+.radio-geo-distance-item{display:inline-block;padding:6px 10px;border:1px solid var(--line,#dce3ed);border-radius:20px;background:var(--soft,#f4f8fc);font-size:.8rem;overflow-wrap:anywhere;max-width:100%}
