@@ -62,6 +62,10 @@ test('NAC independent migration, switch-profile CRUD, source registry and no liv
     assert.equal((await call('GET','/api/nac/nas/'+a+'/rules')).items.length,1);
     assert.match((await call('GET','/api/nac/nas/'+a+'/config?radiusIp=192.0.2.20&interface=Gi1%2F0%2F7')).text,/dot1x guest-vlan 77/);
     assert.match((await call('GET','/api/nac/nas/'+b+'/config?radiusIp=192.0.2.20&interface=ether5')).text,/mac-auth/);
+    await pool.query("UPDATE radius_ops_devices SET vendor='other' WHERE id=$1",[a]);
+    await assert.rejects(()=>call('GET','/api/nac/nas/'+a+'/config?radiusIp=192.0.2.20&interface=Gi1%2F0%2F7'),{status:409});
+    assert.match((await call('GET','/api/nac/nas/'+a+'/config?radiusIp=192.0.2.20&interface=Gi1%2F0%2F7&vendor=cisco-legacy')).text,/guest-vlan 77/);
+    await assert.rejects(()=>call('GET','/api/nac/nas/'+b+'/config?radiusIp=192.0.2.20&interface=Gi1%2F0%2F7&vendor=cisco-legacy'),{status:409});
     await assert.rejects(()=>call('DELETE','/api/nac/profiles/'+guest.id),{status:409});
     await pool.query("UPDATE radius_ops_macs SET enabled=false WHERE id=$1",[macId]);
     assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.reason,'mac-explicitly-disabled');
