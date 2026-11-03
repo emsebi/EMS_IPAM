@@ -28,6 +28,7 @@ export function createProfilesUi(ctx) {
       '<label>'+esc(L('MAC ثبت‌شده','Registered MAC'))+'<select id="nacKnownMode">'+
       '<option value="accept-static">'+esc(L('مجاز؛ VLAN پورت','Allow; port VLAN'))+'</option>'+
       '<option value="accept-vlan">'+esc(L('مجاز؛ VLAN مشخص','Allow; assigned VLAN'))+'</option>'+
+      '<option value="accept-mac-vlan">'+esc(L('مجاز؛ VLAN ذخیره‌شده MAC','Allow; registered MAC VLAN'))+'</option>'+
       '<option value="reject">Reject</option></select></label>'+
       '<label>'+esc(L('VLAN دستگاه ثبت‌شده','Registered VLAN'))+'<input id="nacKnownVlan" inputmode="numeric" type="number" min="1" max="4094"></label>'+
       '<label>'+esc(L('MAC ناشناس','Unknown MAC'))+'<select id="nacUnknownMode"><option value="reject">Reject</option>'+
