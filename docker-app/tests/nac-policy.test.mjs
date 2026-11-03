@@ -45,6 +45,8 @@ test('CLI is a draft with no real secret and vendor-specific reject mapping',()=
   assert.match(c,/dot1x guest-vlan 77/);assert.match(c,/REPLACE_SHARED_SECRET/);
   const m=configDraft({vendor:'mikrotik',radiusIp:'192.0.2.10',interfaceName:'ether4',profile});
   assert.match(m,/reject-vlan-id=77/);assert.doesNotMatch(m,/guest-vlan-id=/);
+  assert.match(m,/mac-auth-mode=mac-as-username-and-password/);
+  assert.match(m,/radius-mac-format=xxxxxxxxxxxx/);
   assert.throws(()=>configDraft({vendor:'cisco-legacy',radiusIp:'192.0.2.10',interfaceName:'Gi1/0/1;reload',profile}));
   assert.throws(()=>configDraft({vendor:'mikrotik',radiusIp:'192.0.2.10',interfaceName:'bridge1',profile}));
 });
