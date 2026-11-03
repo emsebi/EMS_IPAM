@@ -23,11 +23,19 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
   const uplink=peers.find(x=>x.id===link?.destinationId);
   const brand=(host)=>{const result=vendorForMac(host.mac,host.vendor);return result.name || tr("Unknown manufacturer","سازنده نامشخص");};
   const short=(host)=>host.name||host.ip||tr("Unnamed device","دستگاه بدون نام");
+  const lastPing=(host)=>host.pingCheckedAt ? " · "+String(host.pingCheckedAt).slice(0,19).replace("T"," ") : "";
+  const ping=(host)=>host.pingOnline===true?tr("Ping reachable","پینگ موفق"):host.pingOnline===false?tr("No ping reply","بدون پاسخ پینگ"):tr("Ping not checked","پینگ بررسی نشده");
+  const connection=(host)=>Array.isArray(host.connectionMethods)&&host.connectionMethods.length
+    ?host.connectionMethods.map(m=>String(m.type||"").toUpperCase()+":"+String(m.port||"default")).join(" · ")
+    :tr("Configure connection in Inventory","اتصال را در Inventory ثبت کنید");
+  const controls=(host)=>`<div class="radio-doc-actions"><button type="button" class="btn sm radio-connect" data-id="${esc(host.id)}">${esc(tr("Connect","اتصال"))}</button><button type="button" class="btn sm ping-radio" data-id="${esc(host.id)}">${esc(tr("Ping","پینگ"))}</button></div>`;
+
   const vendors=stations.filter(x=>vendorForMac(x.mac,x.vendor).name).length;
   const locations=new Set(stations.map(x=>String(x.location||"").trim()).filter(Boolean)).size;
   const cards=stations.map((st)=>`<article class="radio-doc-node radio-doc-station">
     <div class="radio-doc-node-title"><span class="radio-doc-icon">◉</span><div><button type="button" class="radio-doc-node-link open-radio-host" data-id="${esc(st.id)}">${esc(short(st))}</button><small>${esc(brand(st))}</small></div></div>
-    ${cell("IP",st.ip)}${cell(tr("Location","موقعیت"),st.location)}${cell("MAC",st.mac)}
+    ${cell("IP",st.ip)}${cell(tr("Model","مدل"),st.model)}${cell(tr("Location","موقعیت"),st.location)}${cell("MAC",st.mac)}
+    ${cell(tr("Status","وضعیت"),ping(st)+lastPing(st))}${cell(tr("Connection","روش اتصال"),connection(st))}${controls(st)}
   </article>`).join("");
   return `<section class="radio-doc-grid" aria-label="${esc(tr("Radio documentation map","نقشه مستندسازی رادیو"))}">
    <div class="radio-doc-main">
@@ -40,7 +48,8 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
      <div class="radio-doc-line" aria-hidden="true"></div>
      <div class="radio-doc-stage"><article class="radio-doc-node radio-doc-ap">
        <div class="radio-doc-node-title"><span class="radio-doc-icon">◎</span><div><strong>${esc(short(ap))}</strong><small>${esc(tr("Access Point","اکسس پوینت"))}</small></div></div>
-       ${cell("IP",ap.ip)}${cell("SSID",ap.ssid)}${cell(tr("Location","موقعیت"),ap.location)}${cell(tr("Stations","استیشن‌ها"),stations.length)}
+       ${cell("IP",ap.ip)}${cell("SSID",ap.ssid)}${cell(tr("Model","مدل"),ap.model)}${cell("MAC",ap.mac)}${cell(tr("Location","موقعیت"),ap.location)}${cell(tr("Stations","استیشن‌ها"),stations.length)}
+       ${cell(tr("Status","وضعیت"),ping(ap)+lastPing(ap))}${cell(tr("Connection","روش اتصال"),connection(ap))}${controls(ap)}
       </article></div>
      ${stations.length?`<div class="radio-doc-line" aria-hidden="true"></div><div class="radio-doc-stations">${cards}</div>`:`<div class="radio-doc-empty">${esc(tr("No stations documented for this AP.","هنوز استیشنی برای این AP ثبت نشده است."))}</div>`}
     </div>
@@ -54,8 +63,8 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
    <aside class="radio-doc-side"><h3>${esc(tr("Radio Overview","خلاصه رادیو"))}</h3>
      <div class="radio-doc-metrics"><div><small>${esc(tr("Connected stations","استیشن‌های ثبت‌شده"))}</small><strong>${esc(stations.length)}</strong></div><div><small>${esc(tr("Locations","موقعیت‌ها"))}</small><strong>${esc(locations)}</strong></div><div><small>${esc(tr("Known manufacturers","سازندگان شناسایی‌شده"))}</small><strong>${esc(vendors)}</strong></div><div><small>${esc(tr("Uplink","مقصد اتصال"))}</small><strong>${uplink?"✓":"—"}</strong></div></div>
      <h4>${esc(tr("Connected Stations","استیشن‌های متصل"))}</h4>
-     <div class="radio-doc-table-wrap"><table class="radio-doc-table"><thead><tr><th>${esc(tr("Name","نام"))}</th><th>IP</th><th>${esc(tr("Vendor","سازنده"))}</th><th>${esc(tr("Location","موقعیت"))}</th></tr></thead><tbody>
-     ${stations.map(st=>`<tr><td>${esc(short(st))}</td><td class="ltr mono">${esc(st.ip)}</td><td>${esc(brand(st))}</td><td>${esc(st.location||"—")}</td></tr>`).join("")||`<tr><td colspan="4">${esc(tr("No documented stations","استیشنی ثبت نشده"))}</td></tr>`}</tbody></table></div>
+     <div class="radio-doc-table-wrap"><table class="radio-doc-table"><thead><tr><th>${esc(tr("Name","نام"))}</th><th>IP</th><th>${esc(tr("Vendor","سازنده"))}</th><th>${esc(tr("Model","مدل"))}</th><th>${esc(tr("Location","موقعیت"))}</th></tr></thead><tbody>
+     ${stations.map(st=>`<tr><td>${esc(short(st))}</td><td class="ltr mono">${esc(st.ip)}</td><td>${esc(brand(st))}</td><td>${esc(st.model||"—")}</td><td>${esc(st.location||"—")}</td></tr>`).join("")||`<tr><td colspan="5">${esc(tr("No documented stations","استیشنی ثبت نشده"))}</td></tr>`}</tbody></table></div>
      <small class="radio-doc-hint">${esc(tr("Manufacturer is taken from Inventory or a limited offline OUI list; MAC identification is not guaranteed.","سازنده از Inventory یا فهرست محدود OUI آفلاین تشخیص داده می‌شود؛ شناسایی قطعی نیست."))}</small>
    </aside>
   </section>`;
