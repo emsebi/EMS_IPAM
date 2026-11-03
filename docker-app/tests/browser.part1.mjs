@@ -339,7 +339,13 @@ try {
   await page.locator('#nacBindingProfile').selectOption(browserNacProfile.id);
   await page.locator('#nacBindingEnabled').check();
   await page.locator('#nacSaveBinding').click();
-  await page.waitForFunction((nasId) => document.getElementById('nacNasChoice')?.value === nasId
+  await page.waitForFunction(async ({nasId,profileId}) => {
+    const res=await fetch('/api/nac/overview',{credentials:'same-origin'});
+    if(!res.ok)return false;
+    const data=await res.json();
+    return data.nas?.some(n=>n.id===nasId && n.profileId===profileId && n.bindingEnabled===true);
+  },{nasId:browserNas.id,profileId:browserNacProfile.id});
+  await page.waitForFunction((nasId) => document.getElementById('nacNasChoice')?.value===nasId
     && document.getElementById('nacBindingEnabled')?.checked, browserNas.id);
   await page.locator('#nacPreviewMac').fill('02:12:34:56:78:9a');
   await page.locator('#nacRunPreview').click();
