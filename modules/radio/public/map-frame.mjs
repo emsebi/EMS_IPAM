@@ -10,7 +10,7 @@ let pan=null,activeTiles=new Map();
 const size=256,ns='http://www.w3.org/2000/svg';
 
 function currentCoordinates(position,centerPixel,rect) {
-  const pixel=geoProject(position.latitude,position.longitude);
+  const pixel=geoProject(position.latitude,position.longitude,zoom);
   const world=size*2**zoom;
   let dx=pixel.x-centerPixel.x;
   if(dx>world/2)dx-=world;
