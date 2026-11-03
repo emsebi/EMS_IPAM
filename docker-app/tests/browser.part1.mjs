@@ -320,6 +320,8 @@ try {
   await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
   await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
   await page.reload();
+  // Static sidebar elements can be visible before asynchronous bootstrap registers click handlers.
+  await page.locator('button.module-nav-link[data-module-id="radius"]').waitFor({state:'visible'});
   // Isolated NAC draft UI: no RADIUS live change, network access or switch commands.
   await page.locator('#networkAccessButton').click();
   await page.locator('#nacProfilesTab').click();
