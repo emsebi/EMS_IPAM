@@ -26,7 +26,7 @@ export function prepareProfile(input) {
   const description = typeof input.description === 'string' ? input.description.trim() : '';
   if (description.length > 500 || /[\x00-\x1f\x7f]/.test(description)) throw error('Invalid description');
   if (typeof input.enabled !== 'boolean') throw error('Enabled must be boolean');
-  if (!['accept-static','accept-vlan','reject'].includes(input.knownMode)) throw error('Invalid known-MAC action');
+  if (!['accept-static','accept-vlan','accept-mac-vlan','reject'].includes(input.knownMode)) throw error('Invalid known-MAC action');
   if (!['reject','guest-vlan'].includes(input.unknownMode)) throw error('Invalid unknown-MAC action');
   const knownVlan = input.knownMode === 'accept-vlan' ? vlan(input.knownVlan) : null;
   const guestVlan = input.unknownMode === 'guest-vlan' ? vlan(input.guestVlan) : null;
@@ -60,6 +60,12 @@ export function simulate({nas, profile, binding, registry, rule}) {
       ? {mode:profile.knownMode, vlan:profile.knownVlan, source:'profile-known'}
       : {mode:profile.unknownMode, vlan:profile.guestVlan, source:'profile-unknown'};
   if (chosen.mode === 'reject') return {...reject('policy-reject'), source:chosen.source};
+  if (known && chosen.mode === 'accept-mac-vlan') {
+    let assigned=null;
+    try { assigned=vlan(registry.vlan); } catch { return {...reject('registered-mac-vlan-not-set'),source:chosen.source}; }
+    return {decision:'accept',radiusOutcome:'Access-Accept-if-provisioned',portOutcome:'assigned-vlan',
+      vlan:assigned,reason:'registered-mac-vlan',source:chosen.source,simulationOnly:true};
+  }
   if (chosen.mode === 'guest-vlan') return {
     decision:'reject', radiusOutcome:'Access-Reject', portOutcome:'guest-vlan-if-switch-configured',
     vlan:chosen.vlan, reason:'unknown-mac-guest-policy', source:chosen.source, simulationOnly:true
