@@ -8,11 +8,22 @@
   :root{font-family:system-ui,sans-serif;color:#18334a;background:#edf3f7}
   *{box-sizing:border-box}body{margin:0}
   #radioMap{position:relative;height:100vh;min-height:280px;overflow:hidden;touch-action:none;cursor:crosshair;background:#dce7ef}
-  #radioTiles,#radioPins{position:absolute;inset:0;pointer-events:none}
+  #radioTiles,#radioPins,#radioLinks{position:absolute;inset:0;pointer-events:none}
+  #radioLinks{width:100%;height:100%;overflow:hidden;z-index:1}
+  #radioPins{z-index:2}
+  .radio-link{stroke:#20886e;stroke-width:2.5;opacity:.85}
+  .radio-link-distance{fill:#126c50;stroke:#fff;stroke-width:4px;paint-order:stroke;stroke-linejoin:round;font:700 12px system-ui,sans-serif}
+  .radio-pin.ap{background:#1464b3;color:#fff;border-color:#fff;box-shadow:0 2px 8px #12335288}
+  .radio-pin.station{background:#187a60;color:#fff;border-color:#fff;box-shadow:0 2px 8px #16392988}
+  .radio-pin.selected{outline:3px solid #f9b930;outline-offset:2px;z-index:3}
+  #radioLegend{position:absolute;left:9px;bottom:8px;z-index:4;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#fffffff0;border-radius:7px;padding:5px 8px;font-size:11px;max-width:calc(100% - 245px)}
+  .radio-legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-inline-end:3px;vertical-align:middle}
+  .radio-legend-dot.ap{background:#1464b3}
+  .radio-legend-dot.station{background:#187a60}
+  @media(max-width:500px){#radioLegend{max-width:calc(100% - 16px);bottom:27px}}
+
   .tile{position:absolute;width:256px;height:256px;max-width:none;pointer-events:none}
   .radio-pin{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;background:#eef6ff;color:#124b7a;border:2px solid #176cad;border-radius:10px 10px 10px 2px;padding:4px 7px;font-size:12px;white-space:nowrap;box-shadow:0 2px 7px #1027395c;max-width:180px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-  .radio-pin.selected{background:#165bab;color:white;border-color:white;z-index:2}
-  .radio-pin.station{border-color:#2e9475}
   #radioControls{position:absolute;top:9px;right:9px;display:flex;flex-direction:column;gap:5px;z-index:4}
   #radioControls button{background:white;color:#18334a;border:1px solid #c4d1de;border-radius:8px;min-width:34px;min-height:34px;font-size:21px;cursor:pointer;box-shadow:0 1px 5px #1528392d}
   #radioHint{position:absolute;top:9px;left:9px;background:#fffefee8;padding:7px 10px;border-radius:8px;font-size:12px;z-index:4;max-width:calc(100% - 80px)}
@@ -24,12 +35,15 @@
 <body>
 <div id="radioMap" role="application" aria-label="Radio position picker. Click the map to select coordinates.">
   <div id="radioTiles"></div>
+  <svg id="radioLinks" aria-hidden="true"></svg>
   <div id="radioPins"></div>
   <div id="radioHint">Click the map to select a location</div>
   <div id="radioControls">
     <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
     <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+    <button type="button" id="fitRadio" aria-label="Show all AP and station locations" title="Show all AP and stations">⌖</button>
   </div>
+  <div id="radioLegend"><span><i class="radio-legend-dot ap"></i>AP</span><span><i class="radio-legend-dot station"></i>Station</span><span id="radioCounts"></span><span>GPS straight-line</span></div>
   <div id="radioCredit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></div>
 </div>
 </body>
