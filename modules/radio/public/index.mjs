@@ -1,4 +1,4 @@
-import { renderRadioTopology, radioUplinkSaved } from './topology.mjs';
+import { renderRadioTopology, radioUplinkSaved, radioConnectionHint } from './topology.mjs';
 import { createGeoUi } from './geo-ui.mjs';
 
 export function createUi(ctx) {
@@ -140,7 +140,7 @@ function renderRadios() {
     const device=state.inventory.find(item=>item.id===button.dataset.id);
     if(!device)return;
     const connections=Array.isArray(device.connectionMethods)?device.connectionMethods:[];
-    if(!connections.length)return toast(document.documentElement.lang==='fa'?'روش اتصال را در Inventory دستگاه ثبت کنید.':'Set a connection method in Inventory first.');
+    if(!connections.length)return toast(radioConnectionHint(document.documentElement.lang));
     const box=button.getBoundingClientRect();
     openToolMenu({clientX:box.left,clientY:box.bottom,stopPropagation(){}},device.ip,connections,{username:device.username||''});
   }));
