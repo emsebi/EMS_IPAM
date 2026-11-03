@@ -4,7 +4,7 @@
 CREATE TABLE nac_profiles (
   id uuid PRIMARY KEY, name varchar(120) NOT NULL UNIQUE,
   description varchar(500) NOT NULL DEFAULT '', enabled boolean NOT NULL DEFAULT false,
-  known_mode text NOT NULL CHECK(known_mode IN ('accept-static','accept-vlan','reject')),
+  known_mode text NOT NULL CHECK(known_mode IN ('accept-static','accept-vlan','accept-mac-vlan','reject')),
   known_vlan smallint CHECK(known_vlan BETWEEN 1 AND 4094),
   unknown_mode text NOT NULL CHECK(unknown_mode IN ('reject','guest-vlan')),
   guest_vlan smallint CHECK(guest_vlan BETWEEN 1 AND 4094),
