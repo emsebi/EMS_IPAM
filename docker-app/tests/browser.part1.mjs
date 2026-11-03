@@ -157,6 +157,25 @@ try {
   await page.locator('.radio-ap-choice[data-id=ap2]').click();
   await page.locator('.radio-station-list').getByText('Station Two', { exact: true }).waitFor();
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
+  // Physical-location regression: only a saved AP/Station coordinate appears on the radio map.
+  await page.locator('#radioGeoTarget').selectOption('ap2');
+  await page.locator('#radioGeoLatitude').fill('35.6892');
+  await page.locator('#radioGeoLongitude').fill('51.3890');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
+  await page.locator('#radioGeoTarget').selectOption('st2');
+  await page.locator('#radioGeoLatitude').fill('35.6901');
+  await page.locator('#radioGeoLongitude').fill('51.3902');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
+  const geolocations = (await api('/api/radio/locations?apId=ap2')).items;
+  assert.equal(geolocations.length,2);
+  assert.ok(geolocations.some(item=>item.hostId==='ap2'&&item.latitude===35.6892));
+  assert.ok(geolocations.some(item=>item.hostId==='st2'&&item.longitude===51.3902));
+  await page.frameLocator('#radioGeoFrame').locator('#radioMap').waitFor();
+  await page.screenshot({path:path.join(outputDir,'radio-geolocation.png'),fullPage:true});
+  check('Radio GPS positions saved and scoped; interactive OpenStreetMap frame available without live device login');
+
   await page.locator('#addSelectedStation').click();
   assert.equal(await page.locator('#radioQuickParent').inputValue(), 'ap2');
   assert.equal(await page.locator('#radioQuickMode').inputValue(), 'station');
