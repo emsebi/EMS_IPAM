@@ -1,7 +1,9 @@
 import { renderRadioTopology, radioUplinkSaved } from './topology.mjs';
+import { createGeoUi } from './geo-ui.mjs';
 
 export function createUi(ctx) {
-const { state, $, page, isModuleInstalled, hasClientModule, ensureInventory, updateSelectors, navActive, setRoute, toast, canWrite, ipv4ToInt, intToIpv4, request, prepareHostEditor, loadSpace, escapeHtml, formatNumber, formatDateTime, translateTree, t } = ctx;
+const { state, $, page, isModuleInstalled, hasClientModule, ensureInventory, updateSelectors, navActive, setRoute, toast, canWrite, ipv4ToInt, intToIpv4, request, prepareHostEditor, loadSpace, escapeHtml, formatNumber, formatDateTime, translateTree, t, openToolMenu } = ctx;
+const geo = createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh:()=>renderRadios()});
 const uplinkCache = new Map();
 const loadingUplinks = new Set();
 function getRadioLink(apId) {
@@ -110,12 +112,14 @@ function renderRadios() {
     canEdit:canWrite(),escapeHtml,language:document.documentElement.lang||'en'
   });
   if(selected) getRadioLink(selected.id);
+  const geographicMap = geo.content({ap:selected,stations});
   const actions = (item) => `<div class="row-actions"><button class="btn sm open-ipam-radio" data-id="${escapeHtml(item.id)}">${escapeHtml(t("radio.action.ipam"))}</button><button class="btn sm ping-radio" data-id="${escapeHtml(item.id)}">${escapeHtml(t("radio.action.ping"))}</button>${canWrite()?`<button class="btn sm edit-radio" data-id="${escapeHtml(item.id)}">${escapeHtml(t("radio.action.edit"))}</button>`:''}</div>`;
   page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(t("radio.breadcrumb"))}</div><h2>${escapeHtml(t("radio.title"))}</h2><div class="subtitle">${escapeHtml(t("radio.subtitle"))}</div></div><button id="radioReload" class="btn">${escapeHtml(t("radio.action.refresh"))}</button></div>
     <section class="stats"><article class="stat"><div class="label">${escapeHtml(t("radio.label.accessPoint"))}</div><div class="value">${formatNumber(allAps.length)}</div></article><article class="stat"><div class="label">${escapeHtml(t("radio.label.station"))}</div><div class="value">${formatNumber(allStations.length)}</div></article><article class="stat"><div class="label">${escapeHtml(t("radio.stats.selectedStations"))}</div><div class="value">${formatNumber(stations.length)}</div></article></section>
     <section class="panel radio-register-panel"><div class="radio-register-form"><input id="radioSearch" value="${escapeHtml(state.radioQuery||'')}" placeholder="${escapeHtml(t("radio.search.placeholder"))}">
     ${canWrite()?`<input id="radioQuickIp" class="ltr mono" placeholder="192.0.2.10"><select id="radioQuickMode"><option value="ap">${escapeHtml(t("radio.label.accessPoint"))}</option><option value="station">${escapeHtml(t("radio.label.station"))}</option></select><select id="radioQuickParent" class="hidden"><option value="">${escapeHtml(t("radio.selectAp"))}</option>${allAps.map((ap)=>`<option value="${escapeHtml(ap.id)}">${escapeHtml(ap.name||ap.ip)}</option>`).join('')}</select><button id="radioQuickOpen" class="btn primary">${escapeHtml(t("radio.action.register"))}</button>`:''}</div></section>
     ${topology}
+    ${geographicMap}
     <section class="radio-master-detail"><aside class="panel radio-ap-list" aria-label="${escapeHtml(t("radio.label.accessPoint"))}">${aps.map((ap)=>`<button type="button" class="radio-ap-choice ${ap.id===selected?.id?'selected':''}" data-id="${escapeHtml(ap.id)}" aria-pressed="${ap.id===selected?.id}"><strong>${escapeHtml(ap.name||ap.ip)}</strong><span class="ltr mono">${escapeHtml(ap.ip)}</span><small>${escapeHtml(ap.ssid||'—')} · ${formatNumber(allStations.filter(st=>st.radioParentHostId===ap.id).length)} ${escapeHtml(t("radio.label.station"))}</small>${radioStatusBadge(ap)}</button>`).join('')}${orphans.length?`<button type="button" class="radio-ap-choice ${state.selectedRadioApId==='__orphans'?'selected':''}" data-id="__orphans"><strong>${escapeHtml(t("radio.orphans"))}</strong><small>${formatNumber(orphans.length)}</small></button>`:''}${!aps.length&&!orphans.length?'<div class="empty-state">${escapeHtml(t("radio.empty.noMatching"))}</div>':''}</aside>
     <article class="panel radio-detail"><div class="radio-detail-head"><div><h3>${escapeHtml(selected?.name||selected?.ip||(orphans.length?t("radio.orphans"):t("radio.selectAp")))}</h3>${selected?`<p class="ltr mono">${escapeHtml(selected.ip)} · ${escapeHtml(selected.ssid||'—')}</p>${radioStatusBadge(selected)}`:''}</div>${selected?`<div>${actions(selected)}${canWrite()?`<button class="btn primary sm" id="addSelectedStation">${escapeHtml(t("radio.action.addStation"))}</button>`:''}</div>`:''}</div>
     <div class="radio-station-list">${displayed.map((st)=>`<article class="radio-station-row"><div><button class="link-btn open-radio-host" data-id="${escapeHtml(st.id)}"><b>${escapeHtml(st.name||st.ip)}</b></button><div class="ltr mono">${escapeHtml(st.ip)}</div><small>${escapeHtml(st.mac||'—')} · ${escapeHtml(st.ssid||'—')}</small></div>${radioStatusBadge(st)}${actions(st)}</article>`).join('')||`<div class="empty-state">${escapeHtml(t("radio.empty.noStations"))}</div>`}</div>
@@ -132,6 +136,15 @@ function renderRadios() {
   page.querySelectorAll('.open-radio-host,.edit-radio').forEach((node)=>node.addEventListener('click',()=>openRadioEditor(state.inventory.find((item)=>item.id===node.dataset.id)).catch((error)=>toast(error.message))));
   page.querySelectorAll('.open-ipam-radio').forEach((node)=>node.addEventListener('click',()=>openRadioInIpam(state.inventory.find((item)=>item.id===node.dataset.id))));
   page.querySelectorAll('.ping-radio').forEach((node)=>node.addEventListener('click',()=>pingRadio(state.inventory.find((item)=>item.id===node.dataset.id),node)));
+  page.querySelectorAll('.radio-connect').forEach(button=>button.addEventListener('click',(event)=>{
+    const device=state.inventory.find(item=>item.id===button.dataset.id);
+    if(!device)return;
+    const connections=Array.isArray(device.connectionMethods)?device.connectionMethods:[];
+    if(!connections.length)return toast(document.documentElement.lang==='fa'?'روش اتصال را در Inventory دستگاه ثبت کنید.':'Set a connection method in Inventory first.');
+    const box=button.getBoundingClientRect();
+    openToolMenu({clientX:box.left,clientY:box.bottom,stopPropagation(){}},device.ip,connections,{username:device.username||''});
+  }));
+
   $('radioDocSave')?.addEventListener('click',async()=>{
     if(!selected || !canWrite()) return;
     const button=$('radioDocSave');button.disabled=true;
@@ -144,6 +157,7 @@ function renderRadios() {
       toast(radioUplinkSaved(document.documentElement.lang));
     } catch(error) { button.disabled=false; toast(error.message); }
   });
+  geo.attach({ap:selected,stations});
   syncMode(); translateTree(page);
 }
 return { openRadiosPage, renderRadios };
