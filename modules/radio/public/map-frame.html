@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EMS-IPAM Radio Location Map</title>
+<style>
+  :root{font-family:system-ui,sans-serif;color:#18334a;background:#edf3f7}
+  *{box-sizing:border-box}body{margin:0}
+  #radioMap{position:relative;height:100vh;min-height:280px;overflow:hidden;touch-action:none;cursor:crosshair;background:#dce7ef}
+  #radioTiles,#radioPins{position:absolute;inset:0;pointer-events:none}
+  .tile{position:absolute;width:256px;height:256px;max-width:none;pointer-events:none}
+  .radio-pin{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;background:#eef6ff;color:#124b7a;border:2px solid #176cad;border-radius:10px 10px 10px 2px;padding:4px 7px;font-size:12px;white-space:nowrap;box-shadow:0 2px 7px #1027395c;max-width:180px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .radio-pin.selected{background:#165bab;color:white;border-color:white;z-index:2}
+  .radio-pin.station{border-color:#2e9475}
+  #radioControls{position:absolute;top:9px;right:9px;display:flex;flex-direction:column;gap:5px;z-index:4}
+  #radioControls button{background:white;color:#18334a;border:1px solid #c4d1de;border-radius:8px;min-width:34px;min-height:34px;font-size:21px;cursor:pointer;box-shadow:0 1px 5px #1528392d}
+  #radioHint{position:absolute;top:9px;left:9px;background:#fffefee8;padding:7px 10px;border-radius:8px;font-size:12px;z-index:4;max-width:calc(100% - 80px)}
+  #radioCredit{position:absolute;bottom:4px;right:4px;font-size:10px;background:#fffffff0;border-radius:4px;padding:3px 5px;z-index:3}
+  #radioCredit a{color:#145693}
+</style>
+<script type="module" src="/m/radio/map-frame.mjs"></script>
+</head>
+<body>
+<div id="radioMap" role="application" aria-label="Radio position picker. Click the map to select coordinates.">
+  <div id="radioTiles"></div>
+  <div id="radioPins"></div>
+  <div id="radioHint">Click the map to select a location</div>
+  <div id="radioControls">
+    <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+    <button type="button" id="zoomOut" aria-label="Zoom out">−</button>
+  </div>
+  <div id="radioCredit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></div>
+</div>
+</body>
+</html>
