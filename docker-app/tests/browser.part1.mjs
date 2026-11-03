@@ -320,6 +320,49 @@ try {
   await api('/api/hosts','PUT',{spaceId:'test-space',ip:'192.0.2.60',name:'Trace candidate A',mac:'02:00:00:00:00:60'});
   await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
   await page.reload();
+  // Isolated NAC draft UI: no RADIUS live change, network access or switch commands.
+  await page.locator('button.module-nav-link[data-module-id="network-access"]').click();
+  await page.locator('#nacProfileName').waitFor({state:'visible'});
+  assert.match(page.url(), /#\/module\/network-access$/);
+  await page.locator('#nacProfileName').fill('Browser Guest 77');
+  await page.locator('#nacKnownMode').selectOption('accept-vlan');
+  await page.locator('#nacKnownVlan').fill('14');
+  await page.locator('#nacUnknownMode').selectOption('guest-vlan');
+  await page.locator('#nacGuestVlan').fill('77');
+  await page.locator('#nacProfileEnabled').check();
+  await page.locator('#nacSaveProfile').click();
+  await page.locator('#nacProfileChoice option', {hasText:'Browser Guest 77'}).waitFor();
+  const browserNacProfile = (await api('/api/nac/overview')).profiles.find(p=>p.name==='Browser Guest 77');
+  assert.ok(browserNacProfile);
+  await page.locator('#nacNasChoice').selectOption(browserNas.id);
+  await page.locator('#nacBindingProfile').selectOption(browserNacProfile.id);
+  await page.locator('#nacBindingEnabled').check();
+  await page.locator('#nacSaveBinding').click();
+  await page.waitForFunction((nasId) => document.getElementById('nacNasChoice')?.value === nasId
+    && document.getElementById('nacBindingEnabled')?.checked, browserNas.id);
+  await page.locator('#nacPreviewMac').fill('02:12:34:56:78:9a');
+  await page.locator('#nacRunPreview').click();
+  await page.waitForFunction(() => document.getElementById('nacPreviewResult')?.textContent.includes('guest-vlan-if-switch-configured'));
+  assert.match(await page.locator('#nacPreviewResult').textContent(), /"vlan": 77/);
+  await page.locator('#nacRadiusIp').fill('192.0.2.20');
+  await page.locator('#nacInterface').fill('Gi1/0/4');
+  await page.locator('#nacShowConfig').click();
+  await page.waitForFunction(() => document.getElementById('nacConfig')?.value.includes('REPLACE_SHARED_SECRET'));
+  assert.match(await page.locator('#nacConfig').inputValue(), /dot1x guest-vlan 77/);
+  await page.locator('#nacRuleMac').fill('02:12:34:56:78:9a');
+  await page.locator('#nacRuleMode').selectOption('reject');
+  await page.locator('#nacSaveRule').click();
+  await page.locator('#nacRules').getByText('02:12:34:56:78:9a', {exact:false}).waitFor();
+  await page.locator('#nacRunPreview').click();
+  await page.waitForFunction(() => document.getElementById('nacPreviewResult')?.textContent.includes('"portOutcome": "blocked"'));
+  await page.screenshot({path:path.join(outputDir,'nac-profile-draft.png'),fullPage:true});
+  for (const width of [390,1440]) {
+    await page.setViewportSize({width,height:980});
+    const info=await page.locator('.nac-grid').evaluate(el=>({content:el.scrollWidth,view:el.clientWidth}));
+    assert.ok(info.content <= info.view+1, 'NAC profile overflow at '+width);
+  }
+  await api('/api/nac/preview?nasId='+browserNas.id+'&mac=02:12:34:56:78:9a');
+  check('NAC per-switch guest profile, MAC override, simulator, read-only CLI and responsive UI');
   await page.locator('button.module-nav-link[data-module-id="network-map"]').click();
   await page.locator('#nmSettings').waitFor({state:'visible'});
   await page.locator('#nmUsername').fill('browser-readonly');
