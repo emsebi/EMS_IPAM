@@ -332,7 +332,7 @@ try {
   await page.locator('#nacGuestVlan').fill('77');
   await page.locator('#nacProfileEnabled').check();
   await page.locator('#nacSaveProfile').click();
-  await page.locator('#nacProfileChoice option', {hasText:'Browser Guest 77'}).waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('#nacProfileChoice option')].some(o => o.textContent === 'Browser Guest 77'));
   const browserNacProfile = (await api('/api/nac/overview')).profiles.find(p=>p.name==='Browser Guest 77');
   assert.ok(browserNacProfile);
   await page.locator('#nacNasChoice').selectOption(browserNas.id);
