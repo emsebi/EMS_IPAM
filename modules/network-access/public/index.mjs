@@ -1,6 +1,7 @@
 import {createProfilesUi} from "./profiles.mjs";
 export function createUi(ctx) {
   const { state, $, page, request, isAdmin, ensureInventory, escapeHtml, formatNumber, navActive, setRoute, t, openPersonnelDialog, editPersonnel, toast } = ctx;
+  const profilesUi = createProfilesUi(ctx);
 
   async function openNetworkAccessPage(tab = "mac") {
     if (!isAdmin()) return toast(t("networkAccess.auth.adminOnly"));
@@ -34,13 +35,18 @@ export function createUi(ctx) {
     ).join("");
 
     page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(t("networkAccess.crumb"))}</div><h2>${escapeHtml(t("networkAccess.title"))}</h2></div></div>
-      <div class="access-tabs" role="tablist"><button id="macTab" class="btn ${tab === "mac" ? "primary" : ""}" role="tab" aria-selected="${tab === "mac"}">${escapeHtml(t("networkAccess.tab.mac"))}</button><button id="personnelTab" class="btn ${tab === "personnel" ? "primary" : ""}" role="tab" aria-selected="${tab === "personnel"}">${escapeHtml(t("networkAccess.tab.personnel"))}</button></div>
+      <div class="access-tabs" role="tablist"><button id="macTab" class="btn ${tab === "mac" ? "primary" : ""}" role="tab" aria-selected="${tab === "mac"}">${escapeHtml(t("networkAccess.tab.mac"))}</button><button id="personnelTab" class="btn ${tab === "personnel" ? "primary" : ""}" role="tab" aria-selected="${tab === "personnel"}">${escapeHtml(t("networkAccess.tab.personnel"))}</button><button id="nacProfilesTab" class="btn" role="tab">${escapeHtml(state.language === "fa" ? "پروفایل‌های NAC" : "NAC profiles")}</button></div>
       <section class="panel access-records"><div class="subtitle">${escapeHtml(t(tab === "mac" ? "networkAccess.mac.subtitle" : "networkAccess.personnel.subtitle"))}</div>
       <div class="row-actions"><b>${escapeHtml(t("networkAccess.count", { count: formatNumber(total) }))}</b>${tab === "personnel" ? `<button id="managePersonnel" class="btn primary">${escapeHtml(t("networkAccess.action.managePersonnel"))}</button>` : ""}</div>
       <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr>${columns.map((column) => `<th>${escapeHtml(t(`networkAccess.column.${column}`))}</th>`).join("")}</tr></thead>
       <tbody>${body || `<tr><td colspan="5">${escapeHtml(t("networkAccess.empty"))}</td></tr>`}</tbody></table></div>
       ${tab === "personnel" ? `<div class="row-actions"><button id="personsPrevious" class="btn" ${(state.personnelPage || 0) === 0 ? "disabled" : ""}>${escapeHtml(t("common.previous"))}</button><button id="personsNext" class="btn" ${((state.personnelPage || 0) + 1) * 50 >= total ? "disabled" : ""}>${escapeHtml(t("common.next"))}</button></div>` : ""}</section>`;
 
+    $("nacProfilesTab").addEventListener("click", async () => {
+      state.view = "module"; state.currentModuleId = "network-access"; state.currentModuleRouteParts = [];
+      navActive("networkAccess"); setRoute("/module/network-access");
+      await profilesUi.openPage();
+    });
     $("macTab").addEventListener("click", () => openNetworkAccessPage("mac"));
     $("personnelTab").addEventListener("click", () => openNetworkAccessPage("personnel"));
     $("managePersonnel")?.addEventListener("click", () => openPersonnelDialog());
@@ -58,5 +64,5 @@ export function createUi(ctx) {
     });
   }
 
-  return { openNetworkAccessPage, openPage: createProfilesUi(ctx).openPage };
+  return { openNetworkAccessPage, openPage: profilesUi.openPage };
 }
