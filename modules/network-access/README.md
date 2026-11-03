@@ -4,7 +4,7 @@ This remains the original \`network-access\` module, not a second NAC or RADIUS 
 
 ## Shipped in this increment
 
-- Independent profile definitions: registered-MAC behavior (reject, existing port VLAN, dynamic VLAN) and unknown-MAC behavior (reject, switch-side guest VLAN).
+- Independent profile definitions: registered-MAC behavior (reject, existing port VLAN, fixed dynamic VLAN or the registered MAC's own VLAN) and unknown-MAC behavior (reject, switch-side guest VLAN).
 - Different NAS/switches can select different profiles; a profile can be reused.
 - Per-NAS per-MAC exception (reject or allow, optional VLAN). Allow exceptions only work in the simulation when MAC credentials are already registered/enabled in the radius-ops registry.
 - Admin-only CRUD API under \`/api/nac\`, policy preview and model-specific **review-only** CLI drafts (Catalyst legacy/IOS and RouterOS). Every update is auditable.
