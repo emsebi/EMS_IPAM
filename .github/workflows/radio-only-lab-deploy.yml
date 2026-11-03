@@ -81,8 +81,10 @@ jobs:
           test "$ready" -eq 1
           grep -q '"radio"' "$BEFORE/health-after.json"
           grep -q 'renderRadioTopology' "$DEPLOY/modules/radio/public/topology.mjs"
-          grep -q '2.2.0-lab.1' "$DEPLOY/modules/radio/module.json"
+          grep -q '2.2.0-lab.2' "$DEPLOY/modules/radio/module.json"
           grep -q 'tile.openstreetmap.org' "$DEPLOY/modules/radio/public/map-frame.mjs"
+          grep -q 'radio-link-distance' "$DEPLOY/modules/radio/public/map-frame.mjs"
+          test -f "$DEPLOY/modules/radio/public/geo-math.mjs"
           code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8888/api/radio/map)"
           test "$code" = "401" || { echo "::error::Radio map is not protected behind login (HTTP $code)."; exit 1; }
           python3 "$DEPLOY/scripts/installed-modules-check.py"
