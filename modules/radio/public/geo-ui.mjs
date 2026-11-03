@@ -86,20 +86,21 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh})
   document.getElementById('radioGeoSave')?.addEventListener('click',async()=>{
     const point=validInput();
     if(!point)return toast(L('Enter valid latitude and longitude first.','مختصات عرض و طول معتبر وارد کنید.'));
-    const button=document.getElementById('radioGeoSave');button.disabled=true;
+    const button=document.getElementById('radioGeoSave'),targetId=currentTarget;button.disabled=true;
     try{
-      const answer=await request('/api/radio/location',{method:'PUT',body:{hostId:currentTarget,...point}});
-      const next=cache.get(ap.id)||new Map();next.set(currentTarget,answer.item);cache.set(ap.id,next);
+      const answer=await request('/api/radio/location',{method:'PUT',body:{hostId:targetId,...point}});
+      const next=cache.get(ap.id)||new Map();next.set(targetId,answer.item);cache.set(ap.id,next);
       toast(L('Location saved.','موقعیت ذخیره شد.'));
-      sendMap();
+      if(currentTarget===targetId)sendMap();
     }catch(error){toast(error.message);}finally{button.disabled=false;}
   });
   document.getElementById('radioGeoClear')?.addEventListener('click',async()=>{
-    const button=document.getElementById('radioGeoClear');button.disabled=true;
+    const button=document.getElementById('radioGeoClear'),targetId=currentTarget;button.disabled=true;
     try{
-      await request('/api/radio/location',{method:'PUT',body:{hostId:currentTarget,latitude:null,longitude:null}});
-      cache.get(ap.id)?.delete(currentTarget);lat.value='';lon.value='';
-      toast(L('Location cleared.','موقعیت پاک شد.'));sendMap();
+      await request('/api/radio/location',{method:'PUT',body:{hostId:targetId,latitude:null,longitude:null}});
+      cache.get(ap.id)?.delete(targetId);
+      if(currentTarget===targetId){lat.value='';lon.value='';sendMap();}
+      toast(L('Location cleared.','موقعیت پاک شد.'));
     }catch(error){toast(error.message);}finally{button.disabled=false;}
   });
   sendMap();
