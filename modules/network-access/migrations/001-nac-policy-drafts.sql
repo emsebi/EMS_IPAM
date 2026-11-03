@@ -1,5 +1,6 @@
 -- Draft NAC policy objects; no change to FreeRADIUS radcheck/radreply, core or live authorization.
--- NAS devices and MAC credentials remain owned by radius-ops (no duplicate NAS secret or MAC credential store).
+-- NAS and credentials remain owned by radius-ops; validated at the API boundary.
+-- No cross-module FK: this module migrates alphabetically before radius-ops on fresh installs.
 CREATE TABLE nac_profiles (
   id uuid PRIMARY KEY, name varchar(120) NOT NULL UNIQUE,
   description varchar(500) NOT NULL DEFAULT '', enabled boolean NOT NULL DEFAULT false,
@@ -13,14 +14,14 @@ CREATE TABLE nac_profiles (
   CONSTRAINT nac_distinct_vlan_check CHECK(known_vlan IS NULL OR guest_vlan IS NULL OR known_vlan<>guest_vlan)
 );
 CREATE TABLE nac_nas_bindings (
-  nas_id uuid PRIMARY KEY REFERENCES radius_ops_devices(id) ON DELETE RESTRICT,
+  nas_id uuid PRIMARY KEY,
   profile_id uuid NOT NULL REFERENCES nac_profiles(id) ON DELETE RESTRICT,
   enabled boolean NOT NULL DEFAULT false,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX nac_binding_profile_idx ON nac_nas_bindings(profile_id);
 CREATE TABLE nac_mac_rules (
-  nas_id uuid NOT NULL REFERENCES radius_ops_devices(id) ON DELETE RESTRICT,
+  nas_id uuid NOT NULL,
   mac macaddr NOT NULL,
   mode text NOT NULL CHECK(mode IN ('reject','accept-static','accept-vlan')),
   vlan smallint CHECK(vlan BETWEEN 1 AND 4094),
