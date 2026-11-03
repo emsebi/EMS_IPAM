@@ -347,6 +347,8 @@ try {
   },{nasId:browserNas.id,profileId:browserNacProfile.id});
   await page.waitForFunction((nasId) => document.getElementById('nacNasChoice')?.value===nasId
     && document.getElementById('nacBindingEnabled')?.checked, browserNas.id);
+  const nacApiPreview = await api('/api/nac/preview?nasId='+browserNas.id+'&mac=02:12:34:56:78:9a');
+  assert.equal(nacApiPreview.result.portOutcome,'guest-vlan-if-switch-configured',JSON.stringify(nacApiPreview));
   await page.locator('#nacPreviewMac').fill('02:12:34:56:78:9a');
   await page.locator('#nacRunPreview').click();
   await page.waitForFunction(() => document.getElementById('nacPreviewResult')?.textContent.includes('guest-vlan-if-switch-configured'));
