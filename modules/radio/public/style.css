@@ -39,3 +39,19 @@
 [data-theme=dark] .radio-doc-icon{background:#183652;color:#9dccf9}
 @media(max-width:1100px){.radio-doc-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:650px){.radio-doc-main,.radio-doc-side{padding:12px}.radio-doc-canvas{padding:14px 9px}.radio-doc-controls{grid-template-columns:minmax(0,1fr)}.radio-doc-controls>.btn{width:100%}.radio-doc-grid{gap:12px}.radio-doc-stations{grid-template-columns:minmax(0,1fr)}}
+
+/* Geographic documentation, fully scoped to Radio. */
+.radio-doc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.radio-doc-actions .btn{font-size:.77rem;min-width:0}
+.radio-geo-panel{min-width:0;padding:18px;margin:16px 0}
+.radio-geo-header h3{margin:0 0 6px;font-size:1.11rem}
+.radio-geo-header p{margin:0 0 15px;color:var(--muted,#64748b);font-size:.9rem;line-height:1.6}
+.radio-geo-controls{display:grid;grid-template-columns:minmax(175px,1.5fr) repeat(2,minmax(125px,1fr)) auto auto auto;align-items:end;gap:9px;margin-bottom:14px;min-width:0}
+.radio-geo-controls label{font-size:.79rem;min-width:0;color:var(--muted,#64748b)}
+.radio-geo-controls input,.radio-geo-controls select{display:block;width:100%;min-width:0;max-width:100%;margin-top:5px;border:1px solid var(--line,#dce3ed);background:var(--panel,#fff);color:inherit;padding:9px 8px;border-radius:8px}
+.radio-geo-controls>.btn{white-space:normal;text-align:center}
+#radioGeoFrame{display:block;width:100%;height:365px;max-width:100%;border:1px solid var(--line,#dce3ed);border-radius:12px;background:var(--soft,#edf4fc)}
+.radio-geo-note{display:block;margin-top:9px;line-height:1.6;color:var(--muted,#64748b);font-size:.77rem}
+@media(max-width:1100px){.radio-geo-controls{grid-template-columns:repeat(3,minmax(0,1fr))}.radio-geo-controls>label:first-child{grid-column:span 3}}
+@media(max-width:630px){.radio-geo-panel{padding:12px}.radio-geo-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.radio-geo-controls>label:first-child{grid-column:span 2}.radio-geo-controls>label:nth-child(3){grid-column:span 1}.radio-geo-controls .btn{min-width:0}.radio-geo-controls>a.btn{grid-column:span 2}#radioGeoFrame{height:300px}}
+@media(max-width:360px){.radio-geo-controls{grid-template-columns:minmax(0,1fr)}.radio-geo-controls>label:first-child,.radio-geo-controls>label:nth-child(3),.radio-geo-controls>a.btn{grid-column:auto}}
