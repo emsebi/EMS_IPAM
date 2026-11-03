@@ -25,6 +25,13 @@ test('registered MACs use policy, but disabled or different-scope MACs fail clos
   assert.equal(simulate({nas,binding:{enabled:false},profile,registry}).decision,'reject');
   assert.equal(simulate({nas:{...nas,enabled:false},binding,profile,registry}).decision,'reject');
 });
+test('profile may use per-MAC registered VLAN but rejects missing VLAN',()=>{
+  const chosen={...profile,knownMode:'accept-mac-vlan',knownVlan:null};
+  const approved=simulate({nas,binding,profile:prepareProfile(chosen),registry:{...registry,vlan:26}});
+  assert.equal(approved.decision,'accept');assert.equal(approved.vlan,26);
+  const missing=simulate({nas,binding,profile:prepareProfile(chosen),registry:{...registry,vlan:null}});
+  assert.equal(missing.decision,'reject');assert.equal(missing.reason,'registered-mac-vlan-not-set');
+});
 test('per-switch MAC rule overrides known policy only and cannot authorize unknown MAC',()=>{
   const rule=prepareRule({mode:'accept-vlan',vlan:26,note:'test',enabled:true});
   assert.equal(simulate({nas,binding,profile,registry,rule}).vlan,26);
