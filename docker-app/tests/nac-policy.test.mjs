@@ -30,6 +30,7 @@ test('per-switch MAC rule overrides known policy only and cannot authorize unkno
   assert.equal(simulate({nas,binding,profile,registry,rule}).vlan,26);
   assert.equal(simulate({nas,binding,profile,registry,rule:{...rule,mode:'reject'}}).decision,'reject');
   assert.equal(simulate({nas,binding,profile,registry:null,rule}).decision,'reject');
+  assert.equal(simulate({nas,binding,profile,registry:null,rule:{mode:'reject',enabled:true}}).portOutcome,'blocked');
   assert.throws(()=>prepareRule({mode:'reject',vlan:33,enabled:true}));
 });
 test('profiles reject invalid VLANs and contradictory schemas',()=>{
