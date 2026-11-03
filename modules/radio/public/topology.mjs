@@ -71,3 +71,5 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
 }
 
 export function radioUplinkSaved(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'اتصال ذخیره شد.' : 'Uplink saved.'; }
+
+export function radioConnectionHint(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'روش اتصال را در Inventory دستگاه ثبت کنید.' : 'Set a connection method in Inventory first.'; }
