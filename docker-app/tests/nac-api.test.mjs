@@ -57,6 +57,14 @@ test('NAC independent migration, switch-profile CRUD, source registry and no liv
     assert.equal(second.portOutcome,'blocked');
     const registered='a0:bb:cc:dd:ee:f0';
     assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.vlan,14);
+    const macVlanPolicy=(await call('POST','/api/nac/profiles',{name:'Per-device VLAN',description:'',enabled:true,
+      knownMode:'accept-mac-vlan',knownVlan:null,unknownMode:'reject',guestVlan:null})).profile;
+    await call('PUT','/api/nac/nas/'+a,{profileId:macVlanPolicy.id,enabled:true});
+    assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.vlan,14);
+    await pool.query('UPDATE radius_ops_macs SET vlan=NULL WHERE id=$1',[macId]);
+    assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.reason,'registered-mac-vlan-not-set');
+    await pool.query('UPDATE radius_ops_macs SET vlan=14 WHERE id=$1',[macId]);
+    await call('PUT','/api/nac/nas/'+a,{profileId:guest.id,enabled:true});
     await call('PUT','/api/nac/nas/'+a+'/rules/'+registered,{mode:'reject',vlan:null,enabled:true,note:'quarantine'});
     assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.decision,'reject');
     assert.equal((await call('GET','/api/nac/nas/'+a+'/rules')).items.length,1);
