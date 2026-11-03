@@ -2,3 +2,5 @@ Radio-only VM trial approved for current radio branch.
 Replace only modules/radio; preserve DB, RADIUS and all other modules.
 Rollback old radio on failed health or consistency checks.
 Retry: authenticated module assets checked on disk, not by unauthenticated HTTP.
+
+Radio 2.2 geographic AP/Station map: CI 41725013633 SUCCESS, only module restart permitted.
