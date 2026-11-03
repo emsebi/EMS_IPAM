@@ -84,7 +84,7 @@ export function configDraft({vendor, interfaceName, radiusIp, profile}) {
     return [...header,
       '# Requires RouterOS 7.2+ and bridge vlan-filtering=yes. Validate bridge and interface VLAN membership.',
       '/radius add address=' + radiusIp + ' service=dot1x secret="REPLACE_SHARED_SECRET"',
-      '/interface dot1x server add interface=' + interfaceName + ' auth-types=dot1x,mac-auth' +
+      '/interface dot1x server add interface=' + interfaceName + ' auth-types=dot1x,mac-auth mac-auth-mode=mac-as-username-and-password radius-mac-format=xxxxxxxxxxxx' +
         (profile.unknownMode === 'guest-vlan' ? ' reject-vlan-id=' + vlan(profile.guestVlan) : ''),
       '# reject-vlan-id requires a RADIUS Access-Reject; it does NOT apply to server timeout.',
       '/interface dot1x server active print detail',
