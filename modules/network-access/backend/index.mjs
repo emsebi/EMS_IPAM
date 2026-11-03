@@ -112,7 +112,12 @@ export function createModule({pool,json,readBody,requireAdmin,requireModuleAcces
         const nas=await nasById(pool,configPath[1]);
         const r=await pool.query('SELECT p.* FROM nac_nas_bindings b JOIN nac_profiles p ON p.id=b.profile_id WHERE b.nas_id=$1',[nas.id]);
         if(!r.rowCount)throw fail('Assign a profile before generating a CLI draft',409);
-        const content=configDraft({vendor:nas.vendor,interfaceName:url.searchParams.get('interface'),radiusIp:url.searchParams.get('radiusIp'),profile:profileFrom(r.rows[0])});
+        const requestedVendor=url.searchParams.get('vendor');
+        if (requestedVendor && !['cisco-legacy','cisco-ios','mikrotik'].includes(requestedVendor)) throw fail('Unsupported template vendor');
+        if (nas.vendor!=='other' && requestedVendor && nas.vendor!==requestedVendor) throw fail('Template vendor differs from registered NAS',409);
+        if (nas.vendor==='other' && !requestedVendor) throw fail('Choose and verify the NAS vendor for the CLI template',409);
+        const vendor=nas.vendor==='other'?requestedVendor:nas.vendor;
+        const content=configDraft({vendor,interfaceName:url.searchParams.get('interface'),radiusIp:url.searchParams.get('radiusIp'),profile:profileFrom(r.rows[0])});
         return json(res,200,{ok:true,phase:'review-only',text:content});
       }
       throw fail('Unknown NAC endpoint',404);
