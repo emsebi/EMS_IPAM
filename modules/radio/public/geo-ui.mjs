@@ -1,3 +1,4 @@
+import {distanceMeters,formatDistance} from './geo-math.mjs';
 // Physical-location UI for documented radio hosts.
 // Does not change or poll equipment. Coordinates are optional.
 export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh}) {
@@ -31,7 +32,8 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh})
     '<button class="btn sm" type="button" id="radioGeoClear">'+esc(L('Clear','پاک کردن'))+'</button>':'')+
    '<a class="btn sm" id="radioGeoExternal" target="_blank" rel="noopener noreferrer" href="https://www.openstreetmap.org/">'+esc(L('Open online map','نمایش در نقشه آنلاین'))+'</a></div>'+
    '<iframe id="radioGeoFrame" src="/api/radio/map" loading="lazy" title="'+esc(L('OpenStreetMap location picker','انتخاب موقعیت روی OpenStreetMap'))+'"></iframe>'+
-   '<small class="radio-geo-note">'+esc(L('Only documented positions are shown. Tile images need internet access; coordinates still work offline. Map data © OpenStreetMap contributors.','فقط موقعیت‌های ثبت‌شده نشان داده می‌شوند. تصاویر نقشه اینترنت می‌خواهند؛ ثبت مختصات بدون اینترنت هم کار می‌کند.'))+'</small>'+
+   '<small class="radio-geo-note">'+esc(L('AP (blue) and stations (green) are connected by straight lines. GPS distances are not radio link quality. Map tiles need internet; coordinates work offline. © OpenStreetMap contributors.','AP آبی و استیشن‌ها سبز هستند؛ خط بین آن‌ها فاصله مستقیم جغرافیایی را نشان می‌دهد، نه کیفیت لینک. تصاویر نقشه اینترنت می‌خواهند و مختصات آفلاین هم ثبت می‌شوند.'))+'</small>'+
+   '<div id="radioGeoDistances" class="radio-geo-distances" aria-live="polite"></div>'+ 
    '</section>';
  }
  function attach({ap,stations=[]}) {
@@ -50,6 +52,20 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh})
     const url=point?'https://www.openstreetmap.org/#map=15/'+point.latitude+'/'+point.longitude:'https://www.openstreetmap.org/';
     external.href=url;
   }
+  function updateDistances(){
+    const box=document.getElementById('radioGeoDistances');if(!box)return;
+    const saved=cache.get(ap.id);
+    const getPoint=(device)=>device.id===currentTarget?(validInput()||saved?.get(device.id)):saved?.get(device.id);
+    const source=getPoint(ap);
+    const rows=stations.map(st=>{
+      const destination=getPoint(st);
+      const distance=source&&destination?distanceMeters(source,destination):null;
+      return '<span class="radio-geo-distance-item"><strong>'+esc(st.name||st.ip)+'</strong> · '+esc(distance===null?'—':formatDistance(distance))+'</span>';
+    });
+    box.innerHTML='<strong>'+esc(L('AP → Station distances','فاصله AP تا استیشن‌ها'))+'</strong><div>'+(
+      rows.length?rows.join(''): '<small>'+esc(L('No stations registered','استیشنی ثبت نشده'))+'</small>'
+    )+'</div>';
+  }
   function sendMap(recenter=false) {
     const markers=targets.map(t=>{
       const position=t.id===currentTarget?(validInput()||record()):cache.get(ap.id)?.get(t.id);
@@ -57,6 +73,7 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh})
     }).filter(Boolean);
     frame.contentWindow?.postMessage({type:'ems:radio:geo:data',markers,selectedId:currentTarget,recenter,hint:L('Click map to position selected device','برای تعیین موقعیت دستگاه انتخاب‌شده روی نقشه کلیک کنید')},location.origin);
     externalUrl();
+    updateDistances();
   }
   const selectTarget=id=>{
     if(!targets.some(t=>t.id===id))return;
