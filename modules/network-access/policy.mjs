@@ -52,6 +52,8 @@ export function simulate({nas, profile, binding, registry, rule}) {
   if (registry && !registry.enabled) return reject('mac-explicitly-disabled');
   if (registry && nas.companyId !== registry.companyId) return reject('mac-not-in-nas-registry-scope');
   const known = !!registry;
+  // An explicit deny must also block an otherwise unknown MAC from the guest VLAN.
+  if (rule?.enabled && rule.mode === 'reject') return {...reject('switch-mac-deny'), source:'switch-mac-override'};
   const chosen = known && rule?.enabled
     ? {mode:rule.mode, vlan:rule.vlan, source:'switch-mac-override'}
     : known
