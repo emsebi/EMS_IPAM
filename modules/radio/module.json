@@ -1,8 +1,8 @@
 {
   "id": "radio",
   "name": "Radio Management",
-  "version": "2.2.0-lab.1",
-  "description": "Documentation-first radio map with geographic location picker, existing connection tools and manual Ping.",
+  "version": "2.2.0-lab.2",
+  "description": "Documentation-first radio map with AP-station geographic links with GPS distances, existing connection tools and manual Ping.",
   "enabled": true,
   "permissions": [
     "radio.read",
