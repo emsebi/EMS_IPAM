@@ -1,3 +1,4 @@
+import {createProfilesUi} from "./profiles.mjs";
 export function createUi(ctx) {
   const { state, $, page, request, isAdmin, ensureInventory, escapeHtml, formatNumber, navActive, setRoute, t, openPersonnelDialog, editPersonnel, toast } = ctx;
 
@@ -57,5 +58,5 @@ export function createUi(ctx) {
     });
   }
 
-  return { openNetworkAccessPage };
+  return { openNetworkAccessPage, openPage: createProfilesUi(ctx).openPage };
 }
