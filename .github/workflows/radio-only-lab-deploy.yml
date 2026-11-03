@@ -37,6 +37,9 @@ jobs:
           test -d "$DEPLOY/modules/radio"
           test -f "$GITHUB_WORKSPACE/modules/radio/public/topology.mjs"
           test -f "$GITHUB_WORKSPACE/modules/radio/backend/index.mjs"
+          test -f "$GITHUB_WORKSPACE/modules/radio/backend/geo.mjs"
+          test -f "$GITHUB_WORKSPACE/modules/radio/public/map-frame.html"
+          test -f "$GITHUB_WORKSPACE/modules/radio/public/map-frame.mjs"
           test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
           docker info >/dev/null
           docker inspect ems-ipam-app-1 >/dev/null
@@ -78,6 +81,10 @@ jobs:
           test "$ready" -eq 1
           grep -q '"radio"' "$BEFORE/health-after.json"
           grep -q 'renderRadioTopology' "$DEPLOY/modules/radio/public/topology.mjs"
+          grep -q '2.2.0-lab.1' "$DEPLOY/modules/radio/module.json"
+          grep -q 'tile.openstreetmap.org' "$DEPLOY/modules/radio/public/map-frame.mjs"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8888/api/radio/map)"
+          test "$code" = "401" || { echo "::error::Radio map is not protected behind login (HTTP $code)."; exit 1; }
           python3 "$DEPLOY/scripts/installed-modules-check.py"
           python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BEFORE/radius-before.json"
           test "$(docker inspect --format '{{.Id}}' ems-ipam-radius_ops-1)" = "$RADIUS_CONTAINER_BEFORE"
