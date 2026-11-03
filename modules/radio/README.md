@@ -1,4 +1,4 @@
-# Radio Management (2.2.0-lab.1)
+# Radio Management (2.2.0-lab.2)
 
 Documentation-focused AP / Station topology on the existing EMS_IPAM module.
 No background device polling, RouterOS scripts, new device credentials, SSH logins,
@@ -42,3 +42,6 @@ connection is made simply by opening the map.
 - GET locations requires Radio access and limits results to host/space/company visibility.
 - Only panel admins may save coordinates; all inputs are range checked. Map iframe HTML requires login.
 - Opening OSM loads public tiles based on the currently viewed map area; device identifiers, credentials and inventory are not sent to OSM.
+
+## Physical radio links (2.2.0-lab.2)
+Choosing an AP displays its saved coordinates plus all of its saved Station positions. Blue AP and green Station pins are connected by straight geographic lines, annotated with Haversine great-circle distances (meters or kilometres). These are **approximate GPS straight-line distances**, not measured RF path lengths, link quality, road routing or cable distance. A summary lists AP-to-Station distances. The map automatically fits all saved positions, and has a button to fit all again after panning or zooming. With no AP coordinate saved, stations may show but no distance or link can be computed. Save AP and Station positions through the existing coordinate editor. No database migration, device polling or login is introduced.
