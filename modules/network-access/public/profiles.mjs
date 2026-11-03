@@ -60,6 +60,11 @@ export function createProfilesUi(ctx) {
       '<h3>'+esc(L('دستورات پیشنهادی سوئیچ','Switch CLI draft'))+'</h3>'+
       '<p>'+esc(L('فقط برای پورت Access آزمایشی؛ مدل و نسخه IOS/RouterOS، VLAN، Voice و مسیر دسترسی مدیریتی را قبل از اجرا بررسی کنید.',
       'For an isolated access port only. Verify model/OS, VLAN, voice and management recovery before using.'))+'</p>'+
+      '<label>'+esc(L('نوع سوئیچ برای دستورات','Switch type for CLI draft'))+'<select id="nacVendorChoice">'+
+      '<option value="">'+esc(L('مدل را انتخاب کنید','Choose/confirm model'))+'</option>'+
+      '<option value="cisco-legacy">Cisco Catalyst legacy IOS</option>'+
+      '<option value="cisco-ios">Cisco IOS</option>'+
+      '<option value="mikrotik">MikroTik RouterOS</option></select></label>'+ 
       '<label>'+esc(L('IP سرور RADIUS','RADIUS server IP'))+'<input id="nacRadiusIp" placeholder="192.0.2.10"></label>'+
       '<label>'+esc(L('نام پورت','Interface'))+'<input id="nacInterface" placeholder="'+(nas?.vendor==='mikrotik'?'ether4':'GigabitEthernet1/0/4')+'"></label>'+
       '<button id="nacShowConfig" class="btn">'+esc(L('نمایش دستورات','Generate review-only CLI'))+'</button>'+
@@ -74,6 +79,7 @@ export function createProfilesUi(ctx) {
     el('nacGuestVlan').value=current?.guestVlan??'';
     el('nacProfileEnabled').checked=current?.enabled??false;
     el('nacNasChoice').value=selectedNasId;
+    if (nas && nas.vendor !== 'other') el('nacVendorChoice').value=nas.vendor;
     el('nacBindingProfile').value=nas?.profileId||'';
     el('nacBindingEnabled').checked=nas?.bindingEnabled??false;
     el('nacDeleteProfile').disabled=!selectedProfileId;
@@ -124,7 +130,8 @@ export function createProfilesUi(ctx) {
       try{
         if(!selectedNasId)throw new Error(L('NAS انتخاب نشده','Choose a NAS'));
         const r=await request('/api/nac/nas/'+encodeURIComponent(selectedNasId)+'/config?interface='+
-          encodeURIComponent(el('nacInterface').value.trim())+'&radiusIp='+encodeURIComponent(el('nacRadiusIp').value.trim()));
+          encodeURIComponent(el('nacInterface').value.trim())+'&radiusIp='+encodeURIComponent(el('nacRadiusIp').value.trim())+
+          '&vendor='+encodeURIComponent(el('nacVendorChoice').value));
         el('nacConfig').value=r.text;
       }catch(e){toast(e.message);}
     };
