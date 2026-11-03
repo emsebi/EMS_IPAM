@@ -1,6 +1,6 @@
 // Radio documentation map: OSM background + AP/Station positions and straight-line GPS distances.
 // No radio login, live discovery, recurring network checks or additional dependencies.
-import {distanceMeters,formatDistance,fitGeoPoints,geoProject,geoUnproject,validGeoPoint} from './geo-math.mjs';
+import {distanceMeters,formatDistance,fitGeoPoints,geoProject,geoUnproject,validGeoPoint} from './geo-math.mjs?v=2.2.0-lab.2';
 
 const el=id=>document.getElementById(id);
 const map=el('radioMap'),tiles=el('radioTiles'),links=el('radioLinks'),pins=el('radioPins');
