@@ -321,7 +321,8 @@ try {
   await api('/api/hosts','PUT',{spaceId:traceSpace.id,ip:'192.0.2.60',name:'Trace candidate B',mac:'02:00:00:00:00:61'});
   await page.reload();
   // Isolated NAC draft UI: no RADIUS live change, network access or switch commands.
-  await page.locator('button.module-nav-link[data-module-id="network-access"]').click();
+  await page.locator('#networkAccessButton').click();
+  await page.locator('#nacProfilesTab').click();
   await page.locator('#nacProfileName').waitFor({state:'visible'});
   assert.match(page.url(), /#\/module\/network-access$/);
   await page.locator('#nacProfileName').fill('Browser Guest 77');
@@ -344,6 +345,7 @@ try {
   await page.locator('#nacRunPreview').click();
   await page.waitForFunction(() => document.getElementById('nacPreviewResult')?.textContent.includes('guest-vlan-if-switch-configured'));
   assert.match(await page.locator('#nacPreviewResult').textContent(), /"vlan": 77/);
+  await page.locator('#nacVendorChoice').selectOption('cisco-legacy');
   await page.locator('#nacRadiusIp').fill('192.0.2.20');
   await page.locator('#nacInterface').fill('Gi1/0/4');
   await page.locator('#nacShowConfig').click();
