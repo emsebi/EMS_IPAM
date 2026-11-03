@@ -16,6 +16,8 @@ This remains the original \`network-access\` module, not a second NAC or RADIUS 
 ## Boundaries & preparation for full NAC
 
 - FreeRADIUS server-side MAB and device-admin live flows remain owned by \`radius-ops\`. This module reads its NAS and MAC registry IDs, but does not duplicate credentials.
+- A per-switch binding requires a host-specific `/32` NAS; a shared fallback CIDR is unsafe because different physical switches would otherwise silently inherit one policy.
+- The current live MAB path still scopes the existing MAC registry to legacy Company metadata. Company-free NASes can therefore have **no effective live MAB authorization** until a separate, tested runtime migration is made. The preview does not misreport this case as authorized.
 - Module migration runs alphabetically before \`radius-ops\` on clean installations, so this module intentionally has no cross-module foreign keys. All target NAS/profile IDs are checked before writing through the API. Orphan NAS rows are inert until that NAS ID is valid again.
 - Importing an observed MAC from IPAM/Network Map never automatically authorizes it. Deliberate approval through the RADIUS MAC registry is required.
 - A disabled registered MAC fails closed even if the unknown-MAC profile points to a guest VLAN.
