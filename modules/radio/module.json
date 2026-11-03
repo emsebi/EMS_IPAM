@@ -1,8 +1,8 @@
 {
   "id": "radio",
   "name": "Radio Management",
-  "version": "2.1.0-lab.1",
-  "description": "Documentation-first AP > Station map with inventory uplink, offline MAC vendor hints and manual ping.",
+  "version": "2.2.0-lab.1",
+  "description": "Documentation-first radio map with geographic location picker, existing connection tools and manual Ping.",
   "enabled": true,
   "permissions": [
     "radio.read",
