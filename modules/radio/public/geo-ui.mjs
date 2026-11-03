@@ -1,4 +1,4 @@
-import {distanceMeters,formatDistance} from './geo-math.mjs';
+import {distanceMeters,formatDistance} from './geo-math.mjs?v=2.2.0-lab.2';
 // Physical-location UI for documented radio hosts.
 // Does not change or poll equipment. Coordinates are optional.
 export function createGeoUi({request,escapeHtml,canWrite,toast,state,onRefresh}) {
