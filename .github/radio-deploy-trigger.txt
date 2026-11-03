@@ -4,3 +4,5 @@ Rollback old radio on failed health or consistency checks.
 Retry: authenticated module assets checked on disk, not by unauthenticated HTTP.
 
 Radio 2.2 geographic AP/Station map: CI 41725013633 SUCCESS, only module restart permitted.
+
+Radio 2.2.0-lab.2 AP-station link/distance update: CI 41733196672 all 4 gates SUCCESS; Radio-only VM deploy.
