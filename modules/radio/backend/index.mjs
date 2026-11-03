@@ -1,8 +1,10 @@
+import {createRadioGeo} from './geo.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
 export function createModule(ctx) {
+  const geo = createRadioGeo(ctx);
   const { pool,json,readBody,cleanText,requireAdmin,requireModuleAccess,canAccessSpace,pingMany,storePingResults,audit,broadcast } = ctx;
   // A module-owned JSON file; never stores credentials or config.
   const radioDir = path.join(ctx.backupDir || process.env.BACKUP_DIR || '/backups', 'radio-documentation');
@@ -26,9 +28,10 @@ export function createModule(ctx) {
     if(!host || (onlyAp && host.radioMode!=='ap')) throw Object.assign(new Error('Radio device not found.'),{status:404});
     return host;
   }
-  return { match: (req,url) => (req.method === "POST" && url.pathname === "/api/ping/host") || url.pathname === "/api/radio/uplink",
+  return { match: (req,url) => (req.method === "POST" && url.pathname === "/api/ping/host") || url.pathname === "/api/radio/uplink" || geo.match(req,url),
     async handle(req,res,url,user) {
       const pathname=url.pathname;
+      if (geo.match(req,url)) return geo.handle(req,res,url,user);
       if (pathname === '/api/radio/uplink') {
         await requireModuleAccess(user, 'radio');
         const body = req.method==='PUT' ? await readBody(req) : {};
