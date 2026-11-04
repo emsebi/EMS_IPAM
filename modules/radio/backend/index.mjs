@@ -1,7 +1,6 @@
 import {createRadioGeo} from './geo.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 
 export function createModule(ctx) {
   const geo = createRadioGeo(ctx);
@@ -9,13 +8,12 @@ export function createModule(ctx) {
   // A module-owned JSON file; never stores credentials or config.
   const radioDir = path.join(ctx.backupDir || process.env.BACKUP_DIR || '/backups', 'radio-documentation');
   const radioFile = path.join(radioDir, 'uplinks.json');
-  let saveQueue = Promise.resolve();
   async function readLinks() {
     try {
       const data = JSON.parse(await fs.readFile(radioFile, 'utf8'));
       return Array.isArray(data.items) ? data.items : [];
     } catch (error) {
-      if (error.code === 'ENOENT') return [];
+      if (['ENOENT','EACCES','EPERM'].includes(error.code)) return [];
       throw error;
     }
   }
@@ -41,7 +39,11 @@ export function createModule(ctx) {
         const ap=await getHost(apId,true);
         if (!(await canAccessSpace(user,ap.spaceId))) throw Object.assign(new Error('Access denied.'),{status:404});
         if (req.method==='GET') {
-          const saved=(await readLinks()).find(item=>item.apId===apId);
+          const savedRows=(await pool.query(
+            'SELECT ap_id AS "apId", destination_id AS "destinationId", port, updated_at AS "updatedAt" FROM radio_doc_uplinks WHERE ap_id=$1',
+            [apId]
+          )).rows;
+          const saved=savedRows.length?savedRows[0]:(await readLinks()).find(item=>item.apId===apId);
           if (!saved?.destinationId) return json(res,200,{ok:true,link:null});
           const destination=await getHost(saved.destinationId).catch(()=>null);
           if (!destination || destination.companyId!==ap.companyId || !(await canAccessSpace(user,destination.spaceId)))
@@ -56,18 +58,13 @@ export function createModule(ctx) {
             throw Object.assign(new Error('Choose a switch or system in the same accessible inventory.'),{status:400});
         }
         const link=destinationId?{apId,destinationId,port,updatedAt:new Date().toISOString()}:null;
-        const work=saveQueue.catch(()=>{}).then(async()=>{
-          const items=(await readLinks()).filter(item=>item.apId!==apId);
-          if (link) items.push(link);
-          await fs.mkdir(radioDir,{recursive:true,mode:0o700});
-          const temp=radioFile+'.'+crypto.randomUUID()+'.tmp';
-          try {
-            await fs.writeFile(temp,JSON.stringify({format:'ems-radio-uplinks/1',items},null,2),{mode:0o600});
-            await fs.rename(temp,radioFile);
-          } finally { await fs.rm(temp,{force:true}).catch(()=>{}); }
-        });
-        saveQueue=work;
-        await work;
+        // Radio-only database table, not the root-owned backup bind mount.
+        // NULL destination records a clear so legacy JSON cannot restore a removed link.
+        await pool.query(
+          'INSERT INTO radio_doc_uplinks(ap_id,destination_id,port) VALUES($1,$2,$3) ' +
+          'ON CONFLICT(ap_id) DO UPDATE SET destination_id=EXCLUDED.destination_id,port=EXCLUDED.port,updated_at=now()',
+          [apId,destinationId||null,destinationId?port:'']
+        );
         await audit(user,'radio.uplink','host',apId,{companyId:ap.companyId,spaceId:ap.spaceId,detail:{destinationId,port}});
         return json(res,200,{ok:true,link});
       }
