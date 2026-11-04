@@ -38,7 +38,7 @@ jobs:
           test "$RW" = true
           case "$ROOT" in /*) ;; *) echo "::error::No absolute host bind path"; exit 1;; esac
           echo "host backup directory numeric owner and mode:"
-          stat -c "%u:%g mode=%a type=%F" "$ROOT" "$ROOT/radio-documentation"
+          stat -c "%u:%g mode=%a type=%F" "$ROOT" "$ROOT/radio-documentation" || echo "host backup path not traversable by runner"
           echo "runner host identity:"
           id
           echo "passwordless sudo capability (without running it):"
