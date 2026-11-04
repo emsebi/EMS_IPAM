@@ -6,3 +6,5 @@ Retry: authenticated module assets checked on disk, not by unauthenticated HTTP.
 Radio 2.2 geographic AP/Station map: CI 41725013633 SUCCESS, only module restart permitted.
 
 Radio 2.2.0-lab.2 AP-station link/distance update: CI 41733196672 all 4 gates SUCCESS; Radio-only VM deploy.
+
+Radio 2.2.0-lab.3: fix EACCES by PostgreSQL module storage, CI 41783744640 all four jobs SUCCESS. Save/GET API must work without filesystem writes.
