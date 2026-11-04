@@ -1,0 +1,46 @@
+name: EMS-IPAM Radio Storage Diagnostics
+
+on:
+  push:
+    branches:
+      - work/radio-documentation-map-20261103
+    paths:
+      - .github/radio-storage-diagnostics-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  check-radio-storage:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - name: Inspect Radio storage ownership and possible host repair privilege (read-only)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APP=ems-ipam-app-1
+          docker inspect --format 'app running={{.State.Running}}' "$APP"
+          echo "container app identity:"
+          docker exec "$APP" id
+          echo "app backup directories numeric ownership and mode:"
+          docker exec "$APP" sh -c 'for p in /backups /backups/radio-documentation; do if test -e "$p"; then stat -c "%n %u:%g mode=%a type=%F" "$p"; else echo "$p MISSING"; fi; done'
+          echo "container root identity:"
+          docker exec --user root "$APP" id
+          echo "app user can write existing Radio folder:"
+          if docker exec "$APP" sh -c 'test -w /backups/radio-documentation'; then echo YES; else echo NO; fi
+          ROOT="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/backups"}}{{.Source}}{{end}}{{end}}' "$APP")"
+          RW="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/backups"}}{{.RW}}{{end}}{{end}}' "$APP")"
+          test "$RW" = true
+          case "$ROOT" in /*) ;; *) echo "::error::No absolute host bind path"; exit 1;; esac
+          echo "host backup directory numeric owner and mode:"
+          stat -c "%u:%g mode=%a type=%F" "$ROOT" "$ROOT/radio-documentation"
+          echo "runner host identity:"
+          id
+          echo "passwordless sudo capability (without running it):"
+          if sudo -n true 2>/dev/null; then echo YES; else echo NO; fi
+          echo "completed read-only Radio storage diagnostics."
