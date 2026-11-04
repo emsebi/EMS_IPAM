@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 
 const URLS = new Set(['/api/radio/locations', '/api/radio/location', '/api/radio/map']);
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -15,7 +14,6 @@ export function createRadioGeo(ctx) {
   const {pool, json, readBody, requireModuleAccess, requireAdmin, canAccessSpace, audit} = ctx;
   const folder = path.join(ctx.backupDir || process.env.BACKUP_DIR || '/backups', 'radio-documentation');
   const file = path.join(folder, 'locations.json');
-  let queue = Promise.resolve();
 
   async function readSaved() {
     try {
@@ -23,7 +21,7 @@ export function createRadioGeo(ctx) {
       if (!Array.isArray(data.items)) throw new Error('Malformed saved radio locations.');
       return data.items;
     } catch (error) {
-      if (error.code === 'ENOENT') return [];
+      if (['ENOENT','EACCES','EPERM'].includes(error.code)) return [];
       throw error;
     }
   }
@@ -36,17 +34,6 @@ export function createRadioGeo(ctx) {
       [id]
     );
     return found.rows[0] || null;
-  }
-
-  async function save(items) {
-    await fs.mkdir(folder, { recursive: true, mode: 0o700 });
-    const temp = file + '.' + crypto.randomUUID() + '.tmp';
-    try {
-      await fs.writeFile(temp, JSON.stringify({ format: 'ems-radio-locations/1', items }, null, 2), { mode:0o600 });
-      await fs.rename(temp,file);
-    } finally {
-      await fs.rm(temp,{force:true}).catch(()=>{});
-    }
   }
 
   return {
@@ -79,7 +66,17 @@ export function createRadioGeo(ctx) {
         )).rows;
         const allowed=new Set();
         for(const row of rows) if(await canAccessSpace(user,row.spaceId)) allowed.add(row.id);
-        const items=(await readSaved()).filter(item=>allowed.has(item.hostId)).map(({hostId,latitude,longitude})=>({hostId,latitude,longitude}));
+        const records=(await pool.query(
+          'SELECT host_id AS "hostId", latitude, longitude FROM radio_doc_locations WHERE host_id=ANY($1::text[])',
+          [[...allowed]]
+        )).rows;
+        // Database records take precedence; NULL records mark a deliberately cleared location.
+        const documented=new Map(records.map(record=>[record.hostId,record]));
+        for (const legacy of await readSaved()) {
+          if (allowed.has(legacy.hostId) && !documented.has(legacy.hostId)) documented.set(legacy.hostId,legacy);
+        }
+        const items=[...documented.values()].filter(item=>item.latitude!==null && item.longitude!==null)
+          .map(({hostId,latitude,longitude})=>({hostId,latitude:Number(latitude),longitude:Number(longitude)}));
         return json(res,200,{ok:true,items});
       }
       if (url.pathname === '/api/radio/location') {
@@ -92,14 +89,13 @@ export function createRadioGeo(ctx) {
         const clear=(body.latitude===null || body.latitude==='') && (body.longitude===null || body.longitude==='');
         const latitude=clear?null:finiteCoordinate(body.latitude,-90,90);
         const longitude=clear?null:finiteCoordinate(body.longitude,-180,180);
+        // Upsert also for clears, so a legacy JSON record cannot reappear on the next GET.
+        await pool.query(
+          'INSERT INTO radio_doc_locations(host_id,latitude,longitude) VALUES($1,$2,$3) ' +
+          'ON CONFLICT(host_id) DO UPDATE SET latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude,updated_at=now()',
+          [hostId,latitude,longitude]
+        );
         const item=clear?null:{hostId,latitude,longitude,updatedAt:new Date().toISOString()};
-        const work=queue.catch(()=>{}).then(async()=>{
-          const saved=(await readSaved()).filter(row=>row.hostId!==hostId);
-          if(item) saved.push(item);
-          await save(saved);
-        });
-        queue=work;
-        await work;
         await audit(user,'radio.location','host',hostId,{companyId:host.companyId,spaceId:host.spaceId,detail:{coordinatesSaved:!!item}});
         return json(res,200,{ok:true,item});
       }
