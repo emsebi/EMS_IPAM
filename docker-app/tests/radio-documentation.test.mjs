@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {PGlite} from '@electric-sql/pglite';
+import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {vendorForMac,renderRadioTopology} from '../../modules/radio/public/topology.mjs';
 import {createModule} from '../../modules/radio/backend/index.mjs';
 
@@ -27,43 +27,45 @@ test('documentation map uses AP, inventory uplink, station and location without 
   const injected={...station,name:'<img src=x onerror=alert(1)>'};
   assert.equal(renderRadioTopology({ap,stations:[injected],inventory:[],escapeHtml:esc}).includes('<img'),false);
 });
-test('module-owned uplink JSON persists without polling; enforces admin, AP, company and scope',async()=>{
- const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'radio-doc-'));
- const hosts={
-   ap:{id:'ap',spaceId:'space-a',companyId:'acme',radioMode:'ap'},
-   sw:{id:'sw',spaceId:'space-a',companyId:'acme',radioMode:''},
-   other:{id:'other',spaceId:'space-b',companyId:'elsewhere',radioMode:''},
-   station:{id:'station',spaceId:'space-a',companyId:'acme',radioMode:'station'}
- };
- const calls={queries:0,pings:0,audits:0};
- const ctx={
-   backupDir:tmp,
-   pool:{query:async(sql,[id])=>{calls.queries++;return {rows:hosts[id]?[hosts[id]]:[]};}},
-   json:(_res,_code,body)=>body,readBody:async(req)=>req.body,
-   cleanText:(value,max)=>String(value??'').trim().slice(0,max),
-   requireAdmin:(user)=>{if(user.role!=='admin')throw Object.assign(new Error('Forbidden'),{status:403});},
-   requireModuleAccess:async()=>{},canAccessSpace:async(user,space)=>!user.denied?.includes(space),
-   pingMany:async()=>{calls.pings++;return new Map();},storePingResults:async()=>{},
-   audit:async()=>{calls.audits++;},broadcast:()=>{}
- };
- const api=createModule(ctx),admin={role:'admin'},viewer={role:'viewer'};
- const run=(method,apId,body,user=admin)=>api.handle({method,body},{},new URL('http://local/api/radio/uplink?apId='+encodeURIComponent(apId)),user);
- try {
-   assert.equal((await run('GET','ap')).link,null);
-   await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'sw'},viewer),{status:403});
-   await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'other'}),{status:400});
-   await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'station'}),{status:400});
-   await assert.rejects(run('PUT','station',{apId:'station',destinationId:'sw'}),{status:404});
-   await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'sw'}, {...admin,denied:['space-a']}),{status:404});
-   const saved=await run('PUT','ap',{apId:'ap',destinationId:'sw',port:'ether1'});
-   assert.equal(saved.link.port,'ether1');
-   assert.equal((await run('GET','ap',undefined,viewer)).link.destinationId,'sw');
-   const data=JSON.parse(await fs.readFile(path.join(tmp,'radio-documentation','uplinks.json'),'utf8'));
-   assert.equal(data.items.length,1);assert.equal(data.items[0].apId,'ap');
-   assert.equal(data.items[0].destinationId,'sw');
-   assert.equal(JSON.stringify(data).includes('password'),false);
-   await run('PUT','ap',{apId:'ap',destinationId:''});
-   assert.equal((await run('GET','ap')).link,null);
-   assert.equal(calls.pings,0);assert.equal(calls.audits,2);
- } finally { await fs.rm(tmp,{recursive:true,force:true}); }
+test('module-owned PostgreSQL uplinks persist with unwritable backup directory; enforce permissions and no polling',async()=>{
+ const db=new PGlite();
+ const query=async(sql,params)=>{const r=params?.length?await db.query(sql,params):(await db.exec(sql)).at(-1);return {...r,rows:r?.rows||[],rowCount:r?.rowCount??r?.affectedRows??r?.rows?.length??0};};
+ const pool={query,connect:async()=>({query,release(){}})};
+ const calls={pings:0,audits:0};
+ try{
+  await migrateDatabase(pool);
+  const dir=fileURLToPath(new URL('../../modules/radio/',import.meta.url));
+  assert.deepEqual((await migrateModuleSchemas(pool,[{id:'radio',dir}])).failed,[]);
+  await query("INSERT INTO companies(id,name) VALUES('acme','Acme'),('elsewhere','Elsewhere')");
+  await query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES('space-a','acme','A','192.0.2.0/24'),('space-b','elsewhere','B','198.51.100.0/24')");
+  await query("INSERT INTO hosts(id,space_id,ip,radio_mode) VALUES('ap','space-a','192.0.2.10','ap'),('sw','space-a','192.0.2.11',''),('station','space-a','192.0.2.12','station'),('other','space-b','198.51.100.1','')");
+  const ctx={
+    backupDir:'/proc/ems-ipam-no-write',
+    pool,json:(_res,_code,body)=>body,readBody:async(req)=>req.body,
+    cleanText:(value,max)=>String(value??'').trim().slice(0,max),
+    requireAdmin:(user)=>{if(user.role!=='admin')throw Object.assign(new Error('Forbidden'),{status:403});},
+    requireModuleAccess:async()=>{},canAccessSpace:async(user,space)=>!user.denied?.includes(space),
+    pingMany:async()=>{calls.pings++;return new Map();},storePingResults:async()=>{},
+    audit:async()=>{calls.audits++;},broadcast:()=>{}
+  };
+  const api=createModule(ctx),admin={role:'admin'},viewer={role:'viewer'};
+  const run=(method,apId,body,user=admin,handler=api)=>handler.handle({method,body},{},new URL('http://local/api/radio/uplink?apId='+encodeURIComponent(apId)),user);
+  assert.equal((await run('GET','ap')).link,null);
+  await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'sw'},viewer),{status:403});
+  await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'other'}),{status:400});
+  await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'station'}),{status:400});
+  await assert.rejects(run('PUT','station',{apId:'station',destinationId:'sw'}),{status:404});
+  await assert.rejects(run('PUT','ap',{apId:'ap',destinationId:'sw'}, {...admin,denied:['space-a']}),{status:404});
+  const saved=await run('PUT','ap',{apId:'ap',destinationId:'sw',port:'ether1'});
+  assert.equal(saved.link.port,'ether1');
+  const restarted=createModule(ctx);
+  assert.equal((await run('GET','ap',undefined,viewer,restarted)).link.destinationId,'sw');
+  const rows=(await query('SELECT ap_id,destination_id,port FROM radio_doc_uplinks WHERE ap_id=$1',['ap'])).rows;
+  assert.deepEqual(rows,[{ap_id:'ap',destination_id:'sw',port:'ether1'}]);
+  assert.equal(JSON.stringify(rows).includes('password'),false);
+  await run('PUT','ap',{apId:'ap',destinationId:''});
+  assert.equal((await run('GET','ap')).link,null);
+  assert.equal((await query('SELECT count(*)::int n FROM radio_doc_uplinks')).rows[0].n,1);
+  assert.equal(calls.pings,0);assert.equal(calls.audits,2);
+ }finally{await db.close();}
 });
