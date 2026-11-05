@@ -1,4 +1,20 @@
-# Current integration — P0 Map + multisite contract, 2026-11-05 19:08 UTC
+# Current checkpoint — P0 Map merged, 2026-11-05 19:11 UTC
+
+PR #14 merged as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`; its multisite contract is the development reference. PR #11 is now merged as `8cff91fe9205811b9d02bcab1eecd6896ce4614e` with a fresh expected head. Integrated head `914da808b497ea930b7ac254ecc5a7b8867c87e5` passed all four gates in [CI 42091202000](https://github.com/emsebi/EMS_IPAM/actions/runs/42091202000) and [42091186003](https://github.com/emsebi/EMS_IPAM/actions/runs/42091186003): Core/API/RADIUS, 19 real HTTP/PGlite browser scenarios, PostgreSQL, and full Docker/SSH fixture. Merge tree `86e9afc9e52809ec6dff0518c18600632a6e660d` exactly equals the tested tree.
+
+This is a code/test integration, not a VM deployment or general-release acceptance. Network Map 0.2.0-lab.4 now labels missing/unavailable/disconnected roots separately from a valid zero-hop observation and clears obsolete trace/impact results after root changes. Existing Radio, RADIUS credential controls, viewer access, Personnel, Client and Donation browser checks passed.
+
+## Exact next step and blockers
+
+1. Follow merge CI [42091453770](https://github.com/emsebi/EMS_IPAM/actions/runs/42091453770), currently **in_progress**, and this documentation checkpoint's CI. Contract merge CI 42090780897 was also in_progress at this check. Do not report either as successful until its completed result is inspected.
+2. **Full deployment remains on hold** to preserve PR #12's unmerged Radio fix already installed on the VM (41783898221, `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3`). Actual-user GPS/AP/Station/uplink save/reload acceptance has not been recorded; do not merge #12 without it. Failed browser job 126421929673 (run 41784038181) timed out after 12 seconds waiting for `#nmSettings` at browser.part1.mjs:350; the same head also has successful 41784045199. Preserve this evidence and investigate/retest the shared browser flow when integrating Radio; a flaky-test diagnosis is not yet proven.
+3. Next bounded P0 increment: review/reconcile PR #13 NAC **Preview only** against this new main, preserving Map and Radio scenarios in the shared browser file. Do not modify an actively edited file concurrently or introduce live NAC enforcement.
+4. Independent P1 work can use a separate real HTTP/API fixture for MS-01/MS-02/MS-11: existing parent Company/two branches with identical CIDR/IP, stable companyId/spaceId, every authorized search result labeled Branch/Space, direct out-of-scope requests denied. Reuse existing Company/Address Space schema; design a safe migration before same-branch repeated-VRF support.
+5. No VM deployment, real-device scan, configuration push or TOTP occurred in this increment. Actual RouterOS login/Full-Read incident stays OPEN; server ACCEPT and signed loopback responses are insufficient.
+
+---
+
+# Historical integration — P0 Map + multisite contract, 2026-11-05 19:08 UTC
 
 Fresh main was `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`. PR #14 final head `242fc686a8cd353f44dfa09c29e7d1504d0e656f` passed all four CI gates (42025816687 / 42025748549) and merged with expected SHA as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`. [MULTISITE-OPERATIONS-ACCEPTANCE-FA.md](docs/MULTISITE-OPERATIONS-ACCEPTANCE-FA.md) is now the MS-01…MS-12 / P0…P3 development contract; it describes required behavior, not completed features.
 
