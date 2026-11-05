@@ -1,4 +1,20 @@
-# Current work — explicit saved MAC path status, 2026-11-02 (Tehran)
+# Current integration — P0 Map + multisite contract, 2026-11-05 19:08 UTC
+
+Fresh main was `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`. PR #14 final head `242fc686a8cd353f44dfa09c29e7d1504d0e656f` passed all four CI gates (42025816687 / 42025748549) and merged with expected SHA as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`. [MULTISITE-OPERATIONS-ACCEPTANCE-FA.md](docs/MULTISITE-OPERATIONS-ACCEPTANCE-FA.md) is now the MS-01…MS-12 / P0…P3 development contract; it describes required behavior, not completed features.
+
+PR #11 head `55fa43155dff83017c0917494c0edc9e027a9d5b` passed Core/API/RADIUS, browser, PostgreSQL and full Docker/SSH fixture CI 41391456840 / 41391408187. This integration brings fresh main into that branch, retains its real HTTP/PGlite browser tests for all four saved-path states and root-change invalidation, and refreshes checksums for the merged contract. No concurrent edits are made to Radio/NAC branches. Their overlap with Map is `docker-app/tests/browser.part1.mjs`; integrate sequentially and preserve all scenarios.
+
+## Release holds and exact next step
+
+1. Follow the new exact-head PR #11 integration CI (run IDs will be recorded in this PR/checkpoint), inspect all four gates, then merge with fresh main and expected PR head. Old green CI alone does not certify this integrated head. Do not deploy while CI is pending or failed.
+2. **Do not run a full main deployment yet:** the VM has a newer Radio-only correction from PR #12, deployed by run [41783898221](https://github.com/emsebi/EMS_IPAM/actions/runs/41783898221) at `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3`. Deploying main would revert that unmerged correction. Base full release remains `588ba9f86a1731ee12c5308ddef2e755131352dc` (41360114772); installed Radio differs. PR #12 explicitly requires actual-user GPS/AP/Station/uplink save/reload acceptance before merge, and no acceptance comment was present at this check. Its latest head `b8a7f575486ac90d8ce7f406018358a145c459ec` has successful CI 41784045199 but browser failure in 41784038181; inspect that discrepancy before integration.
+3. PR #13 head `c0012ab10548d89b615a699aabeb7bf706b7b0a6` has successful CI 41728810342 / 41728799965. It is NAC **Preview only**, with no runtime enforcement bridge. Review and integrate its shared browser tests against new main in a separate increment; do not treat generated CLI as applied configuration.
+4. Next independent P1 code/test increment: production HTTP/PostgreSQL fixture using existing parent Company + two branches, identical CIDR and IP, stable companyId/spaceId identity, and direct unauthorized endpoint requests. Assert all permitted results with Branch/Space context; add scoped search only after behavior tests. Repeated VRF inside one branch requires a safe migration design before changing existing uniqueness constraints.
+5. RADIUS actual RouterOS login/Full-Read remains **OPEN / unverified**, independently of valid signed loopback replies or server ACCEPT. Preserve credentials, Collections, Inventory links, Core/MAB Company boundaries, all modules, backups/volumes and port 8888. No real-device discovery, router push or TOTP in this increment.
+
+---
+
+# Historical work — explicit saved MAC path status, 2026-11-02 (Tehran)
 
 Fresh main `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`, CI 41386136552 and PR #10 merge CI 41386061955 all verified SUCCESS. PR #6, #4, #9 and #10 are merged. Installed functional release remains `588ba9f` (Lab Deploy 41360114772); actual RouterOS login remains OPEN / unverified.
 
