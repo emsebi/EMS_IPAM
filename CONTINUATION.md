@@ -1,4 +1,19 @@
-# Current work — P0 NAC Preview integration, 2026-11-05 20:00 UTC
+# Current checkpoint — NAC Preview merged, 2026-11-05
+
+PR #13 integrated fresh main and merged with expected head as `6ff353db76fd980fda15925051a6361f9a56c16e`. Tested head `2f1edf610f46cf2b07028ea9d7a1354454f035c8` passed all four gates in [CI 42099411545](https://github.com/emsebi/EMS_IPAM/actions/runs/42099411545): Core/API/RADIUS, browser, PostgreSQL and full Docker/SSH fixture. Merge tree `efe8b612456cf621221e142d9438ae8c3baa718e` exactly matches the tested tree. Companion run 42099398865 is completed / success; inspect any unfinished result next.
+
+Nine local NAC policy/API/migration tests passed. The new authorization matrix checks all ten endpoint forms for two denied permission combinations before touching protected data. Exact RADIUS row-content preservation is checked. The browser integration retains Map missing-path/root-change scenarios alongside NAC Preview. No live enforcement bridge, router push or scan was added.
+
+## Exact next step
+
+1. Follow [merge CI 42099815442](https://github.com/emsebi/EMS_IPAM/actions/runs/42099815442), last observed in_progress with result pending and the documentation checkpoint CI; their run IDs are also recorded on PR #13. No pending run is being reported as successful.
+2. Next independent code increment: a separate real HTTP/PostgreSQL MS-01/MS-02/MS-11 fixture with existing parent Company + two branches holding the same CIDR and IP, companyId/spaceId identity, authorized search results labeled Branch/Space, and denied direct out-of-scope requests. Do not rebuild Company/Address Space or alter same-branch VRF uniqueness before safe migration design.
+3. **No full deployment:** PR #12's Radio fix is already installed but unmerged and awaits actual-user GPS/AP/Station/uplink save/reload acceptance. Preserve deployed `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3` (41783898221) atop full release 588ba9f. A full main deploy would revert it. Integrate Radio's shared browser scenarios sequentially only after acceptance; preserve the recorded #nmSettings timeout evidence.
+4. NAC is **Preview only**, not enforced or validated on switch ports. Actual RouterOS login/Full-Read remains **OPEN / unverified**. No VM acceptance or public-release readiness is claimed; no TOTP.
+
+---
+
+# Historical work — P0 NAC Preview integration, 2026-11-05 20:00 UTC
 
 Fresh main `2990f7ad70452c2df020aa45ea8e6a2195e7f35a` and its CI 42091626132 are SUCCESS. Map merge CI 42091453770 and contract merge CI 42090780897 also completed SUCCESS. PR #11 and #14 are merged; the MS-01…MS-12 / P0…P3 contract remains the reference.
 
