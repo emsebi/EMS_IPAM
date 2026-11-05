@@ -1,1 +1,15 @@
-.access-tabs{display:flex;gap:10px;margin:18px 0}.access-records{padding:20px}.access-records>.row-actions{margin:16px 0}.access-records .inventory-table-wrap{margin-top:16px}
+/* Existing Network Access records remain available through their legacy view. */
+.access-records .inventory-table-wrap { overflow-x: auto; }
+.nac-warning { margin: 0 0 1rem; padding: 1rem; border: 1px solid var(--line, #b4bcc6); border-radius: 0.7rem; }
+.nac-warning p { margin: 0.35rem 0 0; }
+.nac-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; align-items: start; }
+.nac-grid > section { min-width: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.nac-grid > section:last-child { grid-column: 1 / -1; }
+.nac-grid h3 { margin: 0.45rem 0; }
+.nac-grid label:not(.nac-inline) { display: flex; flex-direction: column; gap: 0.35rem; }
+.nac-grid input:not([type="checkbox"]),.nac-grid select,.nac-grid textarea { max-width: 100%; width: 100%; box-sizing: border-box; }
+.nac-inline { display: flex; gap: 0.6rem; align-items: center; }
+.nac-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.nac-output { white-space: pre-wrap; overflow-wrap: anywhere; font: 0.88rem/1.55 ui-monospace, monospace; direction: ltr; text-align: left; padding: 0.7rem; border: 1px solid var(--line, #b4bcc6); border-radius: 0.5rem; min-height: 5rem; overflow: auto; }
+.nac-rule { padding: 0.5rem 0; border-bottom: 1px solid var(--line, #ddd); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+@media (max-width: 850px) { .nac-grid { grid-template-columns: minmax(0,1fr); } .nac-grid > section:last-child { grid-column: auto; } }

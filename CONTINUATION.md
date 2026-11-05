@@ -1,4 +1,23 @@
-# Current checkpoint — P0 Map merged, 2026-11-05 19:11 UTC
+# Current work — P0 NAC Preview integration, 2026-11-05 20:00 UTC
+
+Fresh main `2990f7ad70452c2df020aa45ea8e6a2195e7f35a` and its CI 42091626132 are SUCCESS. Map merge CI 42091453770 and contract merge CI 42090780897 also completed SUCCESS. PR #11 and #14 are merged; the MS-01…MS-12 / P0…P3 contract remains the reference.
+
+This increment merges fresh main into existing PR #13 (`work/nac-switch-profiles-20261104`, previous head `c0012ab10548d89b615a699aabeb7bf706b7b0a6`). Three-way integration of the shared browser file preserves both the 19 Map/main scenarios and NAC's profile/binding/override/CLI preview scenario; no scenario is dropped. No Radio branch files are changed.
+
+Added production-handler authorization regression: each of all 10 NAC endpoints independently requires both module permission and administrator status. Twenty denied requests must fail before database access, body parsing, draft mutation or response data. Existing PGlite lifecycle assertions now compare exact live radcheck/radreply contents, not just row counts, so an accidental overwrite is detected. All **9 NAC policy/API/migration tests passed locally** on the integrated source; browser syntax passed. Full combined CI is still required.
+
+The reviewed NAC backend only changes its own draft tables and reads existing NAS/MAC registry IDs; no switch execution, discovery or runtime RADIUS authorization bridge is added. “Enabled” still means enabled in simulation. Company scopes in existing MAB/NAC remain intact.
+
+## Exact next step
+
+1. Inspect exact-head PR #13 CI (run IDs recorded in the PR and next checkpoint): require Core/API/RADIUS, browser, PostgreSQL and Docker/SSH gates before merge with fresh main/expected head. The historical green CI for c0012ab is not sufficient for this new integration.
+2. Preserve the VM Radio fix: **do not run a full deployment** while PR #12 remains unmerged and its actual-user save/reload acceptance is absent. The VM has Radio correction `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3` from 41783898221 atop full release 588ba9f; deploying main would revert it. PR #12 comments still contain no acceptance. Follow the documented #nmSettings timeout discrepancy when integrating its shared browser tests.
+3. After NAC integration, next independent P1 increment is a separate real HTTP/PostgreSQL test for existing parent Company + two branches with identical CIDR/IP, stable companyId/spaceId and denied out-of-scope direct requests. Preserve all authorized search candidates with Branch/Space labels. No same-branch repeated-VRF constraint change before safe migration design.
+4. NAC is Preview only, with CLI templates requiring actual model/OS and lab validation before use. No enforcement/release/VM acceptance is claimed. Actual RouterOS login/Full-Read remains OPEN; no network scan, configuration push or TOTP.
+
+---
+
+# Historical checkpoint — P0 Map merged, 2026-11-05 19:11 UTC
 
 PR #14 merged as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`; its multisite contract is the development reference. PR #11 is now merged as `8cff91fe9205811b9d02bcab1eecd6896ce4614e` with a fresh expected head. Integrated head `914da808b497ea930b7ac254ecc5a7b8867c87e5` passed all four gates in [CI 42091202000](https://github.com/emsebi/EMS_IPAM/actions/runs/42091202000) and [42091186003](https://github.com/emsebi/EMS_IPAM/actions/runs/42091186003): Core/API/RADIUS, 19 real HTTP/PGlite browser scenarios, PostgreSQL, and full Docker/SSH fixture. Merge tree `86e9afc9e52809ec6dff0518c18600632a6e660d` exactly equals the tested tree.
 
