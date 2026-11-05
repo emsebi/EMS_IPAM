@@ -1,7 +1,7 @@
 {
   "id": "network-map",
   "name": "Network Map",
-  "version": "0.2.0-lab.3",
+  "version": "0.2.0-lab.4",
   "apiVersion": 1,
   "enabled": true,
   "roles": [

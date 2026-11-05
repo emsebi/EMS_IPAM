@@ -60,10 +60,12 @@ export function createUi(ctx) {
       const {items}=await request('/api/inventory');const el=page.querySelector('#nmTargets'),lines=el.value.split('\n').filter(Boolean),ips=new Set(lines.map(s=>s.split('|')[0].trim()));
       for(const h of items||[])if(h.companyId===company&&/switch|router|سوئیچ|سوییچ|روتر/i.test(h.type||'')&&!ips.has(h.ip)){lines.push(`${h.ip} | ${/mikrotik/i.test(h.vendor||'')?'mikrotik':'auto'} | ${h.name||h.ip}`);ips.add(h.ip);}el.value=lines.join('\n');
     });
-    listen('#nmSettings','submit',async e=>{e.preventDefault();const val=id=>page.querySelector('#'+id).value;
+    listen('#nmSettings','submit',async e=>{e.preventDefault();const previousRoot=settings.rootId,val=id=>page.querySelector('#'+id).value;
       const devices=val('nmTargets').split('\n').filter(s=>s.trim()).map(line=>{const [address,platform,name]=line.split('|').map(s=>s.trim());return {address,platform:platform||'auto',name:name||address};});
       await api('/settings','PUT',{devices,scopes:val('nmScopes').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean),username:val('nmUsername'),password:val('nmPassword'),port:Number(val('nmSshPort')),timeout:Number(val('nmTimeout')),concurrency:Number(val('nmConcurrency')),rootId:val('nmRoot'),saveConfig:page.querySelector('#nmSaveConfig').checked});
-      page.querySelector('#nmPassword').value='';await load();tab='map';render();toast(L('Connection settings saved.','تنظیمات اتصال ذخیره شد.'));
+      page.querySelector('#nmPassword').value='';await load();
+      if(settings.rootId!==previousRoot){trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedPort='';highlightLinks.clear();highlightNodes.clear();}
+      tab='map';render();toast(L('Connection settings saved.','تنظیمات اتصال ذخیره شد.'));
     });
   }
   async function startScan(deviceId){await api('/scan','POST',deviceId?{deviceId}:{});const s=await api('/state');job=s.job;jobBanner();scheduleJob();}
@@ -155,10 +157,21 @@ export function createUi(ctx) {
       <div class="nm-actions">${ipTrace.matches.map(m=>`<button class="btn" type="button" data-ip-mac="${esc(m.mac)}">${L('View saved MAC path','نمایش مسیر ذخیره‌شده MAC')} · <span class="ltr mono">${esc(m.mac)}</span></button>`).join('')}</div></section>`;
   }
   function bindIpMatches(el){el.querySelectorAll('[data-ip-mac]').forEach(b=>b.addEventListener('click',()=>showMacTrace(b.dataset.ipMac).catch(e=>toast(e.message))));}
+  function pathStatusHtml(observation){
+    if(!observation.candidate)return '';
+    const path=trace.paths.find(p=>p.nodeId===observation.nodeId&&p.port===observation.port);
+    let status,label;
+    if(!settings.rootId){status='root-unset';label=L('Select a root switch in connection settings to calculate a saved path.','برای محاسبه مسیر ذخیره‌شده، سوئیچ ریشه را در تنظیمات اتصال مشخص کنید.');}
+    else if(!topology.nodes.some(n=>n.id===settings.rootId)){status='root-unavailable';label=L('The selected root switch is absent from the saved map. A path cannot be determined.','سوئیچ ریشه انتخاب‌شده در نقشه ذخیره‌شده موجود نیست؛ مسیر قابل تعیین نیست.');}
+    else if(!Array.isArray(path?.links)){status='no-path';label=L('No saved path from the root switch. The port observation is retained; this does not confirm a live outage.','مسیر ذخیره‌شده‌ای از سوئیچ ریشه یافت نشد؛ مشاهده پورت حفظ شده و قطعی زنده تأیید نشده است.');}
+    else if(path.links.length===0){status='at-root';label=L('Observed on the root switch; no inter-switch links are needed.','مشاهده روی سوئیچ ریشه است؛ مسیر بین‌سوئیچی ندارد.');}
+    else return '';
+    return `<small class="nm-path-status" data-path-status="${status}">${esc(label)}</small>`;
+  }
   function renderTrace(){
     const el=page.querySelector('#nmTraceResult');if(!el)return;if(!trace){el.innerHTML=ipTraceHtml();bindIpMatches(el);return;}
     el.innerHTML=ipTraceHtml()+`<section class="panel nm-trace-result"><div class="nm-detail-head"><b class="ltr mono">${esc(trace.mac)}</b><span>${esc(trace.record?.name||L('Not registered','ثبت نشده'))}</span><button id="nmTraceRegister" class="btn sm">${trace.record?L('Edit record','ویرایش اطلاعات'):L('+ Register','+ ثبت')}</button></div><p>${L('Manufacturer','سازنده')}: ${esc(trace.vendor.name|| (trace.vendor.kind==='locally-administered'?L('Private / randomized MAC','MAC خصوصی / تصادفی'):L('Unknown','نامشخص')))} <small class="nm-muted">${L('OUI identifies the interface manufacturer, not the exact device model.','OUI سازنده رابط را نشان می‌دهد؛ مدل دقیق تجهیز از آن مشخص نمی‌شود.')}</small></p>
-      ${trace.observations.length?`<div class="nm-trace-observations">${trace.observations.map(o=>`<button class="nm-observation ${o.candidate?'candidate':''}" data-trace-node="${esc(o.nodeId)}" data-trace-port="${esc(o.port)}"><b>${esc(o.nodeName)} · ${esc(o.port)}</b><span>VLAN ${esc(o.vlan||'?')} · ${o.candidate?L('Possible endpoint','محل احتمالی تجهیز'):L('Transit / uplink','مسیر عبور / بالادست')}</span><small>${esc(o.source)} · ${esc(when(o.observedAt))}${o.stale?' · '+L('stale','قدیمی'):''}</small></button>`).join('')}</div>`:`<p>${L('No observation in saved MAC tables. Refresh the relevant devices to collect new data.','در جدول‌های ذخیره‌شده دیده نشده؛ برای دریافت اطلاعات جدید، تجهیزات مربوط را رفرش کنید.')}</p>`}
+      ${trace.observations.length?`<div class="nm-trace-observations">${trace.observations.map(o=>`<button class="nm-observation ${o.candidate?'candidate':''}" data-trace-node="${esc(o.nodeId)}" data-trace-port="${esc(o.port)}"><b>${esc(o.nodeName)} · ${esc(o.port)}</b><span>VLAN ${esc(o.vlan||'?')} · ${o.candidate?L('Possible endpoint','محل احتمالی تجهیز'):L('Transit / uplink','مسیر عبور / بالادست')}</span><small>${esc(o.source)} · ${esc(when(o.observedAt))}${o.stale?' · '+L('stale','قدیمی'):''}</small>${pathStatusHtml(o)}</button>`).join('')}</div>`:`<p>${L('No observation in saved MAC tables. Refresh the relevant devices to collect new data.','در جدول‌های ذخیره‌شده دیده نشده؛ برای دریافت اطلاعات جدید، تجهیزات مربوط را رفرش کنید.')}</p>`}
       <small class="nm-muted">${L('Highlighted paths follow the known physical topology. Unmanaged switches, multiple VLANs or old tables can make the endpoint uncertain.','مسیر برجسته بر اساس اتصالات شناخته‌شده است؛ سوئیچ غیرمدیریتی، چند VLAN یا جدول قدیمی می‌تواند محل نهایی را نامطمئن کند.')}</small></section>`;
     bindIpMatches(el);
     listen('#nmTraceRegister','click',()=>macDialog(trace.mac,trace.record));

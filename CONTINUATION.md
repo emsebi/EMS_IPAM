@@ -1,4 +1,71 @@
-# Current checkpoint — failure-impact regression merged, 2026-11-02 (Tehran)
+# Current work — P0 NAC Preview integration, 2026-11-05 20:00 UTC
+
+Fresh main `2990f7ad70452c2df020aa45ea8e6a2195e7f35a` and its CI 42091626132 are SUCCESS. Map merge CI 42091453770 and contract merge CI 42090780897 also completed SUCCESS. PR #11 and #14 are merged; the MS-01…MS-12 / P0…P3 contract remains the reference.
+
+This increment merges fresh main into existing PR #13 (`work/nac-switch-profiles-20261104`, previous head `c0012ab10548d89b615a699aabeb7bf706b7b0a6`). Three-way integration of the shared browser file preserves both the 19 Map/main scenarios and NAC's profile/binding/override/CLI preview scenario; no scenario is dropped. No Radio branch files are changed.
+
+Added production-handler authorization regression: each of all 10 NAC endpoints independently requires both module permission and administrator status. Twenty denied requests must fail before database access, body parsing, draft mutation or response data. Existing PGlite lifecycle assertions now compare exact live radcheck/radreply contents, not just row counts, so an accidental overwrite is detected. All **9 NAC policy/API/migration tests passed locally** on the integrated source; browser syntax passed. Full combined CI is still required.
+
+The reviewed NAC backend only changes its own draft tables and reads existing NAS/MAC registry IDs; no switch execution, discovery or runtime RADIUS authorization bridge is added. “Enabled” still means enabled in simulation. Company scopes in existing MAB/NAC remain intact.
+
+## Exact next step
+
+1. Inspect exact-head PR #13 CI (run IDs recorded in the PR and next checkpoint): require Core/API/RADIUS, browser, PostgreSQL and Docker/SSH gates before merge with fresh main/expected head. The historical green CI for c0012ab is not sufficient for this new integration.
+2. Preserve the VM Radio fix: **do not run a full deployment** while PR #12 remains unmerged and its actual-user save/reload acceptance is absent. The VM has Radio correction `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3` from 41783898221 atop full release 588ba9f; deploying main would revert it. PR #12 comments still contain no acceptance. Follow the documented #nmSettings timeout discrepancy when integrating its shared browser tests.
+3. After NAC integration, next independent P1 increment is a separate real HTTP/PostgreSQL test for existing parent Company + two branches with identical CIDR/IP, stable companyId/spaceId and denied out-of-scope direct requests. Preserve all authorized search candidates with Branch/Space labels. No same-branch repeated-VRF constraint change before safe migration design.
+4. NAC is Preview only, with CLI templates requiring actual model/OS and lab validation before use. No enforcement/release/VM acceptance is claimed. Actual RouterOS login/Full-Read remains OPEN; no network scan, configuration push or TOTP.
+
+---
+
+# Historical checkpoint — P0 Map merged, 2026-11-05 19:11 UTC
+
+PR #14 merged as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`; its multisite contract is the development reference. PR #11 is now merged as `8cff91fe9205811b9d02bcab1eecd6896ce4614e` with a fresh expected head. Integrated head `914da808b497ea930b7ac254ecc5a7b8867c87e5` passed all four gates in [CI 42091202000](https://github.com/emsebi/EMS_IPAM/actions/runs/42091202000) and [42091186003](https://github.com/emsebi/EMS_IPAM/actions/runs/42091186003): Core/API/RADIUS, 19 real HTTP/PGlite browser scenarios, PostgreSQL, and full Docker/SSH fixture. Merge tree `86e9afc9e52809ec6dff0518c18600632a6e660d` exactly equals the tested tree.
+
+This is a code/test integration, not a VM deployment or general-release acceptance. Network Map 0.2.0-lab.4 now labels missing/unavailable/disconnected roots separately from a valid zero-hop observation and clears obsolete trace/impact results after root changes. Existing Radio, RADIUS credential controls, viewer access, Personnel, Client and Donation browser checks passed.
+
+## Exact next step and blockers
+
+1. Follow merge CI [42091453770](https://github.com/emsebi/EMS_IPAM/actions/runs/42091453770), currently **in_progress**, and this documentation checkpoint's CI. Contract merge CI 42090780897 was also in_progress at this check. Do not report either as successful until its completed result is inspected.
+2. **Full deployment remains on hold** to preserve PR #12's unmerged Radio fix already installed on the VM (41783898221, `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3`). Actual-user GPS/AP/Station/uplink save/reload acceptance has not been recorded; do not merge #12 without it. Failed browser job 126421929673 (run 41784038181) timed out after 12 seconds waiting for `#nmSettings` at browser.part1.mjs:350; the same head also has successful 41784045199. Preserve this evidence and investigate/retest the shared browser flow when integrating Radio; a flaky-test diagnosis is not yet proven.
+3. Next bounded P0 increment: review/reconcile PR #13 NAC **Preview only** against this new main, preserving Map and Radio scenarios in the shared browser file. Do not modify an actively edited file concurrently or introduce live NAC enforcement.
+4. Independent P1 work can use a separate real HTTP/API fixture for MS-01/MS-02/MS-11: existing parent Company/two branches with identical CIDR/IP, stable companyId/spaceId, every authorized search result labeled Branch/Space, direct out-of-scope requests denied. Reuse existing Company/Address Space schema; design a safe migration before same-branch repeated-VRF support.
+5. No VM deployment, real-device scan, configuration push or TOTP occurred in this increment. Actual RouterOS login/Full-Read incident stays OPEN; server ACCEPT and signed loopback responses are insufficient.
+
+---
+
+# Historical integration — P0 Map + multisite contract, 2026-11-05 19:08 UTC
+
+Fresh main was `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`. PR #14 final head `242fc686a8cd353f44dfa09c29e7d1504d0e656f` passed all four CI gates (42025816687 / 42025748549) and merged with expected SHA as `ed3a093579aee160585ba495cdfd7dc9fd7585bf`. [MULTISITE-OPERATIONS-ACCEPTANCE-FA.md](docs/MULTISITE-OPERATIONS-ACCEPTANCE-FA.md) is now the MS-01…MS-12 / P0…P3 development contract; it describes required behavior, not completed features.
+
+PR #11 head `55fa43155dff83017c0917494c0edc9e027a9d5b` passed Core/API/RADIUS, browser, PostgreSQL and full Docker/SSH fixture CI 41391456840 / 41391408187. This integration brings fresh main into that branch, retains its real HTTP/PGlite browser tests for all four saved-path states and root-change invalidation, and refreshes checksums for the merged contract. No concurrent edits are made to Radio/NAC branches. Their overlap with Map is `docker-app/tests/browser.part1.mjs`; integrate sequentially and preserve all scenarios.
+
+## Release holds and exact next step
+
+1. Follow the new exact-head PR #11 integration CI (run IDs will be recorded in this PR/checkpoint), inspect all four gates, then merge with fresh main and expected PR head. Old green CI alone does not certify this integrated head. Do not deploy while CI is pending or failed.
+2. **Do not run a full main deployment yet:** the VM has a newer Radio-only correction from PR #12, deployed by run [41783898221](https://github.com/emsebi/EMS_IPAM/actions/runs/41783898221) at `eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3`. Deploying main would revert that unmerged correction. Base full release remains `588ba9f86a1731ee12c5308ddef2e755131352dc` (41360114772); installed Radio differs. PR #12 explicitly requires actual-user GPS/AP/Station/uplink save/reload acceptance before merge, and no acceptance comment was present at this check. Its latest head `b8a7f575486ac90d8ce7f406018358a145c459ec` has successful CI 41784045199 but browser failure in 41784038181; inspect that discrepancy before integration.
+3. PR #13 head `c0012ab10548d89b615a699aabeb7bf706b7b0a6` has successful CI 41728810342 / 41728799965. It is NAC **Preview only**, with no runtime enforcement bridge. Review and integrate its shared browser tests against new main in a separate increment; do not treat generated CLI as applied configuration.
+4. Next independent P1 code/test increment: production HTTP/PostgreSQL fixture using existing parent Company + two branches, identical CIDR and IP, stable companyId/spaceId identity, and direct unauthorized endpoint requests. Assert all permitted results with Branch/Space context; add scoped search only after behavior tests. Repeated VRF inside one branch requires a safe migration design before changing existing uniqueness constraints.
+5. RADIUS actual RouterOS login/Full-Read remains **OPEN / unverified**, independently of valid signed loopback replies or server ACCEPT. Preserve credentials, Collections, Inventory links, Core/MAB Company boundaries, all modules, backups/volumes and port 8888. No real-device discovery, router push or TOTP in this increment.
+
+---
+
+# Historical work — explicit saved MAC path status, 2026-11-02 (Tehran)
+
+Fresh main `88ec46f6beffd03dfe3523b0dfd3d9c83373de39`, CI 41386136552 and PR #10 merge CI 41386061955 all verified SUCCESS. PR #6, #4, #9 and #10 are merged. Installed functional release remains `588ba9f` (Lab Deploy 41360114772); actual RouterOS login remains OPEN / unverified.
+
+Branch `work/map-path-status-20261102` advances Network Map to 0.2.0-lab.4. Saved MAC candidate observations now distinguish root not configured, selected root absent from the saved map, no saved root path, and observation on the root itself (zero inter-switch links). No-path explicitly does not confirm a live outage; port/source/time/staleness remain visible. Changing the root invalidates old trace/impact results and highlights, preventing a path for the previous root being relabelled as current.
+
+The browser scenario uses the existing real HTTP/PGlite fixture, with a synthetic disconnected switch and no API mocks. It covers each status, root-change invalidation, IP-selected MAC results, preserved port evidence, screenshots and zero collection writes/snapshots during search. Local syntax/diff checks passed; Chromium is absent locally, so the full browser gate must pass in CI before merge or deployment.
+
+## Exact next step
+
+1. Follow the exact-head PR CI (IDs recorded in the PR body), inspect actual failures, and merge with fresh main/expected SHA only after all four gates pass. Then stage the tested merge through existing EMS-IPAM Lab Deploy and record its run; do not wait indefinitely or claim queued deployment succeeded.
+2. Check backup, unchanged RADIUS data/credentials/assignments, port 8888, all installed modules and signed replies after deployment. Preserve Core/MAB Company boundaries and existing accepted UI features. No new migration or router configuration is included.
+3. Live discovery needs explicit targets; actual RouterOS login remains open. TOTP and Radio redesign remain out of scope.
+
+---
+
+# Historical checkpoint — failure-impact regression merged, 2026-11-02 (Tehran)
 
 Fresh main: `0fdf5f4796f70ff344913babf6121626b17a7221`; checkpoint CI 41381047520 completed SUCCESS. PR #6, #4 and #9 are merged. Installed functional release remains `588ba9f86a1731ee12c5308ddef2e755131352dc`, with successful Lab Deploy 41360114772. Actual RouterOS login remains OPEN / unverified.
 

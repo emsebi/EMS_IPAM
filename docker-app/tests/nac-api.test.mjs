@@ -77,12 +77,41 @@ test('NAC independent migration, switch-profile CRUD, source registry and no liv
     await assert.rejects(()=>call('DELETE','/api/nac/profiles/'+guest.id),{status:409});
     await pool.query("UPDATE radius_ops_macs SET enabled=false WHERE id=$1",[macId]);
     assert.equal((await call('GET','/api/nac/preview?nasId='+a+'&mac='+registered)).result.reason,'mac-explicitly-disabled');
-    assert.equal((await pool.query('SELECT count(*)::int AS count FROM radcheck')).rows[0].count,1);
-    assert.equal((await pool.query('SELECT count(*)::int AS count FROM radreply')).rows[0].count,1);
+    assert.deepEqual((await pool.query('SELECT * FROM radcheck')).rows,[{dummy:'original'}]);
+    assert.deepEqual((await pool.query('SELECT * FROM radreply')).rows,[{dummy:'original'}]);
     assert.ok(audits.some(x=>x==='nac.profile.create'));
     assert.ok(audits.some(x=>x==='nac.nas.binding'));
     assert.ok(audits.some(x=>x==='nac.mac.rule'));
     const restarted=await migrateModuleSchemas(pool,[{id:'network-access',dir:moduleDir}]);
     assert.deepEqual(restarted,{applied:[],failed:[]});
   }finally{await db.close();}
+});
+
+test('every NAC endpoint requires module permission AND admin before reading data or request bodies',async()=>{
+  const routes=[
+    ['GET','/api/nac/overview'],['POST','/api/nac/profiles'],
+    ['PUT','/api/nac/profiles/'+a],['DELETE','/api/nac/profiles/'+a],
+    ['PUT','/api/nac/nas/'+a],['GET','/api/nac/nas/'+a+'/rules'],
+    ['PUT','/api/nac/nas/'+a+'/rules/a0:11:22:33:44:66'],
+    ['DELETE','/api/nac/nas/'+a+'/rules/a0:11:22:33:44:66'],
+    ['GET','/api/nac/preview?nasId='+a+'&mac=a0:11:22:33:44:66'],
+    ['GET','/api/nac/nas/'+a+'/config?radiusIp=192.0.2.20&interface=Gi1%2F0%2F7']
+  ];
+  let touched=0;
+  const forbidden=()=>Object.assign(new Error('forbidden'),{status:403});
+  const unexpected=()=>{touched++;throw new Error('unauthorized request reached protected data');};
+  const module=createModule({pool:{query:unexpected},readBody:unexpected,json:unexpected,audit:unexpected,
+    requireModuleAccess:async(user,moduleId)=>{
+      assert.equal(moduleId,'network-access');if(!user.moduleAllowed)throw forbidden();
+    },
+    requireAdmin:user=>{if(user.role!=='admin')throw forbidden();}
+  });
+  // A module grant must not bypass the separate admin gate; admin must not bypass the module gate.
+  for(const user of [{role:'viewer',moduleAllowed:true},{role:'admin',moduleAllowed:false}]){
+    for(const [method,path] of routes){
+      await assert.rejects(()=>module.handle({method},{setHeader:unexpected},new URL('http://ems.local'+path),user),
+        {status:403},`${user.role} ${method} ${path}`);
+    }
+  }
+  assert.equal(touched,0,'denied requests must not query NAS/MAC/Secret data, parse bodies or write drafts');
 });
