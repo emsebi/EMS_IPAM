@@ -1,3 +1,17 @@
+# Current checkpoint — per-Space unregistered search merged, 2026-11-06
+
+PR #19 merged with expected head as b1601dc5660cfa16debc223a5587b413e4bda91e. Final head c7d8a9bf828a401feb2ac982a359576f47a8f8ca passed all four gates in CI [42214392703](https://github.com/emsebi/EMS_IPAM/actions/runs/42214392703) and [42214385456](https://github.com/emsebi/EMS_IPAM/actions/runs/42214385456): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser log confirms 23 scenarios, including unregistered/mixed candidate selection and no host creation by opening the form. Merge tree exactly matches tested head.
+
+Exact-IP unregistered candidates now retain each authorized containing Space, even alongside a registered branch. Uncapped exact-IP occupancy query prevents capped host results from falsely implying absence. Branch/Space/source and null observation/edit fields are explicit; availability remains unverified, not a live free-IP claim. No schema change or network scan.
+
+## Exact next step
+1. Inspect merge CI [42222496792](https://github.com/emsebi/EMS_IPAM/actions/runs/42222496792), last observed in_progress, and checkpoint CI. Exact IDs/statuses also saved on PR #19; unfinished runs are not success.
+2. Next bounded implementation: inspect all /api/search callers and define backward-compatible explicit pagination metadata (hasMore/next cursor or equivalent), stable ordering with ID tie-breakers and authorization on every page. Start with a real HTTP regression exceeding existing host limit 30 and final limit 40 across synthetic authorized/unauthorized branches. Implement one bounded API step that lets the client retrieve remaining results without silently truncating or loading an unbounded dataset. Then a separate UI load-more step with stale-query handling and browser navigation checks. Existing branch identity and evidence fields must survive every page.
+3. Current per-kind caps and final slice still mean not all authorized results are reachable; do not claim complete multisite search until the new regression and UI pass. Test duplicate IPs, overlapping Spaces, mixed registered/unregistered results, no duplicates/missing results across pages and denied scope. Do not rebuild Company/Space or change same-branch VRF uniqueness without migration design.
+4. No full deployment: preserve installed unmerged PR #12 Radio correction eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router pushes, TOTP or VM/public-release acceptance claim.
+
+---
+
 # Current work — unregistered/mixed IP browser selection, 2026-11-06
 
 Fresh main remains 29ec1efdb8668b97a2a89178fa63b91cd5910daf. PR #19 head 86684bb4d19f21aee80c0e671a3e5597f5e7f20c passed CI 42207006186 and 42206999811. PR #12 unchanged; actual-user Radio acceptance remains absent.
