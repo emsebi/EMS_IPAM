@@ -1,3 +1,13 @@
+# Current work — multisite HTTP regression, 2026-11-06
+
+Base main 585d3c06265805e4818699984214ea20829bd6d2; CI 42099948863 and 42099815442 verified SUCCESS. This increment adds a separate real HTTP test using existing Company/Space/Host routes: parent and two branches share CIDR/IP; editing one preserves the other; Company-granted and Space-granted viewers see only their own inventory/search/export; cross-scope reads, ID spoofing, edits and deletes are denied. The same test is wired into the existing PostgreSQL CI job using a newly created disposable database, removed after testing. Default local execution uses PGlite. No shared browser file or production schema changes.
+
+Next: inspect exact-head CI (run IDs recorded in the PR), especially the new real PostgreSQL execution; do not merge if pending/failed. Then add Branch/Space labels and source/time to search results: current search returns spaceId/spaceName but lacks branch context and caps results. This fixture does not certify every endpoint or all multisite acceptance scenarios. Same-branch repeated VRF needs migration design first.
+
+No deployment: preserve PR #12 Radio correction already on VM pending actual-user acceptance. NAC remains Preview only; RouterOS real-device login remains OPEN. No scanning, config push or TOTP.
+
+---
+
 # Current checkpoint — NAC Preview merged, 2026-11-05
 
 PR #13 integrated fresh main and merged with expected head as `6ff353db76fd980fda15925051a6361f9a56c16e`. Tested head `2f1edf610f46cf2b07028ea9d7a1354454f035c8` passed all four gates in [CI 42099411545](https://github.com/emsebi/EMS_IPAM/actions/runs/42099411545): Core/API/RADIUS, browser, PostgreSQL and full Docker/SSH fixture. Merge tree `efe8b612456cf621221e142d9438ae8c3baa718e` exactly matches the tested tree. Companion run 42099398865 is completed / success; inspect any unfinished result next.

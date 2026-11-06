@@ -104,7 +104,9 @@ jobs:
       - name: Run network-map PostgreSQL gate
         env:
           EMS_TEST_POSTGRES_URL: postgresql://ems_test:ems_test_password@127.0.0.1:5432/ems_ipam_test
-        run: node --test tests/network-map-postgres.mjs
+        run: |
+          node --test tests/network-map-postgres.mjs
+          node --test tests/multisite-http.test.mjs
 
   network-map-docker:
     runs-on: ubuntu-latest
