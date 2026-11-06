@@ -1,3 +1,17 @@
+# Current checkpoint — host search context UI merged, 2026-11-06
+
+PR #17 merged with expected head as cfa788a4820ab2512397a541a8a4a81cc299db14. Tested head b918d33e4dbd4a6cbf7ddbcb55ee073db8cdeb96 passed all four gates in CI [42172071749](https://github.com/emsebi/EMS_IPAM/actions/runs/42172071749) and [42172065566](https://github.com/emsebi/EMS_IPAM/actions/runs/42172065566): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP, Docker/SSH. Both job lists verified successful. Browser log confirms 21 scenarios, including two branches with the same CIDR/IP and Space name: selecting each loads its own spaceId and host details. Merge tree exactly matches tested head.
+
+Host candidates now show Branch, Space/CIDR, inventory source, record edit time and unavailable live observation. Local Chromium socket restriction remains an environment limitation; CI exercised the real browser successfully. This is not VM or actual-user acceptance.
+
+## Exact next step
+1. Inspect merge CI [42178280964](https://github.com/emsebi/EMS_IPAM/actions/runs/42178280964), last observed in_progress, plus this checkpoint CI (IDs also recorded on PR #17). Do not report pending runs successful.
+2. Next bounded increment: extend prefix search with companyId/companyName, source and record-update metadata using existing scoped joins, then render Branch/Space for prefix candidates. Extend the existing multisite HTTP fixture with identical prefix names/CIDRs in two branches and scoped assertions; preserve current host behavior. Inspect schema first; no migration needed unless evidence requires it.
+3. Free-IP candidate ambiguity and explicit pagination/all-authorized-results remain outstanding: current caps and first free-IP choice do not satisfy complete search. FA labels exist but new duplicate-IP browser scenario currently exercises English; add Persian coverage in a subsequent bounded UI step.
+4. No full deployment: preserve installed PR #12 Radio fix eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. Main deployment would revert it. NAC Preview only; actual RouterOS login/Full-Read incident OPEN. No scans, config pushes, TOTP or same-branch VRF constraint changes. No public-release readiness claimed.
+
+---
+
 # Current work — host search Branch/Space UI, 2026-11-06
 
 Base main 9b33a1f8ac2011100b3f5f2d65afc89bcb74f893; post-merge CI 42166191120 and 42166133401 completed SUCCESS. Only open PR #12 remains unchanged and awaits actual-user Radio acceptance.
