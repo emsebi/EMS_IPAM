@@ -1,3 +1,13 @@
+# Current work — scoped host search context, 2026-11-06
+
+Fresh main 1a479224c1f39bc9f62c5ee729ae3090e2049810; CI 42153565426 and 42153507136 completed SUCCESS. This bounded increment adds companyId/companyName, source=ipam-inventory, recordUpdatedAt and observedAt=null to authorized host search results. Existing spaceId/spaceName and access filters remain. Inventory edit time is explicitly not network observation time. The existing duplicate-IP HTTP fixture verifies distinct branch labels/identities and scoped metadata without a new schema.
+
+Next: require exact-head CI including the real PostgreSQL HTTP fixture, then merge with fresh expected SHA. Follow with UI Branch/Space and source/time display, equivalent prefix/free-IP context and explicit pagination/all-authorized-results semantics. Current result caps and single free-IP choice remain limitations; this API-only increment does not claim complete multisite search.
+
+No deployment: preserve PR #12 installed unmerged Radio fix pending actual-user acceptance. NAC Preview only; real RouterOS login remains OPEN. No scanning, router push, TOTP or VRF schema change.
+
+---
+
 # Current checkpoint — multisite HTTP regression merged, 2026-11-06
 
 PR #15 merged with expected head as `2459df355a74c82b4b8616ffc207a279abd1d3b5`. Final head `583bb63b48c52b8a06bf47e98f79a121b4d0cbb0` passed all four gates in CI [42147121444](https://github.com/emsebi/EMS_IPAM/actions/runs/42147121444) and [42147116481](https://github.com/emsebi/EMS_IPAM/actions/runs/42147116481): Core/API/RADIUS, browser, real PostgreSQL and Docker/SSH. The merge tree exactly matches the tested tree. The previous browser failure did not recur in either final-head run; this is evidence for the readiness correction, not a guarantee against all timing races.

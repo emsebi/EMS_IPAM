@@ -669,8 +669,10 @@ async function searchData(user, query) {
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
   const [hosts, prefixes, companies, personnel] = await Promise.all([
     pool.query(
-      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
-         FROM hosts h JOIN address_spaces s ON s.id=h.space_id
+      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
+              c.id AS "companyId",c.name AS "companyName",h.updated_at AS "recordUpdatedAt",
+              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
           (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
            ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
