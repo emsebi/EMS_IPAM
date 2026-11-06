@@ -1,3 +1,15 @@
+# Current work — unregistered/mixed IP browser selection, 2026-11-06
+
+Fresh main remains 29ec1efdb8668b97a2a89178fa63b91cd5910daf. PR #19 head 86684bb4d19f21aee80c0e671a3e5597f5e7f20c passed CI 42207006186 and 42206999811. PR #12 unchanged; actual-user Radio acceptance remains absent.
+
+This bounded increment extends the existing synthetic browser fixture after Radio/report checks. In Persian, select both branches when the IP is unregistered in both, then register it only in North and select both mixed results. Assert Branch/Space/source, unavailable live observation, absent record-update time only for unregistered candidates, correct Space HTTP response and host form values. Final inventory assertion proves opening the unregistered South form did not create a host. No production change or removed scenario.
+
+Browser syntax and seven local multisite HTTP tests passed. Local Chromium remains known blocked by socket permissions; new browser scenario is not claimed passed locally. Next: inspect exact-head CI recorded on PR #19, require all four gates and this new scenario before merging with fresh main/expected SHA. Fix failures without removing assertions. Then design explicit pagination/all-authorized-results; current caps remain incomplete.
+
+No deployment: preserve installed unmerged PR #12 Radio fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router push, TOTP or VRF schema change. No VM/public-release acceptance claimed.
+
+---
+
 # Current work — unregistered IP candidates per authorized Space, 2026-11-06
 
 Fresh main 29ec1efdb8668b97a2a89178fa63b91cd5910daf; CI 42199807547 and 42199720632 completed SUCCESS. PR #12 remains unchanged and awaiting actual-user Radio acceptance.
