@@ -706,6 +706,66 @@ try {
   await page.unroute('**/api/search?**');
   check('host load-more retains other kinds, reaches later-page hosts and ignores cleared-query responses');
 
+  const pagingPrefixIds = new Map();
+  for (const site of searchSites) for (let n = 128; n <= 208; n += 4) {
+    const id = (await api('/api/prefixes', 'POST', { spaceId: site.spaceId, cidr: '198.51.100.' + n + '/30', name: 'Prefix paging ' + site.label + ' ' + n })).id;
+    pagingPrefixIds.set(site.label + ':' + n, id);
+  }
+  await api('/api/hosts', 'PUT', { spaceId: searchSites[0].spaceId, ip: '198.51.100.230', name: 'Prefix paging retained host' });
+  for (const site of searchSites) {
+    await page.locator('#searchInput').fill('');
+    await page.locator('#searchInput').fill('Prefix paging');
+    await page.locator('#searchMorePrefixes').waitFor();
+    for (const offset of [0, 40]) {
+      await Promise.all([
+        page.waitForResponse(r => r.url().includes('kind=prefix') && r.url().includes('offset=' + offset) && r.status() === 200),
+        page.locator('#searchMorePrefixes').click(),
+      ]);
+      await page.waitForFunction(count => document.querySelectorAll('#searchResults .search-item').length === count, offset === 0 ? 41 : 43);
+      assert.equal(await page.locator('#searchResults').isVisible(), true);
+      assert.equal(await page.locator('#searchResults .search-item').filter({ hasText: 'Prefix paging retained host' }).count(), 1);
+    }
+    assert.equal(await page.locator('#searchMorePrefixes').count(), 0);
+    assert.equal(await page.locator('#searchMoreHosts').count(), 1, 'host paging state remains independent');
+    const candidate = page.locator('#searchResults .search-item').filter({ hasText: 'Prefix paging ' + site.label + ' 208' });
+    assert.ok((await candidate.textContent()).includes('شعبه: Synthetic ' + site.label));
+    assert.ok((await candidate.textContent()).includes('منبع: ipam-inventory'));
+    await Promise.all([
+      page.waitForResponse(r => r.url().includes('/api/spaces/' + site.spaceId + '/data') && r.status() === 200),
+      candidate.click(),
+    ]);
+    await page.locator('#prefixDialog').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#prefixId').inputValue(), pagingPrefixIds.get(site.label + ':208'));
+    assert.equal(await page.locator('#prefixCidr').inputValue(), '198.51.100.208/30');
+    await page.locator('#prefixDialog [data-close]').first().click();
+  }
+  // Hold an actual prefix page while changing to a different query.
+  await page.locator('#searchInput').fill('Prefix paging');
+  await page.locator('#searchMorePrefixes').waitFor();
+  let releasePrefixPage, prefixPageReceived;
+  const heldPrefixPage = new Promise(resolve => { releasePrefixPage = resolve; });
+  const receivedPrefixPage = new Promise(resolve => { prefixPageReceived = resolve; });
+  await page.route('**/api/search?kind=prefix&**', async route => {
+    const response = await route.fetch();
+    prefixPageReceived();
+    await heldPrefixPage;
+    await route.fulfill({ response });
+  });
+  await page.locator('#searchMorePrefixes').click();
+  await receivedPrefixPage;
+  assert.equal(await page.locator('#searchMorePrefixes').isDisabled(), true);
+  await page.locator('#searchInput').fill('Shared search prefix');
+  await page.waitForFunction(() => document.querySelectorAll('#searchResults .search-item').length === 2);
+  const latePrefixPage = page.waitForResponse(r => r.url().includes('kind=prefix'));
+  releasePrefixPage();
+  await latePrefixPage;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('#searchResults .search-item').count(), 2);
+  assert.equal(await page.locator('#searchResults .search-item').filter({ hasText: 'Prefix paging' }).count(), 0);
+  assert.equal(await page.locator('#searchInput').inputValue(), 'Shared search prefix');
+  await page.unroute('**/api/search?kind=prefix&**');
+  check('prefix load-more retains hosts, selects exact later-page branch IDs and ignores a stale page after query changes');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);

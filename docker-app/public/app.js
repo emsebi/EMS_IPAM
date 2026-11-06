@@ -1443,7 +1443,7 @@ function activateSearchResult(index) {
 
 async function chooseSearchItem(item) {
   ++searchGeneration;
-  searchPage = null;
+  searchPages = {};
   clearTimeout(state.searchTimer);
   $("searchResults").classList.add("hidden");
   state.searchIndex = -1;
@@ -1462,7 +1462,7 @@ async function chooseSearchItem(item) {
 }
 
 let searchGeneration = 0;
-let searchPage = null;
+let searchPages = {};
 
 function renderSearchItems() {
   const resultsNode = $("searchResults");
@@ -1483,48 +1483,51 @@ function renderSearchItems() {
         return `<button class="search-item" data-index="${index}"><span><b>${escapeHtml(title)}</b><em>${escapeHtml(badge)}</em></span><small>${escapeHtml(detail)}${!hostContext && item.spaceName ? ` — ${escapeHtml(item.spaceName)}` : ""}</small>${hostContext}</button>`;
       }).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
       resultsNode.querySelectorAll(".search-item").forEach((node) => node.addEventListener("click", () => chooseSearchItem(items[Number(node.dataset.index)])));
-  if (searchPage && searchPage.nextOffset !== null) {
-    const button = document.createElement("button");
-    button.id = "searchMoreHosts";
-    button.className = "btn";
-    button.disabled = searchPage.loading;
-    const en = state.language === "en";
-    button.textContent = searchPage.loading ? (en ? "Loading…" : "در حال دریافت…")
-      : searchPage.started ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق");
-    button.addEventListener("click", event => {
-      // Rendering detaches this button before the document outside-click handler runs.
-      event.stopPropagation();
-      void loadMoreSearchHosts();
-    });
-    resultsNode.append(button);
-  }
-  if (searchPage?.error) {
-    const error = document.createElement("div");
-    error.setAttribute("role", "alert");
-    error.textContent = searchPage.error;
-    resultsNode.append(error);
+  for (const [kind, page] of Object.entries(searchPages)) {
+    if (page.nextOffset !== null) {
+      const button = document.createElement("button");
+      button.id = kind === "host" ? "searchMoreHosts" : "searchMorePrefixes";
+      button.className = "btn";
+      button.disabled = page.loading;
+      const en = state.language === "en";
+      const more = kind === "host" ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "More ranges" : "رنج‌های بیشتر");
+      const first = kind === "host" ? (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق") : (en ? "Browse all matching ranges" : "نمایش همه رنج‌های منطبق");
+      button.textContent = page.loading ? (en ? "Loading…" : "در حال دریافت…") : page.started ? more : first;
+      button.addEventListener("click", event => {
+        // Rendering detaches this button before the document outside-click handler runs.
+        event.stopPropagation();
+        void loadMoreSearchItems(kind);
+      });
+      resultsNode.append(button);
+    }
+    if (page.error) {
+      const error = document.createElement("div");
+      error.setAttribute("role", "alert");
+      error.textContent = page.error;
+      resultsNode.append(error);
+    }
   }
 }
 
-async function loadMoreSearchHosts() {
-  const page = searchPage;
+async function loadMoreSearchItems(kind) {
+  const page = searchPages[kind];
   if (!page || page.loading || page.nextOffset === null) return;
   page.loading = true; page.error = "";
   renderSearchItems();
   try {
-    const result = await request(`/api/search?kind=host&q=${encodeURIComponent(page.query)}&limit=40&offset=${page.nextOffset}`);
-    if (searchPage !== page || page.generation !== searchGeneration) return;
-    const retained = page.started ? state.searchItems : state.searchItems.filter(item => item.kind !== "host");
-    const ids = new Set(retained.filter(item => item.kind === "host").map(item => item.id));
-    state.searchItems = [...retained, ...(result.items || []).filter(item => !ids.has(item.id) && ids.add(item.id))];
+    const result = await request(`/api/search?kind=${kind}&q=${encodeURIComponent(page.query)}&limit=40&offset=${page.nextOffset}`);
+    if (searchPages[kind] !== page || page.generation !== searchGeneration) return;
+    const retained = page.started ? state.searchItems : state.searchItems.filter(item => item.kind !== kind);
+    const ids = new Set(retained.filter(item => item.kind === kind).map(item => item.id));
+    state.searchItems = [...retained, ...(result.items || []).filter(item => item.kind === kind && !ids.has(item.id) && ids.add(item.id))];
     state.searchIndex = -1;
     page.started = true;
     page.nextOffset = result.pagination?.hasMore ? result.pagination.nextOffset : null;
   } catch (error) {
-    if (searchPage !== page || page.generation !== searchGeneration) return;
+    if (searchPages[kind] !== page || page.generation !== searchGeneration) return;
     page.error = error.message;
   } finally {
-    if (searchPage === page && page.generation === searchGeneration) {
+    if (searchPages[kind] === page && page.generation === searchGeneration) {
       page.loading = false;
       renderSearchItems();
     }
@@ -1535,7 +1538,7 @@ function doSearch(query) {
   const resultsNode = $("searchResults");
   const value = String(query || "").trim();
   const generation = ++searchGeneration;
-  searchPage = null;
+  searchPages = {};
   clearTimeout(state.searchTimer);
   state.searchItems = [];
   state.searchIndex = -1;
@@ -1548,7 +1551,7 @@ function doSearch(query) {
       if (generation !== searchGeneration) return;
       const items = result.items || [];
       state.searchItems = items;
-      searchPage = { query: value, generation, nextOffset: 0, started: false, loading: false, error: "" };
+      searchPages = Object.fromEntries(["host", "prefix"].map(kind => [kind, { query: value, generation, nextOffset: 0, started: false, loading: false, error: "" }]));
       renderSearchItems();
     } catch (error) { if (generation === searchGeneration) resultsNode.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
   }, 180);
