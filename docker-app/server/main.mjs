@@ -672,6 +672,19 @@ async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset 
     );
 }
 
+async function searchPrefixes(spaceIds, q, limit, offset = 0) {
+  return pool.query(
+      `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
+              c.id AS "companyId",c.name AS "companyName",p.updated_at AS "recordUpdatedAt",
+              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
+         FROM prefixes p JOIN address_spaces s ON s.id=p.space_id JOIN companies c ON c.id=s.company_id
+        WHERE p.space_id=ANY($1::text[]) AND p.deleted_at IS NULL AND
+          (p.cidr ILIKE $2 OR translate(p.name,'كيى','کیی') ILIKE $2 OR translate(p.role,'كيى','کیی') ILIKE $2 OR translate(p.description,'كيى','کیی') ILIKE $2)
+        ORDER BY p.cidr,p.id LIMIT $3 OFFSET $4`,
+      [spaceIds, `%${q}%`, limit, offset],
+    );
+}
+
 async function searchData(user, query) {
   const q = normalizePersian(query).slice(0, 160);
   if (!q) return [];
@@ -686,16 +699,7 @@ async function searchData(user, query) {
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
   const [hosts, prefixes, companies, personnel] = await Promise.all([
     searchHosts(spaceIds, q, exactIp, compactMacQuery, 30),
-    pool.query(
-      `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
-              c.id AS "companyId",c.name AS "companyName",p.updated_at AS "recordUpdatedAt",
-              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
-         FROM prefixes p JOIN address_spaces s ON s.id=p.space_id JOIN companies c ON c.id=s.company_id
-        WHERE p.space_id=ANY($1::text[]) AND p.deleted_at IS NULL AND
-          (p.cidr ILIKE $2 OR translate(p.name,'كيى','کیی') ILIKE $2 OR translate(p.role,'كيى','کیی') ILIKE $2 OR translate(p.description,'كيى','کیی') ILIKE $2)
-        ORDER BY p.cidr LIMIT 20`,
-      [spaceIds, `%${q}%`],
-    ),
+    searchPrefixes(spaceIds, q, 20),
     companyIds.length ? pool.query(
       `SELECT DISTINCT c.id,c.name,c.address,c.phone,c.manager_name AS "managerName"
          FROM companies c
@@ -893,7 +897,8 @@ async function api(req, res, url, user) {
   if (moduleHandler) return await moduleHandler.handle(req,res,url,user);
 
   if (req.method === "GET" && pathname === "/api/search") {
-    if (url.searchParams.get("kind") === "host") {
+    const kind = url.searchParams.get("kind");
+    if (kind === "host" || kind === "prefix") {
       const readPageInteger = (key, fallback, max) => {
         const raw = url.searchParams.get(key);
         if (raw === null) return fallback;
@@ -907,10 +912,12 @@ async function api(req, res, url, user) {
       // Re-evaluate authorization on every page. Offset paging is not a snapshot.
       const spaceIds = (await listBootstrap(user)).spaces.map(item => item.id);
       const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
-      const rows = q && spaceIds.length ? (await searchHosts(spaceIds, q, exactIp, q.toLowerCase().replace(/[^0-9a-f]/g, ""), limit + 1, offset)).rows : [];
+      const rows = q && spaceIds.length ? (await (kind === "prefix"
+        ? searchPrefixes(spaceIds, q, limit + 1, offset)
+        : searchHosts(spaceIds, q, exactIp, q.toLowerCase().replace(/[^0-9a-f]/g, ""), limit + 1, offset))).rows : [];
       const hasMore = rows.length > limit;
-      return json(res, 200, { ok: true, items: rows.slice(0, limit).map(item => ({ kind: "host", ...item })),
-        pagination: { kind: "host", limit, offset, hasMore, nextOffset: hasMore ? offset + limit : null } });
+      return json(res, 200, { ok: true, items: rows.slice(0, limit).map(item => ({ kind, ...item })),
+        pagination: { kind, limit, offset, hasMore, nextOffset: hasMore ? offset + limit : null } });
     }
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
   }
