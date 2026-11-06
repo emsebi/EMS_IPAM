@@ -1491,7 +1491,11 @@ function renderSearchItems() {
     const en = state.language === "en";
     button.textContent = searchPage.loading ? (en ? "Loading…" : "در حال دریافت…")
       : searchPage.started ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق");
-    button.addEventListener("click", loadMoreSearchHosts);
+    button.addEventListener("click", event => {
+      // Rendering detaches this button before the document outside-click handler runs.
+      event.stopPropagation();
+      void loadMoreSearchHosts();
+    });
     resultsNode.append(button);
   }
   if (searchPage?.error) {

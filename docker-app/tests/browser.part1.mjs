@@ -665,14 +665,17 @@ try {
   await api('/api/prefixes', 'POST', { spaceId: searchSites[0].spaceId, cidr: '198.51.100.128/26', name: 'Paging fixture range' });
   await page.locator('#searchInput').fill('Paging fixture');
   await page.locator('#searchMoreHosts').waitFor();
-  const firstPage = page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=0'));
-  await page.locator('#searchMoreHosts').click();
-  await firstPage;
+  await Promise.all([
+    page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=0')),
+    page.locator('#searchMoreHosts').click(),
+  ]);
   await page.waitForFunction(() => document.querySelectorAll('#searchResults .search-item').length === 41);
+  assert.equal(await page.locator('#searchResults').isVisible(), true, 'host paging must not trigger outside-click dismissal');
   assert.ok((await page.locator('#searchResults').textContent()).includes('Paging fixture range'));
-  const lastPage = page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=40'));
-  await page.locator('#searchMoreHosts').click();
-  await lastPage;
+  await Promise.all([
+    page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=40')),
+    page.locator('#searchMoreHosts').click(),
+  ]);
   await page.waitForFunction(() => document.querySelectorAll('#searchResults .search-item').length === 43);
   assert.equal(await page.locator('#searchMoreHosts').count(), 0);
   const loadedPageHost = page.waitForResponse(r => r.url().includes('/api/spaces/' + searchSites[1].spaceId + '/data') && r.status() === 200);

@@ -1,3 +1,15 @@
+# Current checkpoint — PR #21 paging click fix, 2026-11-06
+
+Fresh main remains 66024922ab47d404402205df311806e408df0ccf. PR #21 head 882d99909b4dad8e0f605a1cc9070ebf4213bd78 failed browser CI [42249377425](https://github.com/emsebi/EMS_IPAM/actions/runs/42249377425) and [42249368636](https://github.com/emsebi/EMS_IPAM/actions/runs/42249368636); other three gates passed. Both browser logs reached 41 first-page candidates, then timed out waiting for offset=40 at browser.part1.mjs:673. This is not a successful browser run.
+
+Code inspection identified that synchronous renderSearchItems detaches the clicked load-more button before the document outside-click handler tests closest(".searchbox"), hiding the dropdown. Stop propagation on this button before rendering. Browser regression now explicitly asserts the dropdown stays visible after first page; response/click waits are paired with Promise.all so click failures are handled. Existing second-page, prefix preservation, branch navigation and delayed-response assertions remain.
+
+Validation: node --check passed for app.js and browser.part1.mjs; all eight local multisite HTTP tests passed (PGlite, including duplicate-IP branch isolation and 90-host pagination). These do not establish the browser fix: local Chromium is blocked by socket permissions. Exact-head GitHub browser CI is required; new run IDs/status are recorded on PR #21 after push.
+
+Next: inspect the new PR #21 exact-head runs; require all four gates and the new browser assertions before merging with fresh main/expected SHA. If browser fails, inspect the first actual assertion/click error without removing tests. No deployment: PR #12 Radio actual-user acceptance remains pending; preserve the installed Radio fix. NAC Preview only; actual RouterOS login incident remains OPEN.
+
+---
+
 # Current work — host load-more UI and stale-query protection, 2026-11-06
 
 Fresh main 66024922ab47d404402205df311806e408df0ccf; CI 42239302126 and 42239198611 completed SUCCESS. Only PR #12 remains open unchanged, pending actual-user Radio acceptance.
