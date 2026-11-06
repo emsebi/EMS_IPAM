@@ -1,3 +1,18 @@
+# Current checkpoint — scoped host pagination API merged, 2026-11-06
+
+PR #20 merged with expected head as ee9b22d54be8ea08d202cd6bff8d60270d8b9984. Tested head aacea7eb6cb878a6144644cb85ce0b8ab4d15ee8 passed all four gates in CI [42231144528](https://github.com/emsebi/EMS_IPAM/actions/runs/42231144528) and [42231114613](https://github.com/emsebi/EMS_IPAM/actions/runs/42231114613): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. PostgreSQL log confirms all eight multisite tests, including 90-host pagination beyond previous caps with no duplicates/cross-branch leakage. Merge tree exactly matches tested head.
+
+Opt-in /api/search?kind=host supports limit (1..100, default 40), offset, hasMore and nextOffset with stable exact-IP/IP/ID ordering and fresh authorization each request. Existing core/IP-jump/Radio mixed search remains compatible and capped. This is host-only API behavior, not complete global search or UI pagination. Offset pages are not a snapshot under concurrent edits.
+
+## Exact next step
+1. Inspect merge CI [42239198611](https://github.com/emsebi/EMS_IPAM/actions/runs/42239198611), last observed queued, plus checkpoint CI. Exact IDs/statuses are also recorded on PR #20.
+2. Next bounded UI increment: provide an explicit host-results/load-more path using kind=host without dropping existing Company/personnel/prefix/unregistered candidates. Reuse Branch/Space/evidence rendering and exact spaceId navigation. Protect against stale responses after query changes (including clearing the field), repeated load-more clicks and errors; reset pagination on new query and avoid duplicates by host ID.
+3. Add real browser fixture exceeding one page, verify later-page host selection in the correct branch, terminal state and stale-query protection; keep fixtures after Radio/report checks and preserve their existing assertions. Require exact-head CI before merge.
+4. Other result kinds and mixed legacy caps remain unresolved. Extend typed pagination in bounded subsequent steps before claiming all authorized global results. Same-branch repeated VRF still requires safe migration design.
+5. No full deployment: preserve installed unmerged PR #12 Radio correction eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router push, TOTP or VM/public-release acceptance claimed.
+
+---
+
 # Current work — bounded host search pagination API, 2026-11-06
 
 Base main 4d33fe3e01e90d4f31fc5cc4570a628f2c2ec23e; CI 42222590368 and 42222496792 completed SUCCESS. PR #12 remains unchanged pending actual-user Radio acceptance.
