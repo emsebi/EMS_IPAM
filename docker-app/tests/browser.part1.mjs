@@ -659,6 +659,50 @@ try {
   assert.equal(searchInventory[0].spaceId, searchSites[0].spaceId);
   check('unregistered and mixed IP candidates select their own Space without claiming availability or creating hosts');
 
+  for (const site of searchSites) for (let n = 100; n < 121; n++) {
+    await api('/api/hosts', 'PUT', { spaceId: site.spaceId, ip: '198.51.100.' + n, name: 'Paging fixture ' + site.label + ' ' + n });
+  }
+  await api('/api/prefixes', 'POST', { spaceId: searchSites[0].spaceId, cidr: '198.51.100.128/26', name: 'Paging fixture range' });
+  await page.locator('#searchInput').fill('Paging fixture');
+  await page.locator('#searchMoreHosts').waitFor();
+  const firstPage = page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=0'));
+  await page.locator('#searchMoreHosts').click();
+  await firstPage;
+  await page.waitForFunction(() => document.querySelectorAll('#searchResults .search-item').length === 41);
+  assert.ok((await page.locator('#searchResults').textContent()).includes('Paging fixture range'));
+  const lastPage = page.waitForResponse(r => r.url().includes('kind=host') && r.url().includes('offset=40'));
+  await page.locator('#searchMoreHosts').click();
+  await lastPage;
+  await page.waitForFunction(() => document.querySelectorAll('#searchResults .search-item').length === 43);
+  assert.equal(await page.locator('#searchMoreHosts').count(), 0);
+  const loadedPageHost = page.waitForResponse(r => r.url().includes('/api/spaces/' + searchSites[1].spaceId + '/data') && r.status() === 200);
+  await page.locator('#searchResults .search-item').filter({ hasText: 'Paging fixture South 120' }).click();
+  await loadedPageHost;
+  await page.locator('#hostDialog').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#hostName').inputValue(), 'Paging fixture South 120');
+  await page.locator('#hostDialog [data-close]').first().click();
+  // Delay a real HTTP response (no fabricated data), then clear the query.
+  let releaseSearch, searchReceived;
+  const heldSearch = new Promise(resolve => { releaseSearch = resolve; });
+  const receivedSearch = new Promise(resolve => { searchReceived = resolve; });
+  await page.route('**/api/search?**', async route => {
+    const response = await route.fetch();
+    searchReceived();
+    await heldSearch;
+    await route.fulfill({ response });
+  });
+  await page.locator('#searchInput').fill('Paging fixture South');
+  await receivedSearch;
+  await page.locator('#searchInput').fill('');
+  const staleResponse = page.waitForResponse(r => r.url().includes('/api/search?'));
+  releaseSearch();
+  await staleResponse;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('#searchResults').evaluate(el => el.classList.contains('hidden')), true);
+  assert.equal(await page.locator('#searchInput').inputValue(), '');
+  await page.unroute('**/api/search?**');
+  check('host load-more retains other kinds, reaches later-page hosts and ignores cleared-query responses');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);

@@ -1442,6 +1442,9 @@ function activateSearchResult(index) {
 }
 
 async function chooseSearchItem(item) {
+  ++searchGeneration;
+  searchPage = null;
+  clearTimeout(state.searchTimer);
   $("searchResults").classList.add("hidden");
   state.searchIndex = -1;
   if (!item) return;
@@ -1458,20 +1461,12 @@ async function chooseSearchItem(item) {
   else openHostDialog(item.ip);
 }
 
-function doSearch(query) {
+let searchGeneration = 0;
+let searchPage = null;
+
+function renderSearchItems() {
   const resultsNode = $("searchResults");
-  const value = String(query || "").trim();
-  clearTimeout(state.searchTimer);
-  state.searchItems = [];
-  state.searchIndex = -1;
-  if (!value) { resultsNode.classList.add("hidden"); return; }
-  resultsNode.innerHTML = `<div class="search-loading">در حال جست‌وجو…</div>`;
-  resultsNode.classList.remove("hidden");
-  state.searchTimer = setTimeout(async () => {
-    try {
-      const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
-      const items = result.items || [];
-      state.searchItems = items;
+  const items = state.searchItems;
       resultsNode.innerHTML = items.map((item, index) => {
         const title = item.kind === "company" ? item.name : item.kind === "personnel" ? item.fullName : item.kind === "prefix" ? (item.name || item.cidr) : (item.name || item.ip);
         const detail = item.kind === "company" ? (item.address || item.phone || "اطلاعات شرکت") : item.kind === "personnel" ? `${item.employeeCode || ""}${item.department ? ` — ${item.department}` : ""}` : item.kind === "prefix" ? item.cidr : item.ip;
@@ -1488,7 +1483,70 @@ function doSearch(query) {
         return `<button class="search-item" data-index="${index}"><span><b>${escapeHtml(title)}</b><em>${escapeHtml(badge)}</em></span><small>${escapeHtml(detail)}${!hostContext && item.spaceName ? ` — ${escapeHtml(item.spaceName)}` : ""}</small>${hostContext}</button>`;
       }).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
       resultsNode.querySelectorAll(".search-item").forEach((node) => node.addEventListener("click", () => chooseSearchItem(items[Number(node.dataset.index)])));
-    } catch (error) { resultsNode.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
+  if (searchPage && searchPage.nextOffset !== null) {
+    const button = document.createElement("button");
+    button.id = "searchMoreHosts";
+    button.className = "btn";
+    button.disabled = searchPage.loading;
+    const en = state.language === "en";
+    button.textContent = searchPage.loading ? (en ? "Loading…" : "در حال دریافت…")
+      : searchPage.started ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق");
+    button.addEventListener("click", loadMoreSearchHosts);
+    resultsNode.append(button);
+  }
+  if (searchPage?.error) {
+    const error = document.createElement("div");
+    error.setAttribute("role", "alert");
+    error.textContent = searchPage.error;
+    resultsNode.append(error);
+  }
+}
+
+async function loadMoreSearchHosts() {
+  const page = searchPage;
+  if (!page || page.loading || page.nextOffset === null) return;
+  page.loading = true; page.error = "";
+  renderSearchItems();
+  try {
+    const result = await request(`/api/search?kind=host&q=${encodeURIComponent(page.query)}&limit=40&offset=${page.nextOffset}`);
+    if (searchPage !== page || page.generation !== searchGeneration) return;
+    const retained = page.started ? state.searchItems : state.searchItems.filter(item => item.kind !== "host");
+    const ids = new Set(retained.filter(item => item.kind === "host").map(item => item.id));
+    state.searchItems = [...retained, ...(result.items || []).filter(item => !ids.has(item.id) && ids.add(item.id))];
+    state.searchIndex = -1;
+    page.started = true;
+    page.nextOffset = result.pagination?.hasMore ? result.pagination.nextOffset : null;
+  } catch (error) {
+    if (searchPage !== page || page.generation !== searchGeneration) return;
+    page.error = error.message;
+  } finally {
+    if (searchPage === page && page.generation === searchGeneration) {
+      page.loading = false;
+      renderSearchItems();
+    }
+  }
+}
+
+function doSearch(query) {
+  const resultsNode = $("searchResults");
+  const value = String(query || "").trim();
+  const generation = ++searchGeneration;
+  searchPage = null;
+  clearTimeout(state.searchTimer);
+  state.searchItems = [];
+  state.searchIndex = -1;
+  if (!value) { resultsNode.classList.add("hidden"); return; }
+  resultsNode.innerHTML = `<div class="search-loading">در حال جست‌وجو…</div>`;
+  resultsNode.classList.remove("hidden");
+  state.searchTimer = setTimeout(async () => {
+    try {
+      const result = await request(`/api/search?q=${encodeURIComponent(value)}`);
+      if (generation !== searchGeneration) return;
+      const items = result.items || [];
+      state.searchItems = items;
+      searchPage = { query: value, generation, nextOffset: 0, started: false, loading: false, error: "" };
+      renderSearchItems();
+    } catch (error) { if (generation === searchGeneration) resultsNode.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
   }, 180);
 }
 
