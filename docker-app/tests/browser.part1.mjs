@@ -553,6 +553,39 @@ try {
   await page.locator('#aboutDialog [data-close]').click();
   check('Donation addresses, wallet links, bundled QRs, copy/fallback, English/Persian labels and responsive About dialog');
 
+  // Add these synthetic branches after Radio/report checks to keep their fixtures isolated.
+  const searchSites = [];
+  for (const label of ['North', 'South']) {
+    const company = await api('/api/companies', 'POST', { name: 'Synthetic ' + label, kind: 'branch' }, 201);
+    const space = await api('/api/spaces', 'POST', { companyId: company.id, name: 'Shared LAN', cidr: '198.51.100.0/24' }, 201);
+    await api('/api/hosts', 'PUT', { spaceId: space.id, ip: '198.51.100.50', name: label + ' search fixture' });
+    searchSites.push({ label, spaceId: space.id });
+  }
+  await page.reload();
+  await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
+  for (const site of searchSites) {
+    await page.locator('#searchInput').fill('');
+    await page.locator('#searchInput').fill('198.51.100.50');
+    const candidates = page.locator('#searchResults .search-item');
+    await candidates.filter({ hasText: 'Branch: Synthetic South' }).waitFor();
+    assert.equal(await candidates.count(), 2);
+    const candidate = candidates.filter({ hasText: 'Branch: Synthetic ' + site.label });
+    const content = await candidate.textContent();
+    assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+    assert.ok(content.includes('Source: ipam-inventory'));
+    assert.ok(content.includes('Record updated: '));
+    assert.equal(content.includes('Record updated: —'), false);
+    assert.ok(content.includes('Live observation: unavailable'));
+    const loaded = page.waitForResponse(response => response.url().includes('/api/spaces/' + site.spaceId + '/data') && response.status() === 200);
+    await candidate.click();
+    await loaded;
+    await page.locator('#hostDialog').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#hostIp').inputValue(), '198.51.100.50');
+    assert.equal(await page.locator('#hostName').inputValue(), site.label + ' search fixture');
+    await page.locator('#hostDialog [data-close]').first().click();
+  }
+  check('duplicate-IP search shows Branch/Space and honest source/time; each selection loads its own Space');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);

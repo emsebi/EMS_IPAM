@@ -1,3 +1,13 @@
+# Current work — host search Branch/Space UI, 2026-11-06
+
+Base main 9b33a1f8ac2011100b3f5f2d65afc89bcb74f893; post-merge CI 42166191120 and 42166133401 completed SUCCESS. Only open PR #12 remains unchanged and awaits actual-user Radio acceptance.
+
+Host search candidates now display Branch, Space/CIDR, inventory source, record edit time and explicit unavailable live observation. Existing spaceId navigation is preserved. Added browser fixture: two synthetic branches with identical CIDR/IP and Space name; select each candidate and require its own Space HTTP response and host details. Fixtures are created after existing Radio/report checks. Local browser validation is running; require exact-head CI before merge.
+
+Next: inspect this PR CI and local browser outcome; fix any failures without dropping existing scenarios, then merge only with fresh expected SHA. Prefix/free-IP context and pagination/all-authorized-results remain outstanding. No VRF schema change. No deployment: preserve installed unmerged PR #12 Radio fix pending user acceptance. NAC Preview only; actual RouterOS login remains OPEN. No scans or configuration push; no VM/public-release acceptance claimed.
+
+---
+
 # Current checkpoint — scoped host search metadata merged, 2026-11-06
 
 PR #16 merged with fresh expected head as `09e74bb828f4756c4c114384782f6a0770cd81ef`. Final head `0c1490b6371663c60b9179d95f48dfe99c284935` passed all four gates in CI [42160480606](https://github.com/emsebi/EMS_IPAM/actions/runs/42160480606) and [42160476450](https://github.com/emsebi/EMS_IPAM/actions/runs/42160476450): Core/API/RADIUS, browser, PostgreSQL (including multisite HTTP) and Docker/SSH. Merge tree equals the tested head tree.
