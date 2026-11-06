@@ -657,6 +657,21 @@ async function inventoryData(user) {
   return hosts.rows.map((item) => ({ ...item, devicePorts: portsByHost.get(item.id) || [] }));
 }
 
+async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset = 0) {
+  return pool.query(
+      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
+              c.id AS "companyId",c.name AS "companyName",h.updated_at AS "recordUpdatedAt",
+              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
+         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+        WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
+          (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
+           ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
+           translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2 OR h.custom_fields::text ILIKE $2)
+        ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip,h.id LIMIT $5 OFFSET $6`,
+      [spaceIds, `%${q}%`, exactIp || "", compactMacQuery, limit, offset],
+    );
+}
+
 async function searchData(user, query) {
   const q = normalizePersian(query).slice(0, 160);
   if (!q) return [];
@@ -670,18 +685,7 @@ async function searchData(user, query) {
   const compactMacQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
   const [hosts, prefixes, companies, personnel] = await Promise.all([
-    pool.query(
-      `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
-              c.id AS "companyId",c.name AS "companyName",h.updated_at AS "recordUpdatedAt",
-              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
-         FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
-        WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
-          (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
-           ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
-           translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2 OR h.custom_fields::text ILIKE $2)
-        ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip LIMIT 30`,
-      [spaceIds, `%${q}%`, exactIp || "", compactMacQuery],
-    ),
+    searchHosts(spaceIds, q, exactIp, compactMacQuery, 30),
     pool.query(
       `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
               c.id AS "companyId",c.name AS "companyName",p.updated_at AS "recordUpdatedAt",
@@ -889,6 +893,25 @@ async function api(req, res, url, user) {
   if (moduleHandler) return await moduleHandler.handle(req,res,url,user);
 
   if (req.method === "GET" && pathname === "/api/search") {
+    if (url.searchParams.get("kind") === "host") {
+      const readPageInteger = (key, fallback, max) => {
+        const raw = url.searchParams.get(key);
+        if (raw === null) return fallback;
+        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) > max || (key === "limit" && Number(raw) === 0))
+          throw Object.assign(new Error("Invalid search pagination"), { status: 400 });
+        return Number(raw);
+      };
+      const limit = readPageInteger("limit", 40, 100);
+      const offset = readPageInteger("offset", 0, 2147483647);
+      const q = normalizePersian(url.searchParams.get("q") || "").slice(0, 160);
+      // Re-evaluate authorization on every page. Offset paging is not a snapshot.
+      const spaceIds = (await listBootstrap(user)).spaces.map(item => item.id);
+      const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
+      const rows = q && spaceIds.length ? (await searchHosts(spaceIds, q, exactIp, q.toLowerCase().replace(/[^0-9a-f]/g, ""), limit + 1, offset)).rows : [];
+      const hasMore = rows.length > limit;
+      return json(res, 200, { ok: true, items: rows.slice(0, limit).map(item => ({ kind: "host", ...item })),
+        pagination: { kind: "host", limit, offset, hasMore, nextOffset: hasMore ? offset + limit : null } });
+    }
     return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
   }
 

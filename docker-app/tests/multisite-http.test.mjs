@@ -171,4 +171,40 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
   }
   const final=(await admin('GET','/api/inventory')).items.filter(h=>h.ip==='192.0.2.50');
   assert.deepEqual(final.map(h=>[h.id,h.name]).sort(),[[north.id,'North edited'],[south.id,'South fixture']].sort());
+  await t.test('host pages exceed old caps without duplicates or cross-branch leakage',async()=>{
+    const expected=[];
+    for(const site of sites) for(let n=100;n<145;n++){
+      const id=(await admin('PUT','/api/hosts',{spaceId:site.spaceId,ip:'192.0.2.'+n,name:'Paging fixture'})).id;
+      expected.push({id,spaceId:site.spaceId});
+    }
+    for(const [call,allowed] of [[admin,expected],[await client('north-reader'),expected.filter(h=>h.spaceId===north.spaceId)],[await client('south-space-reader'),expected.filter(h=>h.spaceId===south.spaceId)]]){
+      let offset=0,found=[];
+      for(let page=0;page<10;page++){
+        const result=await call('GET','/api/search?kind=host&q=Paging%20fixture&limit=17&offset='+offset);
+        assert.ok(result.items.length<=17);assert.equal(result.pagination.offset,offset);
+        for(const item of result.items){
+          assert.equal(item.kind,'host');assert.equal(item.source,'ipam-inventory');
+          assert.ok(item.companyId && item.companyName && item.spaceId);
+          assert.ok(Number.isFinite(Date.parse(item.recordUpdatedAt)));assert.equal(item.observedAt,null);
+        }
+        found.push(...result.items);
+        if(!result.pagination.hasMore){assert.equal(result.pagination.nextOffset,null);break;}
+        assert.equal(result.pagination.nextOffset,offset+17);offset=result.pagination.nextOffset;
+      }
+      assert.equal(new Set(found.map(h=>h.id)).size,found.length);
+      assert.deepEqual(found.map(h=>h.id).sort(),allowed.map(h=>h.id).sort());
+      const first=await call('GET','/api/search?kind=host&q=Paging%20fixture&limit=17');
+      assert.deepEqual(first.items.map(h=>h.id),found.slice(0,17).map(h=>h.id),'stable order for unchanged data');
+      const end=await call('GET','/api/search?kind=host&q=Paging%20fixture&offset=999');
+      assert.deepEqual(end.items,[]);assert.equal(end.pagination.hasMore,false);
+    }
+    for(const invalid of ['limit=0','limit=101','limit=-1','limit=1.5','offset=-1','offset=abc','offset=2147483648']){
+      await admin('GET','/api/search?kind=host&q=Paging&'+invalid,undefined,400);
+    }
+    const empty=await admin('GET','/api/search?kind=host&q=');
+    assert.deepEqual(empty.items,[]);assert.equal(empty.pagination.nextOffset,null);
+    // Existing callers retain the legacy response; UI pagination is a separate step.
+    const legacy=await admin('GET','/api/search?q=Paging%20fixture');
+    assert.equal(legacy.items.length,30);assert.equal(legacy.pagination,undefined);
+  });
 });
