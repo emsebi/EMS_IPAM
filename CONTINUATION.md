@@ -1,3 +1,17 @@
+# Current checkpoint — host load-more UI merged, 2026-11-06
+
+PR #21 merged with expected head as 908d29be52b0378ab9c14aa6d8d56d0c6ab37bb5 after rechecking main 66024922ab47d404402205df311806e408df0ccf. Final head fff0488fd13b0e0f123ac92e656306a09f6a4355 passed all four gates in CI [42267345619](https://github.com/emsebi/EMS_IPAM/actions/runs/42267345619) and [42267334684](https://github.com/emsebi/EMS_IPAM/actions/runs/42267334684): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser job 128062596270 reports 24 scenarios passed, including 42 hosts across two branches, retained prefix, later-page South host selection, terminal state and ignored cleared-query response. Merge tree exactly matches the tested head.
+
+Quick search now offers Browse all matching hosts / More hosts using the bounded host API. Rendering no longer lets the paging click dismiss its own dropdown. Branch/Space/evidence and exact spaceId navigation remain; existing non-host candidates are retained. This completes the host load-more increment in GitHub, not VM acceptance. Other result kinds remain capped and offset paging is not a concurrent-edit snapshot.
+
+## Exact next step
+1. Inspect merge CI [42276483123](https://github.com/emsebi/EMS_IPAM/actions/runs/42276483123), last observed queued, plus this checkpoint CI (ID/status recorded on PR #21). Pending is not success.
+2. Next bounded code/test increment: extend the existing opt-in typed search pagination to prefixes (kind=prefix), keeping legacy mixed callers and kind=host compatible. Reuse the authorized Space query and Branch/Space/source/recordUpdatedAt fields; deterministic CIDR/ID ordering, bounded limit/offset and authorization on every page. Add a real HTTP fixture exceeding the old prefix cap across two synthetic branches with matching CIDRs/names, checking complete authorized IDs, no duplicates/leaks, terminal pages and invalid parameters. Do not rebuild the Company/Address Space model.
+3. After the API passes exact-head CI, extend the existing explicit load-more UI to prefixes with browser selection in each branch; do not drop host/company/personnel/unregistered results. Company/personnel/unregistered pagination remains subsequent bounded work. Same-branch repeated VRF still requires safe migration design.
+4. No full deployment: PR #12 remains open and unchanged, with no actual-user GPS/AP/Station/uplink save/reload acceptance recorded. Preserve installed Radio correction eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3; main deployment would revert it. PR #6/#4/#11/#13/#14 are already merged. NAC Preview only; actual RouterOS login/Full-Read incident remains OPEN. No live scans, router push, TOTP, VM or public-release acceptance claimed.
+
+---
+
 # Current checkpoint — PR #21 paging click fix, 2026-11-06
 
 Fresh main remains 66024922ab47d404402205df311806e408df0ccf. PR #21 head 882d99909b4dad8e0f605a1cc9070ebf4213bd78 failed browser CI [42249377425](https://github.com/emsebi/EMS_IPAM/actions/runs/42249377425) and [42249368636](https://github.com/emsebi/EMS_IPAM/actions/runs/42249368636); other three gates passed. Both browser logs reached 41 first-page candidates, then timed out waiting for offset=40 at browser.part1.mjs:673. This is not a successful browser run.
