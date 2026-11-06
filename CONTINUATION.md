@@ -1,3 +1,17 @@
+# Current checkpoint — prefix search context merged, 2026-11-06
+
+PR #18 merged with expected head as a1bf8af196f77f6fc696a8bb809e5d9d1d52a658. Tested head 642edfe64c199ac8d8c6def10708a7adba9e050e passed all four gates in CI [42191809105](https://github.com/emsebi/EMS_IPAM/actions/runs/42191809105) and [42191799986](https://github.com/emsebi/EMS_IPAM/actions/runs/42191799986): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser log confirms 22 scenarios including duplicate-prefix selection in English and Persian. Merge tree exactly matches tested head.
+
+Prefix results now show Branch/Space, inventory source, record edit time and unavailable live observation. Two synthetic branches with identical prefix name/CIDR and Space name retain separate IDs; each browser selection opens the correct Space and exact prefix. Company- and Space-scoped HTTP regressions remain passing. No schema change, VM test or actual-user acceptance in this increment.
+
+## Exact next step
+1. Inspect merge CI [42199720632](https://github.com/emsebi/EMS_IPAM/actions/runs/42199720632), last observed in_progress, plus checkpoint CI. IDs/statuses are also saved on PR #18; pending is not success.
+2. Next bounded code/test increment: remove the single-Space assumption for exact-IP unregistered candidates. Inspect current searchData and scoped bootstrap first. Use only authorized containing Spaces and distinguish by companyId/spaceId; do not suppress an unregistered candidate in one Space merely because the same IP is registered elsewhere. Label candidates as absent from inventory, never proven free/live. Reuse the existing two-branch HTTP fixture for no-host and one-branch-host cases, including Company/Space grants. Add Branch/Space/source and honest absent observation/update fields; do not invent timestamps or scan.
+3. Search result caps/pagination and all-authorized-results semantics still need an explicit bounded design and tests; avoid claiming complete search while capped. Same-branch repeated VRF needs safe migration design before changing uniqueness.
+4. No full deployment: preserve installed unmerged PR #12 Radio correction eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router pushes, TOTP or public-release readiness claim.
+
+---
+
 # Current work — duplicate-prefix bilingual browser regression, 2026-11-06
 
 Fresh main remains 8f07725c67775ba8cd4db85ef7993aeadd8a4909. PR #18 head 2bb1c08ff275aed93dfdca512079c892b9db0706 passed CI 42185224473 and 42185187275. PR #12 remains unchanged; no Radio acceptance recorded.
