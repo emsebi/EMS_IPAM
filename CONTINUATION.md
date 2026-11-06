@@ -1,3 +1,17 @@
+# Current work — scoped prefix search pagination API, 2026-11-07
+
+Fresh main db909dc7a6da0e1dd9bb2fe9a8a7e2c696c6af15; post-merge/checkpoint CI 42276483123 and 42276616977 verified SUCCESS in all four gates. Only PR #12 was open, unchanged and pending actual-user Radio acceptance. PR #6/#4/#11/#13/#14 already merged. Continued the saved prefix-pagination step; reused existing local draft after comparing against the freshly fetched exact main files.
+
+GET /api/search?kind=prefix now uses the existing typed pagination contract: limit defaults to 40 (1..100), offset defaults to 0 (0..2147483647), hasMore/nextOffset, bounded limit+1 lookup. One shared prefix query preserves legacy mixed callers (20-prefix cap), kind=host compatibility, Branch/Space/source/recordUpdatedAt and explicit absent live observation. Stable CIDR/ID ordering; Space authorization re-evaluated on every page. No schema or UI change. Offset paging is not a concurrent-edit snapshot; company/personnel/unregistered pagination remains outstanding.
+
+A production HTTP fixture creates 64 prefixes in two synthetic branches with identical CIDRs/names. Admin, Company-scoped and Space-scoped readers traverse every page; exact IDs, deterministic order, no duplicates/leaks, metadata, terminal/default/invalid pages and legacy compatibility are checked. Removing a reader's grant after page one denies later-page results. All 215 local npm tests passed, including nine HTTP/PGlite tests and the explicit all-pages ordering assertion; server syntax passed. Exact-head CI/PostgreSQL/browser results are still required; IDs/status are recorded in the PR body after push. Pending CI is not success.
+
+Exact next step: inspect the new PR's exact-head CI run IDs/status in its body; require all four gates (Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH) before merge with fresh main and expected SHA. If failing, inspect the first actual failure and retain the assertions. After API validation, extend the explicit load-more UI to prefixes with real later-page branch selection and stale-query coverage, preserving host/company/personnel/unregistered candidates. Do not rebuild Company/Space or change same-branch VRF constraints without safe migration design.
+
+No deployment: preserve installed unmerged Radio fix eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; actual RouterOS login/Full-Read incident OPEN. No live scan, router push, TOTP, VM or public-release acceptance claimed.
+
+---
+
 # Current checkpoint — host load-more UI merged, 2026-11-06
 
 PR #21 merged with expected head as 908d29be52b0378ab9c14aa6d8d56d0c6ab37bb5 after rechecking main 66024922ab47d404402205df311806e408df0ccf. Final head fff0488fd13b0e0f123ac92e656306a09f6a4355 passed all four gates in CI [42267345619](https://github.com/emsebi/EMS_IPAM/actions/runs/42267345619) and [42267334684](https://github.com/emsebi/EMS_IPAM/actions/runs/42267334684): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser job 128062596270 reports 24 scenarios passed, including 42 hosts across two branches, retained prefix, later-page South host selection, terminal state and ignored cleared-query response. Merge tree exactly matches the tested head.

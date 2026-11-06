@@ -171,6 +171,59 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
   }
   const final=(await admin('GET','/api/inventory')).items.filter(h=>h.ip==='192.0.2.50');
   assert.deepEqual(final.map(h=>[h.id,h.name]).sort(),[[north.id,'North edited'],[south.id,'South fixture']].sort());
+  await t.test('prefix pages exceed old caps with stable branch identity and fresh authorization',async()=>{
+    const expected=[];
+    for(const site of sites) for(let n=128;n<256;n+=4){
+      const cidr='192.0.2.'+n+'/30';
+      const id=(await admin('POST','/api/prefixes',{spaceId:site.spaceId,cidr,name:'Prefix window fixture'})).id;
+      expected.push({id,spaceId:site.spaceId,companyId:site.companyId,cidr});
+    }
+    for(const [call,allowed] of [[admin,expected],[await client('north-reader'),expected.filter(p=>p.spaceId===north.spaceId)],[await client('south-space-reader'),expected.filter(p=>p.spaceId===south.spaceId)]]){
+      let offset=0,found=[];
+      for(let page=0;page<10;page++){
+        const result=await call('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture&limit=13&offset='+offset);
+        assert.ok(result.items.length<=13);
+        assert.deepEqual(result.pagination,{kind:'prefix',limit:13,offset,hasMore:offset+13<allowed.length,nextOffset:offset+13<allowed.length?offset+13:null});
+        for(const item of result.items){
+          const match=allowed.find(p=>p.id===item.id);
+          assert.ok(match,'result must belong to the current authorized scope');
+          assert.equal(item.kind,'prefix');assert.equal(item.spaceId,match.spaceId);
+          assert.equal(item.companyId,match.companyId);assert.equal(item.cidr,match.cidr);
+          assert.equal(item.companyName,item.spaceId===north.spaceId?'Synthetic North':'Synthetic South');
+          assert.equal(item.spaceName,'Shared LAN');assert.equal(item.spaceCidr,'192.0.2.0/24');
+          assert.equal(item.source,'ipam-inventory');assert.equal(item.observedAt,null);
+          assert.ok(Number.isFinite(Date.parse(item.recordUpdatedAt)));
+        }
+        found.push(...result.items);
+        if(!result.pagination.hasMore)break;
+        offset=result.pagination.nextOffset;
+      }
+      assert.equal(new Set(found.map(p=>p.id)).size,found.length);
+      assert.deepEqual(found.map(p=>p.id).sort(),allowed.map(p=>p.id).sort());
+      const ordered=[...allowed].sort((a,b)=>a.cidr<b.cidr?-1:a.cidr>b.cidr?1:a.id<b.id?-1:a.id>b.id?1:0);
+      assert.deepEqual(found.map(p=>p.id),ordered.map(p=>p.id),'CIDR/ID ordering must hold across every page');
+      const first=await call('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture&limit=13');
+      assert.deepEqual(first.items.map(p=>p.id),found.slice(0,13).map(p=>p.id));
+      const end=await call('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture&offset=999');
+      assert.deepEqual(end.items,[]);assert.equal(end.pagination.hasMore,false);assert.equal(end.pagination.nextOffset,null);
+    }
+    for(const invalid of ['limit=0','limit=101','limit=-1','limit=1.5','limit=','offset=-1','offset=abc','offset=2147483648'])
+      await admin('GET','/api/search?kind=prefix&q=Prefix&'+invalid,undefined,400);
+    const empty=await admin('GET','/api/search?kind=prefix&q=');
+    assert.deepEqual(empty.items,[]);assert.equal(empty.pagination.nextOffset,null);
+    const defaults=await admin('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture');
+    assert.equal(defaults.items.length,40);assert.equal(defaults.pagination.nextOffset,40);
+    const legacy=await admin('GET','/api/search?q=Prefix%20window%20fixture');
+    assert.equal(legacy.items.length,20);assert.equal(legacy.pagination,undefined);
+    // A saved next offset does not retain access after the grant is removed.
+    const userId=(await admin('POST','/api/users',{username:'paged-reader',password:'Test-Password-01',role:'viewer',companyIds:[north.companyId],moduleIds:['ipam']},201)).id;
+    const reader=await client('paged-reader');
+    const before=await reader('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture&limit=13');
+    assert.equal(before.pagination.nextOffset,13);
+    await admin('PUT','/api/users/'+userId,{role:'viewer',companyIds:[],spaceIds:[],moduleIds:['ipam']});
+    const denied=await reader('GET','/api/search?kind=prefix&q=Prefix%20window%20fixture&limit=13&offset='+before.pagination.nextOffset);
+    assert.deepEqual(denied.items,[]);assert.equal(denied.pagination.hasMore,false);assert.equal(denied.pagination.nextOffset,null);
+  });
   await t.test('host pages exceed old caps without duplicates or cross-branch leakage',async()=>{
     const expected=[];
     for(const site of sites) for(let n=100;n<145;n++){
