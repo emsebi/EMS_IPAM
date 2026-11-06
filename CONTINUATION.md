@@ -1,3 +1,27 @@
+# Current work — unregistered/mixed IP browser selection, 2026-11-06
+
+Fresh main remains 29ec1efdb8668b97a2a89178fa63b91cd5910daf. PR #19 head 86684bb4d19f21aee80c0e671a3e5597f5e7f20c passed CI 42207006186 and 42206999811. PR #12 unchanged; actual-user Radio acceptance remains absent.
+
+This bounded increment extends the existing synthetic browser fixture after Radio/report checks. In Persian, select both branches when the IP is unregistered in both, then register it only in North and select both mixed results. Assert Branch/Space/source, unavailable live observation, absent record-update time only for unregistered candidates, correct Space HTTP response and host form values. Final inventory assertion proves opening the unregistered South form did not create a host. No production change or removed scenario.
+
+Browser syntax and seven local multisite HTTP tests passed. Local Chromium remains known blocked by socket permissions; new browser scenario is not claimed passed locally. Next: inspect exact-head CI recorded on PR #19, require all four gates and this new scenario before merging with fresh main/expected SHA. Fix failures without removing assertions. Then design explicit pagination/all-authorized-results; current caps remain incomplete.
+
+No deployment: preserve installed unmerged PR #12 Radio fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router push, TOTP or VRF schema change. No VM/public-release acceptance claimed.
+
+---
+
+# Current work — unregistered IP candidates per authorized Space, 2026-11-06
+
+Fresh main 29ec1efdb8668b97a2a89178fa63b91cd5910daf; CI 42199807547 and 42199720632 completed SUCCESS. PR #12 remains unchanged and awaiting actual-user Radio acceptance.
+
+Exact-IP search now builds unregistered candidates for each authorized containing Space, even when another branch has a registered host. A separate uncapped exact-IP occupancy query prevents capped host results from falsely implying absence. Candidates carry Branch/Space/source, null recordUpdatedAt/observedAt, and availability=unverified. UI explicitly says absent from inventory, availability unverified. No network probe or invented timestamp. Existing result cap still applies; complete pagination remains outstanding.
+
+Extended the existing HTTP fixture for both branches unregistered, one branch registered, no containing Space, metadata and Company/Space grants. All seven local HTTP tests and UI syntax passed. Initial fixture caught missing branch names in bootstrap Spaces; names now resolve from the same authorized bootstrap companies. Require exact-head CI recorded on this PR before merge. Next bounded validation: browser selection of each unregistered candidate (and mixed registered/unregistered results), then explicit pagination/all-authorized-results design. No duplicate Company/Space model or VRF constraint change.
+
+No deployment: preserve installed unmerged Radio PR #12 fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router pushes, TOTP or VM/public-release acceptance claimed.
+
+---
+
 # Current checkpoint — prefix search context merged, 2026-11-06
 
 PR #18 merged with expected head as a1bf8af196f77f6fc696a8bb809e5d9d1d52a658. Tested head 642edfe64c199ac8d8c6def10708a7adba9e050e passed all four gates in CI [42191809105](https://github.com/emsebi/EMS_IPAM/actions/runs/42191809105) and [42191799986](https://github.com/emsebi/EMS_IPAM/actions/runs/42191799986): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser log confirms 22 scenarios including duplicate-prefix selection in English and Persian. Merge tree exactly matches tested head.

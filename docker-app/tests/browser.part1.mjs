@@ -625,6 +625,40 @@ try {
   }
   check('duplicate-prefix search preserves branch identity, evidence labels and selection in English and Persian');
 
+  // Still in Persian. An inventory absence must never imply network availability.
+  for (const mixed of [false, true]) {
+    if (mixed) await api('/api/hosts', 'PUT', {
+      spaceId: searchSites[0].spaceId, ip: '198.51.100.51', name: 'North registered only',
+    });
+    for (const site of searchSites) {
+      const registered = mixed && site.label === 'North';
+      await page.locator('#searchInput').fill('');
+      await page.locator('#searchInput').fill('198.51.100.51');
+      const candidates = page.locator('#searchResults .search-item');
+      await candidates.filter({ hasText: 'شعبه: Synthetic South' }).waitFor();
+      assert.equal(await candidates.count(), 2);
+      const candidate = candidates.filter({ hasText: 'شعبه: Synthetic ' + site.label });
+      const content = await candidate.textContent();
+      assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes('منبع: ipam-inventory'));
+      assert.ok(content.includes('مشاهده زنده: ناموجود'));
+      assert.equal(content.includes('در موجودی ثبت نشده؛ آزادبودن تأیید نشده'), !registered);
+      assert.equal(content.includes('ویرایش رکورد: —'), !registered);
+      const loaded = page.waitForResponse(response => response.url().includes('/api/spaces/' + site.spaceId + '/data') && response.status() === 200);
+      await candidate.click();
+      await loaded;
+      await page.locator('#hostDialog').waitFor({ state: 'visible' });
+      assert.equal(await page.locator('#hostIp').inputValue(), '198.51.100.51');
+      assert.equal(await page.locator('#hostName').inputValue(), registered ? 'North registered only' : '');
+      await page.locator('#hostDialog [data-close]').first().click();
+    }
+  }
+  // Opening an unregistered candidate must not create a host.
+  const searchInventory = (await api('/api/inventory')).items.filter(h => h.ip === '198.51.100.51');
+  assert.equal(searchInventory.length, 1);
+  assert.equal(searchInventory[0].spaceId, searchSites[0].spaceId);
+  check('unregistered and mixed IP candidates select their own Space without claiming availability or creating hosts');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);

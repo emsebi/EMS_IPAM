@@ -1477,12 +1477,13 @@ function doSearch(query) {
         const detail = item.kind === "company" ? (item.address || item.phone || "اطلاعات شرکت") : item.kind === "personnel" ? `${item.employeeCode || ""}${item.department ? ` — ${item.department}` : ""}` : item.kind === "prefix" ? item.cidr : item.ip;
         const badge = item.kind === "company" ? "شرکت" : item.kind === "personnel" ? "پرسنل" : item.kind === "free-ip" ? "IP ثبت‌نشده" : item.kind === "prefix" ? "رنج" : "IP";
         const en = state.language === "en";
-        const hostContext = (item.kind === "host" || item.kind === "prefix") ? [
+        const hostContext = (item.kind === "host" || item.kind === "prefix" || item.kind === "free-ip") ? [
           `${en ? "Branch" : "شعبه"}: ${item.companyName || "—"}`,
           `Space: ${item.spaceName || "—"} (${item.spaceCidr || "—"})`,
           `${en ? "Source" : "منبع"}: ${item.source || "—"}`,
           `${en ? "Record updated" : "ویرایش رکورد"}: ${item.recordUpdatedAt && Number.isFinite(Date.parse(item.recordUpdatedAt)) ? formatDateTime(item.recordUpdatedAt) : "—"}`,
           en ? "Live observation: unavailable" : "مشاهده زنده: ناموجود",
+          ...(item.kind === "free-ip" ? [en ? "Not in inventory; availability unverified" : "در موجودی ثبت نشده؛ آزادبودن تأیید نشده"] : []),
         ].map(value => `<small>${escapeHtml(value)}</small>`).join("") : "";
         return `<button class="search-item" data-index="${index}"><span><b>${escapeHtml(title)}</b><em>${escapeHtml(badge)}</em></span><small>${escapeHtml(detail)}${!hostContext && item.spaceName ? ` — ${escapeHtml(item.spaceName)}` : ""}</small>${hostContext}</button>`;
       }).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
