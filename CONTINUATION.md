@@ -1,3 +1,17 @@
+# Current work — prefix load-more UI and stale-page browser regression, 2026-11-07
+
+PR #22 merged with expected head e95bf0099d875c6e4562380265390befc958bf40 as d3701583c903976a43c23a436311e558820970d3. Both CI 42309355874 and 42309320209 completed SUCCESS; all four job lists verified (Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH). Fresh main rechecked at that merge before this UI branch. Post-merge runs 42309665853 and 42309592834 both report completed SUCCESS. Radio PR #12 unchanged; actual-user acceptance is still missing.
+
+Quick search now offers Browse all matching ranges / More ranges using kind=prefix. The existing host paging implementation is shared, with independent per-kind page/loading/error state. A first typed page replaces only its own kind; other candidates survive, later pages deduplicate by kind/ID. Query changes/clear/selection invalidate both page identities and generations; disabled loading buttons and outside-click protection are retained. Branch/Space/source/edit time and exact space/prefix navigation remain unchanged. No API/schema change; company/personnel/unregistered pagination remains outstanding and offset pages are not concurrent-edit snapshots.
+
+New real browser fixture: 42 prefixes across the two synthetic branches with matching CIDRs, plus a retained host. Traverse both pages, preserve host/paging controls, require terminal state, select each branch's later-page prefix and assert its exact prefix ID/Space. Hold an actual prefix HTTP response, change query, then verify the stale page cannot replace the new results; assert loading button disabled. Existing host/Radio/RADIUS/browser scenarios retained. Both modified JS files pass syntax checks; all nine local multisite HTTP/PGlite tests passed. The new browser scenario has NOT been verified locally (known Chromium socket restriction); exact-head CI is required.
+
+Exact next step: inspect this PR's exact-head CI IDs/status in its body and the PR #22 merge run. If browser fails, inspect the first concrete assertion/request error without removing coverage. Require all four gates before merging with fresh main and expected SHA. Next bounded tests can cover failed-page retry and concurrent host/prefix responses if not yet covered; then extend typed paging to remaining result kinds. Do not claim all-authorized global search complete while remaining kinds are capped. Same-branch repeated VRF requires safe migration design.
+
+No deployment: preserve installed unmerged Radio fix eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; actual RouterOS login/Full-Read incident OPEN. No live scan, router push, TOTP or VM/public-release acceptance claimed.
+
+---
+
 # Current work — scoped prefix search pagination API, 2026-11-07
 
 Fresh main db909dc7a6da0e1dd9bb2fe9a8a7e2c696c6af15; post-merge/checkpoint CI 42276483123 and 42276616977 verified SUCCESS in all four gates. Only PR #12 was open, unchanged and pending actual-user Radio acceptance. PR #6/#4/#11/#13/#14 already merged. Continued the saved prefix-pagination step; reused existing local draft after comparing against the freshly fetched exact main files.
