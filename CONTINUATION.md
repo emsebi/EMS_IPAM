@@ -1,3 +1,19 @@
+# Current work — bounded host search pagination API, 2026-11-06
+
+Base main 4d33fe3e01e90d4f31fc5cc4570a628f2c2ec23e; CI 42222590368 and 42222496792 completed SUCCESS. PR #12 remains unchanged pending actual-user Radio acceptance.
+
+GET /api/search?kind=host&q=...&limit=40&offset=0 adds opt-in host-only pagination. Limit defaults to 40, range 1..100; offset defaults to 0, range 0..2147483647; invalid values return 400. Response retains ok/items and adds pagination {kind,limit,offset,hasMore,nextOffset}; nextOffset is null on last page. SQL fetches at most limit+1 rows, ordered by exact-IP priority, IP and host ID. Branch/Space and evidence metadata remain. Authorization is recomputed on each page. Offset pagination is stable for unchanged data, NOT a database snapshot; concurrent edits can shift pages and clients must restart when refreshing.
+
+Existing callers in core search, IP jump and modules/radio keep the legacy mixed response unless kind=host is explicit. Extracted one shared host query, avoiding duplicated search predicates. No UI/schema change. Other kinds and legacy caps remain incomplete; this is not full global search pagination.
+
+All eight local multisite HTTP tests and server syntax passed. New fixture creates 90 hosts across two branches with identical IP sets, traverses pages for admin/Company viewer/Space viewer, checks exact ID sets without duplicates/leaks, stable ordering, metadata, terminal pages, invalid parameters and legacy response compatibility. Exact-head CI/PostgreSQL remains required.
+
+Next: inspect PR CI/run IDs recorded on the PR, require all four gates before merge with fresh expected SHA. Then add deliberate host load-more UI with stale-query protection and real browser coverage. Extend typed pagination to prefixes/companies/personnel/unregistered candidates in bounded steps before claiming all authorized global results; do not hide remaining legacy caps. No same-branch VRF change without migration design.
+
+No deployment: preserve installed unmerged PR #12 Radio fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; real RouterOS login/Full-Read OPEN. No scans, router pushes, TOTP or VM/public-release acceptance claimed.
+
+---
+
 # Current checkpoint — per-Space unregistered search merged, 2026-11-06
 
 PR #19 merged with expected head as b1601dc5660cfa16debc223a5587b413e4bda91e. Final head c7d8a9bf828a401feb2ac982a359576f47a8f8ca passed all four gates in CI [42214392703](https://github.com/emsebi/EMS_IPAM/actions/runs/42214392703) and [42214385456](https://github.com/emsebi/EMS_IPAM/actions/runs/42214385456): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH. Both job lists verified successful. Browser log confirms 23 scenarios, including unregistered/mixed candidate selection and no host creation by opening the form. Merge tree exactly matches tested head.
