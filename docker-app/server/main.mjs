@@ -681,8 +681,10 @@ async function searchData(user, query) {
       [spaceIds, `%${q}%`, exactIp || "", compactMacQuery],
     ),
     pool.query(
-      `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr"
-         FROM prefixes p JOIN address_spaces s ON s.id=p.space_id
+      `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
+              c.id AS "companyId",c.name AS "companyName",p.updated_at AS "recordUpdatedAt",
+              'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
+         FROM prefixes p JOIN address_spaces s ON s.id=p.space_id JOIN companies c ON c.id=s.company_id
         WHERE p.space_id=ANY($1::text[]) AND p.deleted_at IS NULL AND
           (p.cidr ILIKE $2 OR translate(p.name,'كيى','کیی') ILIKE $2 OR translate(p.role,'كيى','کیی') ILIKE $2 OR translate(p.description,'كيى','کیی') ILIKE $2)
         ORDER BY p.cidr LIMIT 20`,

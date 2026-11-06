@@ -1,3 +1,15 @@
+# Current work — scoped prefix search context, 2026-11-06
+
+Base main 8f07725c67775ba8cd4db85ef7993aeadd8a4909; CI 42178360773 and 42178280964 completed SUCCESS. Only PR #12 remains open, unchanged and awaiting actual-user Radio acceptance.
+
+Prefix search now returns companyId/companyName, source=ipam-inventory, recordUpdatedAt from prefixes.updated_at and observedAt=null using existing authorized Space filtering. UI reuses the host context display for prefix candidates. No schema change. The multisite HTTP fixture now creates equal prefix names/CIDRs in two branches and asserts distinct identity/metadata plus Company- and Space-scoped visibility. Initial test expected 201 incorrectly; existing POST prefix contract is 200, now used. All six local HTTP tests passed; UI syntax check passed. Require exact-head CI; UI-specific duplicate-prefix navigation coverage remains to add (host navigation already covered).
+
+Next: inspect this PR CI including real PostgreSQL and browser before merge; preserve all existing scenarios. Add duplicate-prefix selection and Persian label browser assertions in the next bounded UI test step. Free-IP ambiguity and pagination/all-authorized-results remain outstanding. No same-branch VRF constraint change without safe migration design.
+
+No deployment: preserve installed unmerged PR #12 Radio fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; actual RouterOS login/Full-Read OPEN. No scans, config pushes or TOTP. No VM/public-release acceptance claimed.
+
+---
+
 # Current checkpoint — host search context UI merged, 2026-11-06
 
 PR #17 merged with expected head as cfa788a4820ab2512397a541a8a4a81cc299db14. Tested head b918d33e4dbd4a6cbf7ddbcb55ee073db8cdeb96 passed all four gates in CI [42172071749](https://github.com/emsebi/EMS_IPAM/actions/runs/42172071749) and [42172065566](https://github.com/emsebi/EMS_IPAM/actions/runs/42172065566): Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP, Docker/SSH. Both job lists verified successful. Browser log confirms 21 scenarios, including two branches with the same CIDR/IP and Space name: selecting each loads its own spaceId and host details. Merge tree exactly matches tested head.
