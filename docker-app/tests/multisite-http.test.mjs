@@ -84,6 +84,15 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const hits=(await admin('GET','/api/search?q=192.0.2.50')).items.filter(h=>h.kind==='host');
     assert.deepEqual(hits.map(h=>h.id).sort(),sites.map(s=>s.id).sort());
     assert.deepEqual(hits.map(h=>h.spaceId).sort(),sites.map(s=>s.spaceId).sort());
+    for(const site of sites){
+      const hit=hits.find(h=>h.id===site.id);
+      assert.equal(hit.companyId,site.companyId);
+      assert.equal(hit.companyName,site===north?'Synthetic North':'Synthetic South');
+      assert.equal(hit.spaceName,'Shared LAN');
+      assert.equal(hit.source,'ipam-inventory');
+      assert.ok(Number.isFinite(Date.parse(hit.recordUpdatedAt)));
+      assert.equal(hit.observedAt,null,'inventory edit time is not a live observation');
+    }
   });
   for(const [username,site,other,scope,role] of [
     ['north-reader',north,south,{companyIds:[north.companyId]},'viewer'],
@@ -99,6 +108,8 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       assert.deepEqual(inventory.map(h=>h.id),[site.id]);
       const hits=(await call('GET','/api/search?q=192.0.2.50')).items.filter(h=>h.kind==='host');
       assert.deepEqual(hits.map(h=>h.id),[site.id]);assert.equal(hits[0].spaceId,site.spaceId);
+      assert.equal(hits[0].companyId,site.companyId);
+      assert.ok(!JSON.stringify(hits).includes(other.companyId));
       const data=await call('GET','/api/spaces/'+site.spaceId+'/data');
       assert.equal(data.hosts[0].id,site.id);
       const csv=await call('GET','/api/inventory/export');
