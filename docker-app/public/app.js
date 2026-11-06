@@ -1477,7 +1477,7 @@ function doSearch(query) {
         const detail = item.kind === "company" ? (item.address || item.phone || "اطلاعات شرکت") : item.kind === "personnel" ? `${item.employeeCode || ""}${item.department ? ` — ${item.department}` : ""}` : item.kind === "prefix" ? item.cidr : item.ip;
         const badge = item.kind === "company" ? "شرکت" : item.kind === "personnel" ? "پرسنل" : item.kind === "free-ip" ? "IP ثبت‌نشده" : item.kind === "prefix" ? "رنج" : "IP";
         const en = state.language === "en";
-        const hostContext = item.kind === "host" ? [
+        const hostContext = (item.kind === "host" || item.kind === "prefix") ? [
           `${en ? "Branch" : "شعبه"}: ${item.companyName || "—"}`,
           `Space: ${item.spaceName || "—"} (${item.spaceCidr || "—"})`,
           `${en ? "Source" : "منبع"}: ${item.source || "—"}`,

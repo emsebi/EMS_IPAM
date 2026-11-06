@@ -66,6 +66,23 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const id=(await admin('PUT','/api/hosts',host,200)).id;sites.push({companyId,spaceId,id,host});
   }
   const [north,south]=sites;
+  for(const site of sites){
+    site.prefixId=(await admin('POST','/api/prefixes',{spaceId:site.spaceId,cidr:'192.0.2.0/25',name:'Shared prefix'})).id;
+  }
+  await t.test('identical prefixes retain branch, Space and non-live evidence metadata',async()=>{
+    const hits=(await admin('GET','/api/search?q=Shared%20prefix')).items.filter(h=>h.kind==='prefix');
+    assert.deepEqual(hits.map(h=>h.id).sort(),sites.map(s=>s.prefixId).sort());
+    for(const site of sites){
+      const hit=hits.find(h=>h.id===site.prefixId);
+      assert.equal(hit.companyId,site.companyId);
+      assert.equal(hit.companyName,site===north?'Synthetic North':'Synthetic South');
+      assert.equal(hit.spaceId,site.spaceId);assert.equal(hit.spaceName,'Shared LAN');
+      assert.equal(hit.cidr,'192.0.2.0/25');assert.equal(hit.spaceCidr,'192.0.2.0/24');
+      assert.equal(hit.source,'ipam-inventory');
+      assert.ok(Number.isFinite(Date.parse(hit.recordUpdatedAt)));
+      assert.equal(hit.observedAt,null);
+    }
+  });
   await t.test('same CIDR/IP in separate branches never overwrites the other host',async()=>{
     assert.notEqual(north.id,south.id);assert.notEqual(north.spaceId,south.spaceId);
     for(const site of sites){
@@ -110,6 +127,12 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       assert.deepEqual(hits.map(h=>h.id),[site.id]);assert.equal(hits[0].spaceId,site.spaceId);
       assert.equal(hits[0].companyId,site.companyId);
       assert.ok(!JSON.stringify(hits).includes(other.companyId));
+      const prefixes=(await call('GET','/api/search?q=Shared%20prefix')).items.filter(h=>h.kind==='prefix');
+      assert.deepEqual(prefixes.map(p=>p.id),[site.prefixId]);
+      assert.equal(prefixes[0].companyId,site.companyId);
+      assert.equal(prefixes[0].spaceId,site.spaceId);
+      assert.ok(!JSON.stringify(prefixes).includes(other.companyId));
+      assert.ok(!JSON.stringify(prefixes).includes(other.prefixId));
       const data=await call('GET','/api/spaces/'+site.spaceId+'/data');
       assert.equal(data.hosts[0].id,site.id);
       const csv=await call('GET','/api/inventory/export');

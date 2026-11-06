@@ -586,6 +586,45 @@ try {
   }
   check('duplicate-IP search shows Branch/Space and honest source/time; each selection loads its own Space');
 
+  for (const site of searchSites) {
+    site.prefixId = (await api('/api/prefixes', 'POST', {
+      spaceId: site.spaceId, cidr: '198.51.100.0/25', name: 'Shared search prefix',
+    })).id;
+  }
+  for (const language of ['en', 'fa']) {
+    if (language === 'fa') {
+      await Promise.all([page.waitForEvent('load'), page.locator('#languageSelect').selectOption(language)]);
+      await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
+    }
+    const branchLabel = language === 'en' ? 'Branch' : 'شعبه';
+    const sourceLabel = language === 'en' ? 'Source' : 'منبع';
+    const updatedLabel = language === 'en' ? 'Record updated' : 'ویرایش رکورد';
+    const observation = language === 'en' ? 'Live observation: unavailable' : 'مشاهده زنده: ناموجود';
+    for (const site of searchSites) {
+      await page.locator('#searchInput').fill('');
+      await page.locator('#searchInput').fill('Shared search prefix');
+      const candidates = page.locator('#searchResults .search-item');
+      await candidates.filter({ hasText: branchLabel + ': Synthetic South' }).waitFor();
+      assert.equal(await candidates.count(), 2);
+      const candidate = candidates.filter({ hasText: branchLabel + ': Synthetic ' + site.label });
+      const content = await candidate.textContent();
+      assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes(sourceLabel + ': ipam-inventory'));
+      assert.ok(content.includes(updatedLabel + ': '));
+      assert.equal(content.includes(updatedLabel + ': —'), false);
+      assert.ok(content.includes(observation));
+      const loaded = page.waitForResponse(response => response.url().includes('/api/spaces/' + site.spaceId + '/data') && response.status() === 200);
+      await candidate.click();
+      await loaded;
+      await page.locator('#prefixDialog').waitFor({ state: 'visible' });
+      assert.equal(await page.locator('#prefixId').inputValue(), site.prefixId);
+      assert.equal(await page.locator('#prefixCidr').inputValue(), '198.51.100.0/25');
+      assert.equal(await page.locator('#prefixName').inputValue(), 'Shared search prefix');
+      await page.locator('#prefixDialog [data-close]').first().click();
+    }
+  }
+  check('duplicate-prefix search preserves branch identity, evidence labels and selection in English and Persian');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);
