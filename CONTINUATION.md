@@ -1,3 +1,17 @@
+# Current checkpoint — multisite HTTP regression merged, 2026-11-06
+
+PR #15 merged with expected head as `2459df355a74c82b4b8616ffc207a279abd1d3b5`. Final head `583bb63b48c52b8a06bf47e98f79a121b4d0cbb0` passed all four gates in CI [42147121444](https://github.com/emsebi/EMS_IPAM/actions/runs/42147121444) and [42147116481](https://github.com/emsebi/EMS_IPAM/actions/runs/42147116481): Core/API/RADIUS, browser, real PostgreSQL and Docker/SSH. The merge tree exactly matches the tested tree. The previous browser failure did not recur in either final-head run; this is evidence for the readiness correction, not a guarantee against all timing races.
+
+The new HTTP fixture tests existing parent/two branches sharing CIDR/IP, independent host edits, Company/Space grants, scoped inventory/search/CSV export and denied cross-scope reads/writes/deletes/ID spoofing. Five tests pass against PGlite and real PostgreSQL. No production schema or behavior changed; not all MS scenarios/endpoints are certified.
+
+## Exact next step
+1. Inspect merge CI [42153507136](https://github.com/emsebi/EMS_IPAM/actions/runs/42153507136), last observed in_progress; result pending and the documentation checkpoint CI. Run IDs are also recorded on PR #15.
+2. Next bounded code increment: add companyId/companyName (Branch) alongside spaceId/spaceName to scoped search host/prefix results, with source and record-update time; show Branch/Space in the UI. Extend the existing duplicate-IP HTTP fixture rather than rebuilding it. Search currently caps host/results and picks a single free-IP candidate; follow up with explicit pagination/all-authorized-results semantics instead of silently claiming completeness.
+3. No full deployment: PR #12 Radio fix already installed still awaits actual-user GPS/AP/Station/uplink save/reload acceptance. Preserve deployed eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 (41783898221) atop full release 588ba9f; main deploy would revert it. Keep its shared browser scenarios intact.
+4. NAC remains Preview only; real RouterOS login/Full-Read remains OPEN. No scans, config push, TOTP or same-branch VRF schema changes. Public-release/VM acceptance is not claimed.
+
+---
+
 # Current work — multisite PostgreSQL verified; browser readiness correction, 2026-11-06
 
 Fresh main remains 585d3c06265805e4818699984214ea20829bd6d2. PR #15 head 1e8b40a3ed503db949282def5165266431b64b89 passed all four gates in CI 42141332115, including all five multisite HTTP tests against real PostgreSQL 16 (job 127642086625), not only PGlite. Companion CI 42141327224 failed browser job 127642069425 waiting for #nacProfilesTab at browser.part1.mjs:327; its other three gates passed.
