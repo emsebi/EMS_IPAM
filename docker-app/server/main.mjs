@@ -660,7 +660,9 @@ async function inventoryData(user) {
 async function searchData(user, query) {
   const q = normalizePersian(query).slice(0, 160);
   if (!q) return [];
-  const spaces = (await listBootstrap(user)).spaces;
+  const bootstrap = await listBootstrap(user);
+  const spaces = bootstrap.spaces;
+  const companyNames = new Map(bootstrap.companies.map(item => [item.id, item.name]));
   const spaceIds = spaces.map((item) => item.id);
   if (!spaceIds.length) return [];
   const items = [];
@@ -716,12 +718,22 @@ async function searchData(user, query) {
   items.push(...personnel.rows.map((item) => ({ kind: "personnel", ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
-  if (exactIp && !hosts.rows.some((item) => item.ip === exactIp)) {
+  if (exactIp) {
     const address = parseCidr(`${exactIp}/32`);
+    // Do not infer absence from the capped host search result.
+    const registered = await pool.query(
+      'SELECT DISTINCT space_id AS "spaceId" FROM hosts WHERE space_id=ANY($1::text[]) AND ip=$2 AND deleted_at IS NULL',
+      [spaceIds, exactIp],
+    );
+    const registeredSpaces = new Set(registered.rows.map(item => item.spaceId));
     const containing = spaces.map((item) => ({ item, info: parseCidr(item.cidr) }))
-      .filter(({ info }) => info && address && contains(info, address))
-      .sort((a, b) => b.info.prefix - a.info.prefix)[0]?.item;
-    if (containing) items.unshift({ kind: "free-ip", ip: exactIp, spaceId: containing.id, spaceName: containing.name, spaceCidr: containing.cidr });
+      .filter(({ item, info }) => info && address && contains(info, address) && !registeredSpaces.has(item.id))
+      .sort((a, b) => b.info.prefix - a.info.prefix || a.item.id.localeCompare(b.item.id));
+    items.push(...containing.map(({ item }) => ({
+      kind: "free-ip", ip: exactIp, spaceId: item.id, spaceName: item.name, spaceCidr: item.cidr,
+      companyId: item.companyId, companyName: companyNames.get(item.companyId),
+      source: "ipam-inventory", recordUpdatedAt: null, observedAt: null, availability: "unverified",
+    })));
   }
   return items.slice(0, 40);
 }

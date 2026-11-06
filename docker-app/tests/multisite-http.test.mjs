@@ -66,6 +66,23 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const id=(await admin('PUT','/api/hosts',host,200)).id;sites.push({companyId,spaceId,id,host});
   }
   const [north,south]=sites;
+  await t.test('unregistered exact IP produces a candidate per Space, including beside a registered branch',async()=>{
+    const candidates=(await admin('GET','/api/search?q=192.0.2.51')).items.filter(h=>h.kind==='free-ip' && sites.some(s=>s.spaceId===h.spaceId));
+    assert.deepEqual(candidates.map(h=>h.spaceId).sort(),sites.map(s=>s.spaceId).sort());
+    for(const site of sites){
+      const hit=candidates.find(h=>h.spaceId===site.spaceId);
+      assert.equal(hit.companyId,site.companyId);
+      assert.equal(hit.companyName,site===north?'Synthetic North':'Synthetic South');
+      assert.equal(hit.source,'ipam-inventory');assert.equal(hit.availability,'unverified');
+      assert.equal(hit.recordUpdatedAt,null);assert.equal(hit.observedAt,null);
+    }
+    await admin('PUT','/api/hosts',{spaceId:north.spaceId,ip:'192.0.2.51',name:'North only'});
+    const mixed=(await admin('GET','/api/search?q=192.0.2.51')).items.filter(h=>sites.some(s=>s.spaceId===h.spaceId));
+    assert.deepEqual(mixed.filter(h=>h.kind==='host').map(h=>h.spaceId),[north.spaceId]);
+    assert.deepEqual(mixed.filter(h=>h.kind==='free-ip').map(h=>h.spaceId),[south.spaceId]);
+    await admin('DELETE','/api/hosts/'+north.spaceId+'/192.0.2.51');
+    assert.equal((await admin('GET','/api/search?q=203.0.113.51')).items.filter(h=>h.kind==='free-ip').length,0);
+  });
   for(const site of sites){
     site.prefixId=(await admin('POST','/api/prefixes',{spaceId:site.spaceId,cidr:'192.0.2.0/25',name:'Shared prefix'})).id;
   }
@@ -127,6 +144,10 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       assert.deepEqual(hits.map(h=>h.id),[site.id]);assert.equal(hits[0].spaceId,site.spaceId);
       assert.equal(hits[0].companyId,site.companyId);
       assert.ok(!JSON.stringify(hits).includes(other.companyId));
+      const unregistered=(await call('GET','/api/search?q=192.0.2.51')).items.filter(h=>h.kind==='free-ip');
+      assert.deepEqual(unregistered.map(h=>h.spaceId),[site.spaceId]);
+      assert.equal(unregistered[0].companyId,site.companyId);
+      assert.ok(!JSON.stringify(unregistered).includes(other.companyId));
       const prefixes=(await call('GET','/api/search?q=Shared%20prefix')).items.filter(h=>h.kind==='prefix');
       assert.deepEqual(prefixes.map(p=>p.id),[site.prefixId]);
       assert.equal(prefixes[0].companyId,site.companyId);
