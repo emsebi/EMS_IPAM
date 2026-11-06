@@ -1,3 +1,17 @@
+# Current checkpoint — scoped host search metadata merged, 2026-11-06
+
+PR #16 merged with fresh expected head as `09e74bb828f4756c4c114384782f6a0770cd81ef`. Final head `0c1490b6371663c60b9179d95f48dfe99c284935` passed all four gates in CI [42160480606](https://github.com/emsebi/EMS_IPAM/actions/runs/42160480606) and [42160476450](https://github.com/emsebi/EMS_IPAM/actions/runs/42160476450): Core/API/RADIUS, browser, PostgreSQL (including multisite HTTP) and Docker/SSH. Merge tree equals the tested head tree.
+
+Authorized host search results now include companyId/companyName alongside spaceId/spaceName, source=ipam-inventory, recordUpdatedAt and observedAt=null. Existing Company/Space filtering remains enforced. The duplicate-IP fixture checks both branch identities and scoped metadata. This is API behavior only; edit time is not live observation time.
+
+## Exact next step
+1. Inspect merge CI [42166133401](https://github.com/emsebi/EMS_IPAM/actions/runs/42166133401), currently in_progress; result pending and the documentation checkpoint CI. Exact run IDs are also recorded on PR #16; do not report unfinished runs as successful.
+2. Next bounded UI increment: render Branch/Space and inventory edit time/source for host search candidates; label absent live observations honestly. Add real browser coverage with two branches sharing the same IP AND Space name, select each result and verify navigation uses its own spaceId. Reuse the existing HTTP fixture and avoid altering Radio's branch concurrently.
+3. Prefix/free-IP context and explicit pagination/all-authorized-results semantics are still outstanding. Current host/result caps and single free-IP choice remain; do not claim complete multisite search. No same-branch repeated-VRF constraint change without safe migration design.
+4. No full deployment: PR #12 Radio fix already installed awaits actual-user acceptance; preserve eb983f8e69c77dc5cd40a3af8f9d831d5d8649b3 from 41783898221 atop full release 588ba9f. Main deployment would revert it. NAC Preview only; actual RouterOS login/Full-Read remains OPEN. No scan, config push or TOTP; no public-release or VM acceptance claimed.
+
+---
+
 # Current work — scoped host search context, 2026-11-06
 
 Fresh main 1a479224c1f39bc9f62c5ee729ae3090e2049810; CI 42153565426 and 42153507136 completed SUCCESS. This bounded increment adds companyId/companyName, source=ipam-inventory, recordUpdatedAt and observedAt=null to authorized host search results. Existing spaceId/spaceName and access filters remain. Inventory edit time is explicitly not network observation time. The existing duplicate-IP HTTP fixture verifies distinct branch labels/identities and scoped metadata without a new schema.
