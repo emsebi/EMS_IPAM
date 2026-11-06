@@ -1,3 +1,15 @@
+# Current work — duplicate-prefix bilingual browser regression, 2026-11-06
+
+Fresh main remains 8f07725c67775ba8cd4db85ef7993aeadd8a4909. PR #18 head 2bb1c08ff275aed93dfdca512079c892b9db0706 passed CI 42185224473 and 42185187275. PR #12 remains unchanged; no Radio acceptance recorded.
+
+This increment extends the existing isolated browser fixture after Radio/report checks: two branches share prefix name/CIDR and Space name. In both English and Persian, assert Branch/Space, source, nonempty record-edit time and unavailable live observation; select both candidates and require the correct Space HTTP response, exact prefix ID, CIDR and name. No production change or removed scenario. Browser syntax and all six local multisite HTTP tests passed. Local Chromium is known blocked by process_singleton_posix socket permission; new browser scenario requires CI validation, not claimed passed locally.
+
+Next: inspect exact-head PR #18 runs recorded on the PR; require all four CI gates including the new bilingual browser scenario before merging with fresh main/expected SHA. Fix any failure without removing assertions. Then address free-IP ambiguity and pagination/all-authorized-results semantics; these are still incomplete. No same-branch VRF constraint changes without safe migration design.
+
+No deployment: preserve installed unmerged PR #12 Radio fix pending actual-user GPS/AP/Station/uplink save/reload acceptance. NAC Preview only; actual RouterOS login/Full-Read OPEN. No scans, router push, TOTP, VM acceptance or public-release claim.
+
+---
+
 # Current work — scoped prefix search context, 2026-11-06
 
 Base main 8f07725c67775ba8cd4db85ef7993aeadd8a4909; CI 42178360773 and 42178280964 completed SUCCESS. Only PR #12 remains open, unchanged and awaiting actual-user Radio acceptance.
