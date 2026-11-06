@@ -322,6 +322,9 @@ try {
   await page.reload();
   // Static sidebar elements can be visible before asynchronous bootstrap registers click handlers.
   await page.locator('button.module-nav-link[data-module-id="radius"]').waitFor({state:'visible'});
+  // Finish restoring the RADIUS route after reload before navigating away.
+  // Module navigation is registered before the asynchronous route content renders.
+  await page.locator('.r-tabs').waitFor({state:'visible'});
   // Isolated NAC draft UI: no RADIUS live change, network access or switch commands.
   await page.locator('#networkAccessButton').click();
   await page.locator('#nacProfilesTab').click();

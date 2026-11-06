@@ -1,3 +1,15 @@
+# Current work — multisite PostgreSQL verified; browser readiness correction, 2026-11-06
+
+Fresh main remains 585d3c06265805e4818699984214ea20829bd6d2. PR #15 head 1e8b40a3ed503db949282def5165266431b64b89 passed all four gates in CI 42141332115, including all five multisite HTTP tests against real PostgreSQL 16 (job 127642086625), not only PGlite. Companion CI 42141327224 failed browser job 127642069425 waiting for #nacProfilesTab at browser.part1.mjs:327; its other three gates passed.
+
+The browser test now waits for the restored RADIUS page content (.r-tabs) after reload, as well as module navigation, before clicking Network Access. This addresses a readiness gap: a registered menu does not prove the asynchronous initial route has rendered. No assertion was removed or timeout increased. The explanation is a race hypothesis requiring the new CI result, not a proven resolution. No production code change.
+
+Next: inspect new exact-head PR #15 CI (run IDs recorded on the PR), especially browser; if green, merge with fresh main/expected head. Then add Branch/Space labels and source/time to authorized search results and address result limits. Preserve all shared browser scenarios when PR #12 is integrated; that branch has not been changed here.
+
+No deployment: Radio acceptance is still required; preserve the installed unmerged fix. NAC Preview only. RouterOS real login remains OPEN. No scans, configuration pushes, schema changes or TOTP.
+
+---
+
 # Current work — multisite HTTP regression, 2026-11-06
 
 Base main 585d3c06265805e4818699984214ea20829bd6d2; CI 42099948863 and 42099815442 verified SUCCESS. This increment adds a separate real HTTP test using existing Company/Space/Host routes: parent and two branches share CIDR/IP; editing one preserves the other; Company-granted and Space-granted viewers see only their own inventory/search/export; cross-scope reads, ID spoofing, edits and deletes are denied. The same test is wired into the existing PostgreSQL CI job using a newly created disposable database, removed after testing. Default local execution uses PGlite. No shared browser file or production schema changes.
