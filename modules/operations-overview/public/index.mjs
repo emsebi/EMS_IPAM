@@ -290,7 +290,14 @@ export function createUi(ctx) {
         : {x:160+(i%6)*325,y:110+Math.floor(i/6)*120};
     });
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    svg.setAttribute("viewBox","0 0 2000 1200");svg.setAttribute("class","ov-graph ov-network-graph");
+    // Fit the actual recorded devices; a tiny two-node topology must not be lost in a 2000x1200 canvas.
+    const coordinates=Object.values(pos);
+    const minX=Math.min(...coordinates.map(p=>p.x),0),maxX=Math.max(...coordinates.map(p=>p.x),0);
+    const minY=Math.min(...coordinates.map(p=>p.y),0),maxY=Math.max(...coordinates.map(p=>p.y),0);
+    const x0=minX-130,y0=minY-90;
+    const width=Math.max(430,maxX-minX+260),height=Math.max(230,maxY-minY+180);
+    svg.setAttribute("viewBox",[x0,y0,width,height].join(" "));
+    svg.setAttribute("class","ov-graph ov-network-graph");
     const add=(type,props,value,parent=svg)=>{
       const e=document.createElementNS("http://www.w3.org/2000/svg",type);
       Object.entries(props).forEach(([k,v])=>e.setAttribute(k,txt(v)));
