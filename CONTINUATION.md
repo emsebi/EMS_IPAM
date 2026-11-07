@@ -1,3 +1,15 @@
+# Scoped unregistered IP search pages (2026-11-07)
+
+PR #25 merged at `8218f8010c202732676c648b40ff9ee198b975ba` with expected head `703ccf8bdb78f9809aa6a7e687cbcafaad4b0312`. Both runs [42345676840](https://github.com/emsebi/EMS_IPAM/actions/runs/42345676840) and [42345659184](https://github.com/emsebi/EMS_IPAM/actions/runs/42345659184) passed all four jobs. The browser job recorded 27 passing scenarios including overlapping host/range pages. [Main merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349370320) also succeeded.
+
+`GET /api/search?kind=free-ip&q=<IPv4>` pages through the authorized Spaces containing that address, most-specific CIDR first with Space ID breaking ties. It excludes active host registrations before applying limit/offset. The mixed endpoint retains its original 40-result limit. Candidate evidence is inventory-only, availability unverified, with no observation or edit time. Alternate decimal spellings of an exact IPv4 query use the stored canonical address. Each page reads current grants. Like existing host/range paging, offsets do not give snapshot isolation during concurrent changes. No schema or UI change.
+
+All 10 local HTTP/PGlite checks passed. The new fixture exercises 43 synthetic overlapping Spaces, registered and soft-deleted hosts, both page boundaries, revoked access, branch/Space metadata and the mixed endpoint. Next: check both exact-head Actions runs recorded in this PR, particularly the multisite test on PostgreSQL 16. Only merge with a fresh base and expected head after all four jobs pass. Next UI step: expose free-IP paging for an exact address even when the mixed list has no candidate in its first 40 rows. Deduplicate by Space and IP, retain other result types, and verify selecting a later candidate opens the correct Space without writing a host.
+
+Radio #12 awaits the user's AP/Station GPS and AP uplink save/reload on the installed lab version. No deployment. Actual RouterOS login and Full/Read remain open. Before packaging, reconcile the inherited SHA256SUMS mismatch for docs/test-results/embedded-server.log (reproduced on the exact merge tree before tests).
+
+---
+
 # Concurrent host and range search pages (2026-11-07)
 
 PR #24 merged at `8cc30ffe28b47d2855341834344b15a3f2c00a14` with expected head `65e4c31c038e349ed1d9c3ac210014c87405d429`. Its PR run [42340841020](https://github.com/emsebi/EMS_IPAM/actions/runs/42340841020) and push run [42340807406](https://github.com/emsebi/EMS_IPAM/actions/runs/42340807406) both passed all four jobs. The browser job logged 26 passing scenarios, including failed first/later pages and successful retry. The [main merge run 42345298002](https://github.com/emsebi/EMS_IPAM/actions/runs/42345298002) also passed all four jobs.
