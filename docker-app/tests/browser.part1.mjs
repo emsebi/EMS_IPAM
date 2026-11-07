@@ -314,6 +314,40 @@ try {
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
 
+  // New integration panel: real DB records, no synthetic product screenshot.
+  await page.locator('button.module-nav-link[data-module-id="operations-overview"]').click();
+  await page.locator('.ov-tabs button').first().waitFor();
+  assert.equal(await page.locator('.ov-tabs button').count(),5);
+  await page.locator('.ov-root .ov-stat').first().waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-ipam.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(1).click();
+  await page.locator('.ov-facts').waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-sites.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(2).click();
+  await page.locator('.ov-panel select.ov-select').selectOption('ap2');
+  await page.locator('.ov-graph').waitFor();
+  await page.locator('.ov-table').getByText('Station Two',{exact:true}).waitFor();
+  assert.equal(await page.locator('.ov-table').getByText('Station One',{exact:true}).count(),0);
+  await page.screenshot({path:path.join(outputDir,'operations-radio.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(3).click();
+  await page.locator('.ov-table').getByText('Browser Hotspot',{exact:true}).waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-radius.png'),fullPage:true});
+  let unexpectedScan=false;
+  const countMapWrites = req => {
+    if (req.url().includes('/api/network-map/') && req.method()!=='GET') unexpectedScan=true;
+  };
+  page.on('request',countMapWrites);
+  await page.locator('.ov-tabs button').nth(4).click();
+  await page.locator('.ov-toolbar select.ov-select').selectOption('test-co');
+  await page.locator('.ov-root .ov-metrics').waitFor();
+  assert.equal(unexpectedScan,false,'overview must not initiate collection or layout writes');
+  page.off('request',countMapWrites);
+  await page.screenshot({path:path.join(outputDir,'operations-network-snapshot.png'),fullPage:true});
+  check('Operations Overview five tabs use saved records, preserve AP ownership and avoid automatic scans');
+  await page.locator('button.module-nav-link[data-module-id="radius"]').click();
+  await page.locator('.r-tabs').waitFor();
+
+
   // Keep map-only overlapping inventory out of earlier module layout fixtures.
   const inventoryBeforeTrace=(await api('/api/inventory')).items.map(h=>h.id).sort();
   const traceSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Overlapping fixture',cidr:'192.0.2.0/23'},201);
