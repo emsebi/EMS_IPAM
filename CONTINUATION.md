@@ -1,3 +1,18 @@
+# Current integration work — five-tab real-data Operations Overview (2026-11-08)
+
+PR #27 (`work/live-ops-dashboard-20261108`) adds an admin-only read-only module under `modules/operations-overview/`, without modifying core schema, NAS/RADIUS policies, existing Radio files or network collection routes. The source reuses existing APIs and has IPAM/Inventory, Sites/Branches, Radio AP–Station relationships, RADIUS groups/NAS Collections/access assignment/events, and saved topology tabs. GPS distance appears only if both endpoints have valid coordinates; ping/scan status is never fabricated. Deep links return to existing management pages.
+
+New Node contract tests and actual Playwright browser checks verify five tabs, AP membership (AP Two shows Station Two, not Station One), reading real RADIUS collection, no automatic network-map write/scan, and screenshots from PGlite-backed HTTP fixtures. Both exact-head runs on `0770a77250a28785fee092e0f55700545cd1b119` had all four gates SUCCESS: Core/tests, browser, real PostgreSQL/multisite and Docker/SSH. Representative browser artifact on [run 42414198797](https://github.com/emsebi/EMS_IPAM/actions/runs/42414198797) contains five `operations-*.png` screenshots. Screenshots are actual app browser tests with synthetic test data, **not current user's VM**. Further docs-only commits need their own exact-head CI before merge.
+
+IMPORTANT: This is a first functional integrated overview, **not** completion of the five conceptual mockups. Full IP utilization/availability, geographic Radio basemap and position persistence, live-status monitoring, active Cisco/MikroTik discovery verification and RouterOS Full/Read acceptance are separate pending milestones. No invention of data, credentials, devices, online state or claimed deployment.
+
+Next:
+1. Recheck PR #27 exact-head CI after README/continuation changes, plus fresh main. Merge only if all four checks on the same head succeed and it is conflict-free. The new module can be installed on a fresh isolated test VM via existing README installer, but user VM deployment is **held**.
+2. Preserve open Radio PR #12 with installed EACCES fix until user verifies GPS/AP/Station/uplink save–reload on VM; deploying main now could overwrite that correction.
+3. Continue the user-requested real functionality in bounded increments: branch IPAM utilization from authoritative allocations; branch contact/detail UI actions; Radio map based on persisted GPS with AP/station lines and distance; richer RADIUS NAS Collection/group policy maps and real RouterOS login acceptance; Smart Network Map using explicit saved/manual discovery and status timestamps. Each step requires test evidence and genuine browser screenshots before presentation.
+4. PR #26 unregistered-IP pagination is separate and must be evaluated on its own exact head; preserve its existing behavior.
+
+---
 # Concurrent host and range search pages (2026-11-07)
 
 PR #24 merged at `8cc30ffe28b47d2855341834344b15a3f2c00a14` with expected head `65e4c31c038e349ed1d9c3ac210014c87405d429`. Its PR run [42340841020](https://github.com/emsebi/EMS_IPAM/actions/runs/42340841020) and push run [42340807406](https://github.com/emsebi/EMS_IPAM/actions/runs/42340807406) both passed all four jobs. The browser job logged 26 passing scenarios, including failed first/later pages and successful retry. The [main merge run 42345298002](https://github.com/emsebi/EMS_IPAM/actions/runs/42345298002) also passed all four jobs.
