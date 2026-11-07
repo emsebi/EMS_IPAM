@@ -1,0 +1,24 @@
+{
+  "id": "operations-overview",
+  "name": "Network Operations Overview",
+  "version": "0.1.0-lab.1",
+  "description": "Real database-backed overview of IPAM, sites, radio links, RADIUS assignments and saved topology; no automatic polling or device changes.",
+  "enabled": true,
+  "apiVersion": 1,
+  "roles": [
+    "admin"
+  ],
+  "permissions": [
+    "operations-overview.read"
+  ],
+  "navigation": {
+    "label": "Operations Overview",
+    "labels": {
+      "en": "Operations Overview",
+      "fa": "نمای یکپارچه شبکه"
+    },
+    "icon": "▦",
+    "order": 15,
+    "panel": true
+  }
+}
