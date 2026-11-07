@@ -339,7 +339,7 @@ try {
   page.on('request',countMapWrites);
   await page.locator('.ov-tabs button').nth(4).click();
   await page.locator('.ov-toolbar select.ov-select').selectOption('test-co');
-  await page.locator('.ov-panel').first().waitFor();
+  await page.locator('.ov-root .ov-metrics').waitFor();
   assert.equal(unexpectedScan,false,'overview must not initiate collection or layout writes');
   page.off('request',countMapWrites);
   await page.screenshot({path:path.join(outputDir,'operations-network-snapshot.png'),fullPage:true});
