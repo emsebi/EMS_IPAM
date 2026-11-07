@@ -1,3 +1,15 @@
+# Current work — retry a failed host or range search page (2026-11-07)
+
+Main de1b02a48362a2a9d2ad8e74937e192b4ac331bc includes PR #23. Both PR-head runs (42309930831 and 42309901018) passed all four jobs, as did main push 42315092457. The existing work/search-page-retry-tests branch still pointed to that merge; resumed the unfinished browser fixture there.
+
+A failed host or range page now exposes a localized, kind-specific retry button. Retrying keeps the displayed candidates and asks for the same query and offset. The browser regression interrupts the first and second page once each for hosts and ranges, checks that the menu and candidates survive the error, clicks retry, and checks the real HTTP response, deduplication and terminal page. Covers the Persian host and English range retry labels. No endpoint or schema change.
+
+Local verification: both JS syntax checks and all nine multisite HTTP/PGlite tests passed. The default parallel full suite had one fixture startup failure (loopback ECONNREFUSED, 206 passed); see the PR for the serial rerun. Local Chromium failed to start (process_singleton_posix socket: Operation not permitted). The browser assertions require the new commit's CI. Exact-head run IDs and latest observed status are tracked in the PR description. Next: check those runs, diagnose any first failing request/assertion, and only merge after all four gates pass on the expected SHA and main is current. Then cover overlapping host/prefix page responses, followed by remaining capped result kinds.
+
+VM gate: PR #12 Radio GPS/AP/Station/uplink save-and-reload still needs actual user acceptance on the deployed fix. No deployment this step. Real RouterOS login/Full-Read remains open; NAC remains Preview.
+
+---
+
 # Current work — prefix load-more UI and stale-page browser regression, 2026-11-07
 
 PR #22 merged with expected head e95bf0099d875c6e4562380265390befc958bf40 as d3701583c903976a43c23a436311e558820970d3. Both CI 42309355874 and 42309320209 completed SUCCESS; all four job lists verified (Core/API/RADIUS, browser, real PostgreSQL/multisite HTTP and Docker/SSH). Fresh main rechecked at that merge before this UI branch. Post-merge runs 42309665853 and 42309592834 both report completed SUCCESS. Radio PR #12 unchanged; actual-user acceptance is still missing.

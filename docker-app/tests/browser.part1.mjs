@@ -766,6 +766,59 @@ try {
   await page.unroute('**/api/search?kind=prefix&**');
   check('prefix load-more retains hosts, selects exact later-page branch IDs and ignores a stale page after query changes');
 
+  // Interrupt transport once per page; successful retries still use the real API.
+  for (const { kind, query, button, retryLabel, language } of [
+    { kind: 'host', query: 'Paging fixture', button: '#searchMoreHosts', retryLabel: 'تلاش دوباره برای دریافت میزبان‌ها', language: 'fa' },
+    { kind: 'prefix', query: 'Prefix paging', button: '#searchMorePrefixes', retryLabel: 'Retry loading ranges', language: 'en' },
+  ]) {
+    if (await page.locator('#languageSelect').inputValue() !== language) {
+      await Promise.all([page.waitForEvent('load'), page.locator('#languageSelect').selectOption(language)]);
+      await page.locator('#deviceTypesButton').waitFor();
+    }
+    await page.locator('#searchInput').fill('');
+    await page.locator('#searchInput').fill(query);
+    await page.locator(button).waitFor();
+    const requests = [];
+    let failNextPage;
+    const pattern = '**/api/search?kind=' + kind + '&**';
+    await page.route(pattern, async route => {
+      const params = new URL(route.request().url()).searchParams;
+      requests.push({ query: params.get('q'), offset: params.get('offset') });
+      if (failNextPage) {
+        failNextPage = false;
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    try {
+      for (const offset of [0, 40]) {
+        failNextPage = true;
+        const before = await page.locator('#searchResults .search-item').allTextContents();
+        await Promise.all([
+          page.waitForEvent('requestfailed', request => request.url().includes('kind=' + kind) && request.url().includes('offset=' + offset)),
+          page.locator(button).click(),
+        ]);
+        await page.locator('#searchResults [role=alert]').waitFor();
+        assert.equal(await page.locator('#searchResults').isVisible(), true);
+        assert.deepEqual(await page.locator('#searchResults .search-item').allTextContents(), before, 'failed page preserves all existing results');
+        assert.equal(await page.locator(button).isEnabled(), true, 'failed page remains retryable');
+        assert.equal(await page.locator(button).textContent(), retryLabel);
+        await Promise.all([
+          page.waitForResponse(r => r.url().includes('kind=' + kind) && r.url().includes('offset=' + offset) && r.status() === 200),
+          page.locator(button).click(),
+        ]);
+        await page.waitForFunction(count => document.querySelectorAll('#searchResults .search-item').length === count, offset === 0 ? 41 : 43);
+        assert.equal(await page.locator('#searchResults [role=alert]').count(), 0);
+        const contents = await page.locator('#searchResults .search-item').allTextContents();
+        assert.equal(new Set(contents).size, contents.length, 'retry must not duplicate results');
+      }
+      assert.deepEqual(requests, ['0', '0', '40', '40'].map(offset => ({ query, offset })), 'retry must retain the query and offset');
+      assert.equal(await page.locator(button).count(), 0, 'successful final retry reaches terminal state');
+    } finally {
+      await page.unroute(pattern);
+    }
+  }
+  check('host and prefix paging preserve results on transport failure and retry the same first and later pages');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);
