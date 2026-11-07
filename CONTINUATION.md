@@ -1,3 +1,15 @@
+# Concurrent host and range search pages (2026-11-07)
+
+PR #24 merged at `8cc30ffe28b47d2855341834344b15a3f2c00a14` with expected head `65e4c31c038e349ed1d9c3ac210014c87405d429`. Its PR run [42340841020](https://github.com/emsebi/EMS_IPAM/actions/runs/42340841020) and push run [42340807406](https://github.com/emsebi/EMS_IPAM/actions/runs/42340807406) both passed all four jobs. The browser job logged 26 passing scenarios, including failed first/later pages and successful retry. The [main merge run 42345298002](https://github.com/emsebi/EMS_IPAM/actions/runs/42345298002) also passed all four jobs.
+
+New browser regression on `work/search-page-overlap` uses the existing two synthetic branches and a single IP fragment matching more than 40 hosts and 40 ranges. It delays a real host response on page one and a real range response on page two, processes the other response first each time, then checks every displayed name/address/branch against the full scoped API results and verifies both lists end. No product or schema change. Local syntax check passed. Local Chromium stopped at startup (process_singleton_posix socket, Operation not permitted). Check this PR's exact-head CI and browser assertion before marking the new regression verified. CI run IDs and the local HTTP result are tracked in the PR body.
+
+Next: inspect the browser log for the overlapping-pages scenario and all four gate results. If any fails, fix the first failing assertion on this branch; otherwise merge with freshly verified base and expected head. Then extend scoped typed paging to unregistered IP candidates, using two or more authorized Spaces sharing a CIDR, explicit evidence labels and a grant revoked between pages. Check legacy mixed search and prior host/range pagination. Company/personnel results also remain capped.
+
+VM deployment remains held for actual user acceptance of AP/Station coordinates and AP uplink save/reload on Radio #12. Actual RouterOS login and Full/Read are still open; NAC is preview only.
+
+---
+
 # Current work — retry a failed host or range search page (2026-11-07)
 
 Main de1b02a48362a2a9d2ad8e74937e192b4ac331bc includes PR #23. Both PR-head runs (42309930831 and 42309901018) passed all four jobs, as did main push 42315092457. The existing work/search-page-retry-tests branch still pointed to that merge; resumed the unfinished browser fixture there.
