@@ -292,10 +292,10 @@ export function createUi(ctx) {
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
     // Fit the actual recorded devices; a tiny two-node topology must not be lost in a 2000x1200 canvas.
     const coordinates=Object.values(pos);
-    const minX=Math.min(...coordinates.map(p=>p.x),0),maxX=Math.max(...coordinates.map(p=>p.x),0);
-    const minY=Math.min(...coordinates.map(p=>p.y),0),maxY=Math.max(...coordinates.map(p=>p.y),0);
-    const x0=minX-130,y0=minY-90;
-    const width=Math.max(430,maxX-minX+260),height=Math.max(230,maxY-minY+180);
+    const minX=Math.min(...coordinates.map(p=>p.x)),maxX=Math.max(...coordinates.map(p=>p.x));
+    const minY=Math.min(...coordinates.map(p=>p.y)),maxY=Math.max(...coordinates.map(p=>p.y));
+    const width=Math.max(480,maxX-minX+280),height=Math.max(260,maxY-minY+210);
+    const x0=(minX+maxX-width)/2,y0=(minY+maxY-height)/2;
     svg.setAttribute("viewBox",[x0,y0,width,height].join(" "));
     svg.setAttribute("class","ov-graph ov-network-graph");
     const add=(type,props,value,parent=svg)=>{
