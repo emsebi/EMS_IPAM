@@ -819,6 +819,59 @@ try {
   }
   check('host and prefix paging preserve results on transport failure and retry the same first and later pages');
 
+  // Both synthetic branches have multiple host and prefix pages for the same search.
+  const overlapQuery = '198.51.100.';
+  const expectedRows = [];
+  for (const kind of ['host', 'prefix']) {
+    const { items, pagination } = await api('/api/search?kind=' + kind + '&q=' + overlapQuery + '&limit=100');
+    assert.ok(items.length > 40 && items.length <= 80);
+    assert.equal(pagination.hasMore, false);
+    for (const item of items) {
+      const address = item.ip || item.cidr;
+      expectedRows.push([item.name || address, address, 'Branch: ' + item.companyName].join('|'));
+    }
+  }
+  await page.locator('#searchInput').fill(overlapQuery);
+  const pageButtons = { host: '#searchMoreHosts', prefix: '#searchMorePrefixes' };
+  for (const [offset, delayed, first] of [[0, 'host', 'prefix'], [40, 'prefix', 'host']]) {
+    const matchesPage = (url, kind) => url.pathname === '/api/search'
+      && url.searchParams.get('kind') === kind && url.searchParams.get('q') === overlapQuery
+      && url.searchParams.get('offset') === String(offset);
+    const delayedPage = url => matchesPage(url, delayed);
+    const release = Promise.withResolvers();
+    await page.route(delayedPage, async route => {
+      const response = await route.fetch();
+      await release.promise;
+      await route.fulfill({ response });
+    });
+    try {
+      await Promise.all([
+        page.waitForRequest(request => delayedPage(new URL(request.url()))),
+        page.locator(pageButtons[delayed]).click(),
+      ]);
+      await Promise.all([
+        page.waitForResponse(response => matchesPage(new URL(response.url()), first) && response.ok()),
+        page.locator(pageButtons[first]).click(),
+      ]);
+      await page.locator(pageButtons[first] + ':disabled').waitFor({ state: 'hidden' });
+      assert.equal(await page.locator(pageButtons[delayed]).isDisabled(), true);
+      const delivered = page.waitForResponse(response => delayedPage(new URL(response.url())) && response.ok());
+      release.resolve();
+      await delivered;
+      await page.locator(pageButtons[delayed] + ':disabled').waitFor({ state: 'hidden' });
+    } finally {
+      release.resolve();
+      await page.unroute(delayedPage);
+    }
+  }
+  const visibleRows = await page.locator('#searchResults .search-item').evaluateAll(rows => rows.map(row => {
+    const [address, branch] = row.querySelectorAll('small');
+    return [row.querySelector('b').textContent, address.textContent, branch.textContent].join('|');
+  }));
+  assert.deepEqual(visibleRows.sort(), expectedRows.sort(), 'both page orders must retain every host and range in its branch exactly once');
+  assert.equal(await page.locator('#searchMoreHosts, #searchMorePrefixes').count(), 0);
+  check('overlapping host and range pages preserve every branch result in both response orders');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);
