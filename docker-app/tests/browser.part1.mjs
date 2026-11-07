@@ -157,6 +157,32 @@ try {
   await page.locator('.radio-ap-choice[data-id=ap2]').click();
   await page.locator('.radio-station-list').getByText('Station Two', { exact: true }).waitFor();
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
+  // Physical-location regression: only a saved AP/Station coordinate appears on the radio map.
+  await page.locator('#radioGeoTarget').selectOption('ap2');
+  await page.locator('#radioGeoLatitude').fill('35.6892');
+  await page.locator('#radioGeoLongitude').fill('51.3890');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
+  await page.locator('#radioGeoTarget').selectOption('st2');
+  await page.locator('#radioGeoLatitude').fill('35.6901');
+  await page.locator('#radioGeoLongitude').fill('51.3902');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
+  const geolocations = (await api('/api/radio/locations?apId=ap2')).items;
+  assert.equal(geolocations.length,2);
+  assert.ok(geolocations.some(item=>item.hostId==='ap2'&&item.latitude===35.6892));
+  assert.ok(geolocations.some(item=>item.hostId==='st2'&&item.longitude===51.3902));
+  const mapFrame=page.frameLocator('#radioGeoFrame');
+  await mapFrame.locator('#radioMap').waitFor();
+  await mapFrame.locator('line.radio-link[data-station-id="st2"]').waitFor({state:'attached'});
+  await mapFrame.locator('.radio-pin.ap[data-host-id="ap2"]').waitFor();
+  await mapFrame.locator('.radio-pin.station[data-host-id="st2"]').waitFor();
+  assert.equal(await mapFrame.locator('line.radio-link').count(),1);
+  assert.match(await mapFrame.locator('text.radio-link-distance[data-station-id="st2"]').textContent(),/m|km/);
+  assert.match(await page.locator('#radioGeoDistances').innerText(),/Station Two/);
+  await page.screenshot({path:path.join(outputDir,'radio-geolocation.png'),fullPage:true});
+  check('Radio AP/Station map draws distinct pins, a saved geographic link and its GPS distance without radio login');
+
   await page.locator('#addSelectedStation').click();
   assert.equal(await page.locator('#radioQuickParent').inputValue(), 'ap2');
   assert.equal(await page.locator('#radioQuickMode').inputValue(), 'station');
