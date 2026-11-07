@@ -1492,7 +1492,14 @@ function renderSearchItems() {
       const en = state.language === "en";
       const more = kind === "host" ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "More ranges" : "رنج‌های بیشتر");
       const first = kind === "host" ? (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق") : (en ? "Browse all matching ranges" : "نمایش همه رنج‌های منطبق");
-      button.textContent = page.loading ? (en ? "Loading…" : "در حال دریافت…") : page.started ? more : first;
+      button.textContent = page.started ? more : first;
+      if (page.loading) {
+        button.textContent = en ? "Loading…" : "در حال دریافت…";
+      } else if (page.error) {
+        button.textContent = kind === "host"
+          ? (en ? "Retry loading hosts" : "تلاش دوباره برای دریافت میزبان‌ها")
+          : (en ? "Retry loading ranges" : "تلاش دوباره برای دریافت رنج‌ها");
+      }
       button.addEventListener("click", event => {
         // Rendering detaches this button before the document outside-click handler runs.
         event.stopPropagation();
