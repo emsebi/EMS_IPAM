@@ -154,7 +154,24 @@ try {
   await page.screenshot({ path: path.join(outputDir, 'device-types.png'), fullPage: true });
 
   await page.locator('#radiosButton').click();
+
+  // Persist real map coordinates via the Radio API, then verify the actual OSM-frame overlay.
+  await api('/api/radio/location','PUT',{hostId:'ap2',latitude:35.689200,longitude:51.389000});
+  await api('/api/radio/location','PUT',{hostId:'st2',latitude:35.696900,longitude:51.395600});
   await page.locator('.radio-ap-choice[data-id=ap2]').click();
+  await page.locator('#radioGeoFrame').waitFor({state:'visible'});
+  await page.waitForFunction(()=>document.querySelector('#radioGeoDistances')?.textContent.includes('Station Two'));
+  await page.waitForFunction(()=>document.querySelector('#radioGeoDistances')?.textContent.includes('km') ||
+    document.querySelector('#radioGeoDistances')?.textContent.includes(' m'));
+  const geographicFrame=page.frameLocator('#radioGeoFrame');
+  await geographicFrame.locator('.radio-pin.ap').waitFor();
+  await geographicFrame.locator('.radio-pin.station').waitFor();
+  assert.equal(await geographicFrame.locator('.radio-link').count(),1);
+  const savedRadioLocations=await api('/api/radio/locations?apId=ap2');
+  assert.equal(savedRadioLocations.items.length,2);
+  await page.locator('.radio-geo-panel').screenshot({path:path.join(outputDir,'radio-geographic-map.png')});
+  check('Radio geographic map persists AP and station GPS and renders actual OSM overlay, link and distance');
+
   await page.locator('.radio-station-list').getByText('Station Two', { exact: true }).waitFor();
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
   await page.locator('#addSelectedStation').click();
