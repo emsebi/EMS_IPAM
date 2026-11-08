@@ -48,3 +48,11 @@ Choosing an AP displays its saved coordinates plus all of its saved Station posi
 
 ## Storage permission fix (2.2.0-lab.3)
 The VM container runs as unprivileged `node` (UID 1000), and its bind-mounted `/backups` is root-owned (0755). Writes to new `radio-documentation` JSON files returned EACCES. No chmod of the shared backup root, privilege elevation, or RADIUS changes were made. The versioned Radio-owned migration `001-radio-documentation.sql` adds the `radio_doc_locations` and `radio_doc_uplinks` tables. Newly saved documentation goes to PostgreSQL, is durable across app restart, and is part of the regular database dump. Old read-only JSON remains available as a fallback until the same host is edited/saved or explicitly cleared; NULL tombstones prevent resurrection. The Radio storage migration does not change Core, RADIUS or any existing inventory table.
+
+## 2.3.0-lab.1 — Map-centered Radio Documentation UI
+- The primary geographic map uses the available desktop width with a large height (590 px); on narrow screens the information rail stacks below.
+- Right-hand AP list shows all APs in the accessible Inventory scope. Check one or more APs or individual Station children to show/hide them on the map. Show all / Hide all are available. This is **documentation filtering**, not a device scan.
+- Only documented coordinates are drawn. All drawn Station lines are tied strictly to their recorded `radioParentHostId`; no implicit/guessed radio relationships. GPS distances are straight-line estimates only.
+- Existing selected AP / Station details, model/IP/MAC, manual Ping, Inventory edit and Connect actions remain. Radio Topology, uplink editor and paginated Station list now share **one** lower master-detail panel, removing the previous redundant topology Station cards/table.
+- Clicking an AP in the lower panel checks it for map visibility; map selection checkboxes are independent of the AP currently open for editing. Clicking a pin outside the current group opens its parent AP's details.
+- AP/Station positions and uplinks remain saved in the Radio-only PostgreSQL tables. No RADIUS/core changes or background SSH.
