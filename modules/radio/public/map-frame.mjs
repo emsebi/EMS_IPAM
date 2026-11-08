@@ -52,35 +52,31 @@ function svgNode(tag,attributes,text){
 function renderLinks(rect,positions) {
   links.setAttribute('viewBox','0 0 '+rect.width+' '+rect.height);
   const layer=document.createDocumentFragment();
-  const ap=markers.find(m=>m.role==='ap' && validGeoPoint(m));
-  if(ap){
-    const source=positions.get(ap.id);
-    if(source){
-      for(const station of markers){
-        if(station.role!=='station'||!validGeoPoint(station))continue;
-        const target=positions.get(station.id);
-        if(!target)continue;
-        const meters=distanceMeters(ap,station);
-        if(meters===null)continue;
-        const visible=[source,target].some(p=>p.x>=-100&&p.x<=rect.width+100&&p.y>=-100&&p.y<=rect.height+100);
-        if(!visible)continue;
-        const line=svgNode('line',{x1:source.x,y1:source.y,x2:target.x,y2:target.y,class:'radio-link', 'data-station-id':station.id});
-        layer.append(line);
-        const mx=(source.x+target.x)/2,my=(source.y+target.y)/2-7;
-        const label=svgNode('text',{x:mx,y:my,class:'radio-link-distance','text-anchor':'middle','data-station-id':station.id},formatDistance(meters));
-        layer.append(label);
-      }
-    }
+  const aps=new Map(markers.filter(m=>m.role==='ap'&&validGeoPoint(m)).map(ap=>[ap.id,ap]));
+  for(const station of markers){
+    if(station.role!=='station'||!validGeoPoint(station))continue;
+    const ap=aps.get(station.parentId);
+    if(!ap)continue; // Never link a station to another AP.
+    const source=positions.get(ap.id),target=positions.get(station.id);
+    if(!source||!target)continue;
+    const meters=distanceMeters(ap,station);
+    if(meters===null)continue;
+    const visible=[source,target].some(p=>p.x>=-100&&p.x<=rect.width+100&&p.y>=-100&&p.y<=rect.height+100);
+    if(!visible)continue;
+    const line=svgNode('line',{x1:source.x,y1:source.y,x2:target.x,y2:target.y,class:'radio-link','data-station-id':station.id,'data-ap-id':ap.id});
+    layer.append(line);
+    const mx=(source.x+target.x)/2,my=(source.y+target.y)/2-7;
+    layer.append(svgNode('text',{x:mx,y:my,class:'radio-link-distance','text-anchor':'middle','data-station-id':station.id,'data-ap-id':ap.id},formatDistance(meters)));
   }
   links.replaceChildren(layer);
 }
 function renderMarkers(rect,positions) {
   const layer=document.createDocumentFragment();
-  const ap=markers.find(m=>m.role==='ap'&&validGeoPoint(m));
+  const aps=new Map(markers.filter(m=>m.role==='ap'&&validGeoPoint(m)).map(ap=>[ap.id,ap]));
   for(const marker of markers){
     const point=positions.get(marker.id);
     if(!point||point.x<-180||point.x>rect.width+180||point.y<-80||point.y>rect.height+100)continue;
-    const isAp=marker.role==='ap',distance=!isAp&&ap?distanceMeters(ap,marker):null;
+    const isAp=marker.role==='ap',parent=aps.get(marker.parentId),distance=!isAp&&parent?distanceMeters(parent,marker):null;
     const text=(isAp?'AP · ':'ST · ')+String(marker.name||marker.id).slice(0,52);
     const pin=document.createElement('button');
     pin.type='button';pin.className='radio-pin '+(isAp?'ap':'station')+(marker.id===selectedId?' selected':'');
@@ -102,7 +98,7 @@ function draw(){
   const positions=new Map(markers.filter(validGeoPoint).map(m=>[m.id,currentCoordinates(m,centerPixel,rect)]));
   renderLinks(rect,positions);
   renderMarkers(rect,positions);
-  el('radioCounts').textContent=markers.filter(m=>m.role==='station'&&validGeoPoint(m)).length+' station locations';
+  el('radioCounts').textContent=markers.filter(m=>m.role==='ap').length+' AP · '+markers.filter(m=>m.role==='station').length+' stations';
 }
 function updateView(position,newZoom=zoom){
   center.latitude=clamp(position.latitude,-85.05112878,85.05112878);
@@ -119,10 +115,10 @@ window.addEventListener('message',event=>{
   if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='ems:radio:geo:data')return;
   const data=event.data;
   markers=(Array.isArray(data.markers)?data.markers:[]).slice(0,120).filter(m=>m&&['ap','station'].includes(m.role)&&validGeoPoint(m))
-    .map(m=>({id:String(m.id),name:String(m.name||m.id),role:m.role,latitude:Number(m.latitude),longitude:Number(m.longitude)}));
+    .map(m=>({id:String(m.id),name:String(m.name||m.id),role:m.role,parentId:String(m.parentId||''),latitude:Number(m.latitude),longitude:Number(m.longitude)}));
   selectedId=String(data.selectedId||'');
   // Refresh automatic fit only when the location set changes or user selects another AP.
-  const signature=JSON.stringify(markers.map(m=>[m.id,m.latitude,m.longitude,m.role]));
+  const signature=JSON.stringify(markers.map(m=>[m.id,m.parentId,m.latitude,m.longitude,m.role]));
   if(!initialized||signature!==lastPositions||data.recenter){
     lastPositions=signature;initialized=true;fitAll();
   }else draw();
