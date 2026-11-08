@@ -8,3 +8,5 @@ Radio 2.2 geographic AP/Station map: CI 41725013633 SUCCESS, only module restart
 Radio 2.2.0-lab.2 AP-station link/distance update: CI 41733196672 all 4 gates SUCCESS; Radio-only VM deploy.
 
 Radio 2.2.0-lab.3: fix EACCES by PostgreSQL module storage, CI 41783744640 all four jobs SUCCESS. Save/GET API must work without filesystem writes.
+
+Radio 2.3.0-lab.1 visual acceptance VM trial: CI 42467482060 four gates SUCCESS. Change only Radio; preserve DB & RADIUS.
