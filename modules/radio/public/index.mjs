@@ -1,5 +1,5 @@
-import { renderRadioTopology, radioUplinkSaved, radioConnectionHint } from './topology.mjs?v=2.2.0-lab.2';
-import { createGeoUi } from './geo-ui.mjs?v=2.2.0-lab.2';
+import { renderRadioTopology, radioUplinkSaved, radioConnectionHint } from './topology.mjs?v=2.3.0-lab.1';
+import { createGeoUi } from './geo-ui.mjs?v=2.3.0-lab.1';
 
 export function createUi(ctx) {
 const { state, $, page, isModuleInstalled, hasClientModule, ensureInventory, updateSelectors, navActive, setRoute, toast, canWrite, ipv4ToInt, intToIpv4, request, prepareHostEditor, loadSpace, escapeHtml, formatNumber, formatDateTime, translateTree, t, openToolMenu } = ctx;
