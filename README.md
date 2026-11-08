@@ -4,6 +4,32 @@
 
 [RADIUS 1.1.0-lab؛ گروه‌بندی با NAS Collections و بدون Company](docs/releases/radius-1.1.0-lab.md) · [تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.0-rc.3.md) · [حمایت از توسعه](#support-ems-ipam)
 
+## تصاویر واقعی محیط EMS_IPAM
+
+این تصاویر از **اجرای واقعی رابط وب در تست خودکار مرورگر** با داده‌های آزمایشی و API/دیتابیس برنامه گرفته شده‌اند؛ تصویر تولیدشده با هوش مصنوعی یا اسکرین‌شات VM فعلی نیستند.
+
+### نقشه جغرافیایی رادیوها — Radio Management 2.2
+
+![نقشه OpenStreetMap و موقعیت AP و Station در EMS_IPAM، خط ارتباط و فاصله جغرافیایی](docs/screenshots/real/radio-geographic-map.png)
+
+در صفحه **Radios**، AP و Stationهای ثبت‌شده در Inventory روی نقشه OpenStreetMap با رنگ متفاوت نمایش داده می‌شوند؛ خط AP تا Station و فاصله مستقیم GPS دیده می‌شود. مختصات از طریق انتخاب روی نقشه یا ورود دستی ثبت شده و در جدول‌های اختصاصی PostgreSQL نگهداری می‌شوند. فقط مدیر سامانه می‌تواند موقعیت را تغییر دهد. نقشه **مانیتورینگ زنده یا اندازه‌گیری کیفیت لینک رادیویی نیست** و بدون ذخیره موقعیت معتبر، خط یا فاصله ساختگی ترسیم نمی‌شود. برای نمایش کاشی‌های OpenStreetMap مرورگر به اینترنت نیاز دارد.
+
+### پنج نمای یکپارچه عملیاتی — Operations Overview
+
+| IP Manager و Inventory | شعب و سایت‌ها |
+|:---:|:---:|
+| ![نمای واقعی IP Manager و Inventory](docs/screenshots/real/operations-ipam.png) | ![نمای واقعی شعب و اطلاعات مرتبط](docs/screenshots/real/operations-sites.png) |
+| **رادیو و ارتباط AP–Station** | **RADIUS، NAS Collections و گروه‌های دسترسی** |
+| ![نمای واقعی ارتباطات رادیویی](docs/screenshots/real/operations-radio.png) | ![نمای واقعی گروه‌های دسترسی RADIUS](docs/screenshots/real/operations-radius.png) |
+
+**نقشه هوشمند شبکه — آخرین Snapshot ذخیره‌شده**
+
+![نمای واقعی نقشه تجهیزات ذخیره‌شده در EMS_IPAM](docs/screenshots/real/operations-network-snapshot.png)
+
+در نمای عملیاتی، داده‌های ثبت‌شده از ماژول‌های اصلی خوانده می‌شوند. وضعیت شبکه در بخش Smart Network Map بازتاب **آخرین برداشت ذخیره‌شده** است، نه مانیتورینگ زنده. مدیریت و ویرایش اصلی هر بخش در ماژول خود انجام می‌شود.
+
+**وضعیت نصب:** این قابلیت‌ها در کد شاخه main ثبت و با تست‌های خودکار بررسی شده‌اند؛ نصب یا پذیرش نسخه تازه روی VM شخصی هنوز تأیید نشده است. راهنمای نصب آزمایشی در ادامه همین صفحه قرار دارد.
+
 ## دانلود و نصب با یک دستور
 
 روی Ubuntu/Debian با دسترسی sudo و اینترنت، همین دستور را کپی کنید؛ نصب‌کننده پیش‌نیازها، Docker و Compose را بررسی می‌کند و منوی نصب/ارتقا را می‌آورد:
@@ -70,7 +96,7 @@ ZIP را استخراج و `Install.cmd` را با کاربر خودتان اج�
 | IP Manager → IP Manage | شرکت، رنج، IP، جست‌وجو و مشخصات آدرس‌ها |
 | IP Manager → Device List | فهرست تجهیزات و انتخاب نوع در فرم IP |
 | IP Manager → Device Types | افزودن، ویرایش، حذف نوع آزاد و تعداد استفاده؛ مستقل از Settings |
-| IP Manager → Radios | انتخاب AP و نمایش فقط Stationهای همان AP؛ Ping دستی |
+| IP Manager → Radios | انتخاب AP و نمایش Stationهای همان AP؛ نقشه جغرافیایی OpenStreetMap با خطوط و فواصل GPS، ذخیره مختصات در PostgreSQL و Ping دستی |
 | 802.1X / MAC | دو تب رکوردهای MAC موجود در IPAM و پرسنل؛ فعلاً بدون اعمال سیاست RADIUS |
 | RADIUS Device Access | ثبت NAS، مجموعهٔ تجهیزات، پروفایل دسترسی، کاربران، قالب کانفیگ و لاگ‌های عملیاتی |
 | گزارش‌ها | خلاصهٔ عملیاتی ماژول‌ها و رخدادهای مدیریتی |
