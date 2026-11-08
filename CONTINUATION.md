@@ -1,3 +1,14 @@
+# Checkpoint — Geographic Radio Map and real GitHub screenshots, 2026-11-08
+
+Radio geographic map PR #28 was merged to main at 4c567bb5b00fe625c3b14fbca533aa39b5319390. All four exact-head gates (test, browser, PostgreSQL, Docker/SSH) passed on each PR workflow. The real browser test saved GPS for fixture AP2/Station2, verified location persistence, the map frame pins, the AP–Station line and geographic distance. The map is displayed above the detailed Radio topology list; no network devices are polled automatically.
+
+Main-push CI 42466631002 passed four gates plus the new publish-browser-screenshots job. Six real browser PNG images have been committed in docs/screenshots/real: radio-geographic-map, operations-ipam, operations-sites, operations-radio, operations-radius and operations-network-snapshot. README now embeds all six (commit 3402b5fe0989573fde56a393376a6a97f9e5c39d). Screenshots use temporary fixture records and real API/browser tests, not generated imagery or a capture from the user's physical VM.
+
+VM remains unchanged. Preserve the Radio-only installation and user data; actual AP/Station location Save→reload, GPS link/distance, and AP uplink Save→reload acceptance are still open. RADIUS login/Full/Read on real RouterOS remains OPEN and NAC remains Preview. The legacy draft PR #12 contains historical changes and must not be merged wholesale; Radio module was ported in isolation through PR #28. Main can now include Radio PostgreSQL migrations without reverting that module's code, but do not claim VM validation from CI or replace deployed files without data backup and deployment comparison.
+
+Next: physical VM user acceptance for Radio GPS/AP/Station/uplink and RADIUS RouterOS login. Continue full network discovery, NAC and other mockup-to-functional work as separate bounded increments, each with exact-head CI and actual browser evidence.
+
+---
 # Current integration work — five-tab real-data Operations Overview (2026-11-08)
 
 PR #27 (`work/live-ops-dashboard-20261108`) adds an admin-only read-only module under `modules/operations-overview/`, without modifying core schema, NAS/RADIUS policies, existing Radio files or network collection routes. The source reuses existing APIs and has IPAM/Inventory, Sites/Branches, Radio AP–Station relationships, RADIUS groups/NAS Collections/access assignment/events, and saved topology tabs. GPS distance appears only if both endpoints have valid coordinates; ping/scan status is never fabricated. Deep links return to existing management pages.
