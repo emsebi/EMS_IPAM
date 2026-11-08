@@ -81,7 +81,7 @@ jobs:
           test "$ready" -eq 1
           grep -q '"radio"' "$BEFORE/health-after.json"
           grep -q 'renderRadioTopology' "$DEPLOY/modules/radio/public/topology.mjs"
-          grep -q '2.2.0-lab.3' "$DEPLOY/modules/radio/module.json"
+          grep -q '2.3.0-lab.1' "$DEPLOY/modules/radio/module.json"
           grep -q 'tile.openstreetmap.org' "$DEPLOY/modules/radio/public/map-frame.mjs"
           grep -q 'radio-link-distance' "$DEPLOY/modules/radio/public/map-frame.mjs"
           test -f "$DEPLOY/modules/radio/public/geo-math.mjs"
