@@ -216,6 +216,7 @@ try {
   assert.equal(await multiFrame.locator('line.radio-link[data-station-id="st2"]').count(),1);
   await page.locator('#radioMapNone').click();
   await page.waitForFunction(() => document.getElementById('radioMapSelectedCount')?.textContent.includes('0 AP'));
+  await multiFrame.locator('line.radio-link').first().waitFor({state:'detached'});
   assert.equal(await multiFrame.locator('line.radio-link').count(),0);
   await page.locator('#radioMapAll').click();
   await multiFrame.locator('line.radio-link[data-station-id="st1"][data-ap-id="ap1"]').waitFor({state:'attached'});
