@@ -100,3 +100,10 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
 export function radioUplinkSaved(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'اتصال ذخیره شد.' : 'Uplink saved.'; }
 
 export function radioConnectionHint(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'روش اتصال را در Inventory دستگاه ثبت کنید.' : 'Set a connection method in Inventory first.'; }
+
+export function radioPanelLabels(language='en'){
+  const fa=String(language).toLowerCase().startsWith('fa');
+  return fa
+    ? {connect:'اتصال',topologyAndStations:'توپولوژی رادیو و استیشن‌ها',subtitle:'AP → استیشن‌های ثبت‌شده · مستندسازی Inventory'}
+    : {connect:'Connect',topologyAndStations:'Radio Topology & Stations',subtitle:'AP → registered Stations · Inventory documentation'};
+}
