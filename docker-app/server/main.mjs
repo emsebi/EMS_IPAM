@@ -1991,6 +1991,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && await staticFile(res, url.pathname)) return;
     errorResponse(res, 404, "فایل پیدا نشد.");
   } catch (error) {
+    if (error.code === "23505" && error.constraint === "address_spaces_company_id_cidr_key") {
+      return json(res, 409, { ok: false, code: "SPACE_CIDR_CONFLICT", error: "در هر شعبه، هر CIDR فقط یک‌بار قابل ثبت است. ثبت همان CIDR در دو VRF داخل یک شعبه هنوز پشتیبانی نمی‌شود." });
+    }
     const status = Number(error.status || (error.code === "23505" ? 409 : 400));
     const message = error.code === "23505" ? "رکوردی با این مقدار قبلاً ثبت شده است." : (error.message || "خطای داخلی برنامه");
     console.error(new Date().toISOString(), req.method, req.url, error);

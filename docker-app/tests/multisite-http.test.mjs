@@ -66,6 +66,26 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const id=(await admin('PUT','/api/hosts',host,200)).id;sites.push({companyId,spaceId,id,host});
   }
   const [north,south]=sites;
+  await t.test('same-branch CIDR conflict on create and edit preserves both Spaces and their hosts', async () => {
+    const duplicate = { companyId: north.companyId, name: 'Separate VRF', cidr: '192.0.2.0/24' };
+    const rejected = await admin('POST', '/api/spaces', duplicate, 409);
+    assert.equal(rejected.code, 'SPACE_CIDR_CONFLICT');
+    assert.match(rejected.error, /VRF/);
+
+    const original = { companyId: north.companyId, name: 'Independent space', cidr: '198.51.100.0/24' };
+    const { id } = await admin('POST', '/api/spaces', original, 201);
+    const edited = await admin('PUT', '/api/spaces/' + id, duplicate, 409);
+    assert.equal(edited.code, rejected.code);
+    const spaces = (await admin('GET', '/api/bootstrap')).spaces.filter(s => s.companyId === north.companyId);
+    assert.deepEqual(spaces.map(s => [s.id, s.name, s.cidr]).sort(), [
+      [north.spaceId, 'Shared LAN', duplicate.cidr], [id, original.name, original.cidr],
+    ].sort());
+    for (const site of sites) {
+      const data = await admin('GET', '/api/spaces/' + site.spaceId + '/data');
+      assert.deepEqual(data.hosts.map(h => h.id), [site.id]);
+    }
+    await admin('DELETE', '/api/spaces/' + id);
+  });
   await t.test('unregistered exact IP produces a candidate per Space, including beside a registered branch',async()=>{
     const candidates=(await admin('GET','/api/search?q=192.0.2.51')).items.filter(h=>h.kind==='free-ip' && sites.some(s=>s.spaceId===h.spaceId));
     assert.deepEqual(candidates.map(h=>h.spaceId).sort(),sites.map(s=>s.spaceId).sort());

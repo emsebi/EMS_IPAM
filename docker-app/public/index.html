@@ -120,6 +120,7 @@
     <form id="spaceForm">
       <div class="modal-head"><div><h3 id="spaceDialogTitle">افزودن رنج اصلی</h3><p>رنج‌های اصلی از /16 تا /24 پشتیبانی می‌شوند.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body form-grid">
+        <div id="spaceFormError" class="notice error full" role="alert"></div>
         <input id="spaceId" type="hidden">
         <label class="field">نام رنج<input id="spaceName" required placeholder="مثلاً شبکه دفتر مرکزی"></label>
         <label class="field">CIDR<input id="spaceCidr" class="ltr mono" required placeholder="172.16.0.0/16"></label>

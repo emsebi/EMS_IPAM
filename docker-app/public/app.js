@@ -234,6 +234,7 @@ async function request(url, options = {}) {
   if (!response.ok) {
     const error = new Error(payload?.error || `خطای ${response.status}`);
     error.status = response.status;
+    error.code = payload?.code;
     throw error;
   }
   return payload;
@@ -1138,6 +1139,7 @@ async function openCompanyDialog(id = null) {
 function openSpaceDialog(companyId, id = null) {
   const item = id ? state.bootstrap.spaces.find((entry) => entry.id === id) : null;
   $("spaceForm").reset();
+  $("spaceFormError").textContent = "";
   $("spaceId").value = item?.id || "";
   $("spaceName").value = item?.name || "";
   $("spaceCidr").value = item?.cidr || "";
@@ -2064,7 +2066,27 @@ $("deleteCompanyButton").addEventListener("click", () => deleteCompany($("compan
 $("spaceForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = $("spaceId").value;
-  try { const result = await request(id ? `/api/spaces/${encodeURIComponent(id)}` : "/api/spaces", { method: id ? "PUT" : "POST", body: { companyId: event.currentTarget.dataset.company, name: $("spaceName").value, cidr: $("spaceCidr").value, color: $("spaceColor").value, description: $("spaceDescription").value } }); $("spaceDialog").close(); state.bootstrap = await request("/api/bootstrap"); await loadSpace(id || result.id); toast(id ? "رنج اصلی ویرایش شد." : "رنج اصلی اضافه شد."); } catch (error) { toast(error.message); }
+  const form = event.currentTarget;
+  const body = {
+    companyId: form.dataset.company, name: $("spaceName").value, cidr: $("spaceCidr").value,
+    color: $("spaceColor").value, description: $("spaceDescription").value,
+  };
+  const errorBox = $("spaceFormError");
+  errorBox.textContent = "";
+  let result;
+  try {
+    result = await request(id ? `/api/spaces/${encodeURIComponent(id)}` : "/api/spaces", { method: id ? "PUT" : "POST", body });
+  } catch (error) {
+    errorBox.textContent = error.code === "SPACE_CIDR_CONFLICT" ? t("space.error.duplicateCidr") : error.message;
+    return;
+  }
+  markFormClean(form);
+  $("spaceDialog").close();
+  try {
+    state.bootstrap = await request("/api/bootstrap");
+    await loadSpace(id || result.id);
+    toast(id ? "رنج اصلی ویرایش شد." : "رنج اصلی اضافه شد.");
+  } catch (error) { toast(error.message); }
 });
 
 $("deleteSpaceButton").addEventListener("click", () => deleteSpace($("spaceId").value));

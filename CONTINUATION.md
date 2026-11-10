@@ -1,3 +1,13 @@
+# Current checkpoint — same-branch CIDR conflicts (MS-03), 2026-11-11
+
+[PR #26](https://github.com/emsebi/EMS_IPAM/pull/26) merged at `6b2c0814c16fa98834bd05f9ed787a269ca3885c` with expected head `3b0619afc805a4d5617a97cc22bc7fd269d6a24c`. Both [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42901691973) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42901682406) passed all four gates. Browser logged 30 passing scenarios including selection beyond 40 mixed results without creating a host. [Merge CI 42911053587](https://github.com/emsebi/EMS_IPAM/actions/runs/42911053587) succeeded. The next main commit `535fec9f24c3b47a9e249f19c8bbcad240db87db` changed only the published Radio screenshot.
+
+On `work/ms03-space-cidr-conflict`, the Space editor now explains the same-branch CIDR / separate-VRF limitation on an actual database conflict, preserves form input and distinguishes this 409 from other conflicts. The migration design is in the MS-03 section of the multisite contract. This change ships no DDL and does not enable multiple routing domains. Local HTTP/PGlite: 11 tests passed, including create/update conflicts and retained host/Space identity. Local Chromium was blocked at launch (process-singleton socket denied); the PR body tracks exact CI IDs. Next: inspect the inline-error browser scenario, PostgreSQL multisite test and all four gates on the PR head. If green, merge with the expected SHA. Then rehearse the additive default-domain backfill and retry/rollback in a disposable legacy PostgreSQL fixture before enabling any schema change.
+
+VM still runs the Radio-only 2.3 trial. Main would replace it; GPS and uplink persistence and multi-AP acceptance on [Radio #12](https://github.com/emsebi/EMS_IPAM/pull/12) remain open. RouterOS device login and Full/Read also remain open. No deployment.
+
+---
+
 # Current checkpoint — unregistered IP results in quick search (2026-11-11, Tehran)
 
 [PR #26](https://github.com/emsebi/EMS_IPAM/pull/26) now integrates its existing scoped search API with quick search on main `dc9fcdd364f747855b53bc8979e16bad642e3dcd`. Prior backend head `346cf809d006e8cb67a90df2f223593a35e31c97` passed all four jobs on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349722184) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349718439). Those runs predate the panel changes.
