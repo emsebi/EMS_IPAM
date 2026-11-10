@@ -1,14 +1,50 @@
-# Radio Management module
+# Radio Management (2.2.0-lab.3)
 
-This module provides a simple AP/Station relationship view. It deliberately does **not** monitor signal, performance, or device credentials.
+Documentation-focused AP / Station topology on the existing EMS_IPAM module.
+No background device polling, RouterOS scripts, new device credentials, SSH logins,
+SNMP polling, signal/CCQ measurements, alert engine or router configuration changes.
 
-- AP and Station records reuse the shared `hosts`/IPAM inventory records.
-- Search supports partial Name, IP, MAC and SSID.
-- Each Station points to a parent AP.
-- Edit, IPAM navigation and one-host Ping are separate actions.
-- The last Ping result is shown as Online, Offline or Unknown.
-- Stations without a parent AP remain visible in a dedicated section.
-- IP details remain editable from IPAM/Inventory by administrators; read-only users can inspect and Ping.
-- Removing this module folder disables the Radio navigation after restart/update.
+## Features
+- Select an AP from the existing shared IPAM/Inventory records and display its registered Stations.
+- Map: inventory Switch/System -> AP -> Stations. Each node shows available name, IP and location.
+- Record an uplink destination from the **same company and accessible Inventory**, plus port/interface. Only panel administrators can change this.
+- Persist the link in the Radio-owned PostgreSQL table `radio_doc_uplinks` (no secrets). Existing JSON uplinks are read as a legacy fallback; new saves use PostgreSQL and are included in database backups.
+- Display recorded `vendor` first; otherwise look up a **limited offline OUI hint** for MikroTik, Ubiquiti and one TP-Link prefix. Unknown and locally-administered MACs are labeled unknown. OUI identifies a MAC registrant, not product model.
+- Record each AP and Station geographic latitude/longitude with a map click or manual numeric entry, optionally clear, and display the saved pins in an authenticated OpenStreetMap view. The current Inventory location text and device model remain unchanged.
+- Device node shows saved Ping result/time, model, MAC, IP and existing connection methods. **Connect** launches the existing HTTP/HTTPS/WinBox/SSH chooser; no automatic login or secrets are transmitted in the map.
+- Keep old selection, paginated station rows, filters, edit/IPAM links, orphan stations and manual Ping in place.
+- Frontend uses the existing Inventory endpoint; the only new API is `GET/PUT /api/radio/uplink`. No database migration or core change.
 
-Version 2.0.0-rc.1 uses API 1. Select one AP to view its stations, with pagination and an orphan group. `backend/index.mjs` owns manual host Ping; `public/index.mjs` owns this page. For non-admin users, the current shared-data flow requires IPAM, Inventory and Radio grants plus assigned company/space access. Core 1.7.0-rc.2 is required for this loader. See docs/MODULE-SDK-FA.md.
+## How to use
+1. Register the AP as `Radio Mode: AP` using existing Inventory.
+2. Register station devices as `Radio Mode: Station` and select their AP.
+3. Register the destination switch or system as an ordinary Inventory device.
+4. Open Radios, select the AP, choose the destination and port, then Save link.
+5. If a Station has no known manufacturer, enter its Vendor in Inventory. Unregistered stations are not auto-discovered.
+
+## Verification and deployment safety
+`node --test docker-app/tests/radio-documentation.test.mjs`.
+Deploy only after CI passes, back up database and current module folder, preserve existing
+RADIUS secrets/configuration and volumes, and verify installed APIs and browser routes.
+Map tiles are fetched by the browser only while the map is displayed, using OSM's standard tile endpoint with visible attribution. The map frame has a dedicated narrow CSP; the Core CSP is unchanged. If internet access is unavailable, existing coordinates remain editable and saved, but map tiles may not load. Location changes are now stored in `radio_doc_locations` (PostgreSQL) and are included in the Core database backup tar.gz. Previously written JSON, if readable, is a legacy read-only fallback and should be retained separately for archival.
+
+The device-specific live MikroTik discovery is intentionally deferred: no automated
+connection is made simply by opening the map.
+
+## Location usage
+1. Open Radio, select an AP, then the target AP or Station in **AP and Station locations**.
+2. Click the OpenStreetMap background to populate latitude/longitude or type both fields.
+3. Save location. Existing pins appear for that AP and its registered Stations; click a pin to select its radio.
+4. Open online map links to view the current point on the public OSM website.
+5. To rename the physical location label or set Model/Connection methods, use the original Inventory editor.
+
+## Access control and map privacy
+- GET locations requires Radio access and limits results to host/space/company visibility.
+- Only panel admins may save coordinates; all inputs are range checked. Map iframe HTML requires login.
+- Opening OSM loads public tiles based on the currently viewed map area; device identifiers, credentials and inventory are not sent to OSM.
+
+## Physical radio links (2.2.0-lab.3)
+Choosing an AP displays its saved coordinates plus all of its saved Station positions. Blue AP and green Station pins are connected by straight geographic lines, annotated with Haversine great-circle distances (meters or kilometres). These are **approximate GPS straight-line distances**, not measured RF path lengths, link quality, road routing or cable distance. A summary lists AP-to-Station distances. The map automatically fits all saved positions, and has a button to fit all again after panning or zooming. With no AP coordinate saved, stations may show but no distance or link can be computed. Save AP and Station positions through the existing coordinate editor. No database migration, device polling or login is introduced.
+
+## Storage permission fix (2.2.0-lab.3)
+The VM container runs as unprivileged `node` (UID 1000), and its bind-mounted `/backups` is root-owned (0755). Writes to new `radio-documentation` JSON files returned EACCES. No chmod of the shared backup root, privilege elevation, or RADIUS changes were made. The versioned Radio-owned migration `001-radio-documentation.sql` adds the `radio_doc_locations` and `radio_doc_uplinks` tables. Newly saved documentation goes to PostgreSQL, is durable across app restart, and is part of the regular database dump. Old read-only JSON remains available as a fallback until the same host is edited/saved or explicitly cleared; NULL tombstones prevent resurrection. The Radio storage migration does not change Core, RADIUS or any existing inventory table.

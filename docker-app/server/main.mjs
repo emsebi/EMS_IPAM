@@ -716,11 +716,11 @@ async function searchFreeIps(spaces, ip, limit, offset = 0) {
 
 async function searchData(user, query) {
   const q = normalizePersian(query).slice(0, 160);
-  if (!q) return [];
+  if (!q) return { items: [] };
   const bootstrap = await listBootstrap(user);
   const spaces = bootstrap.spaces;
   const spaceIds = spaces.map((item) => item.id);
-  if (!spaceIds.length) return [];
+  if (!spaceIds.length) return { items: [] };
   const items = [];
   const exactIp = exactSearchIp(q);
   const compactMacQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
@@ -754,11 +754,15 @@ async function searchData(user, query) {
   items.push(...personnel.rows.map((item) => ({ kind: "personnel", ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
-  if (exactIp && items.length < 40) {
-    const candidates = await searchFreeIps(spaces, exactIp, 40 - items.length);
-    items.push(...candidates.rows.map(item => ({ kind: "free-ip", ...item })));
-  }
-  return items.slice(0, 40);
+  const visible = items.slice(0, 40);
+  if (!exactIp) return { items: visible };
+
+  // Fetch one extra candidate even when other result kinds fill all 40 slots.
+  const remaining = 40 - visible.length;
+  const candidates = await searchFreeIps(spaces, exactIp, remaining + 1);
+  visible.push(...candidates.rows.slice(0, remaining).map(item => ({ kind: "free-ip", ...item })));
+  if (candidates.rows.length > remaining) return { items: visible, nextFreeIpOffset: remaining };
+  return { items: visible };
 }
 
 async function getMapForUser(user, mapId, { write = false } = {}) {
@@ -940,7 +944,7 @@ async function api(req, res, url, user) {
       return json(res, 200, { ok: true, items: rows.slice(0, limit).map(item => ({ kind, ...item })),
         pagination: { kind, limit, offset, hasMore, nextOffset: hasMore ? offset + limit : null } });
     }
-    return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
+    return json(res, 200, { ok: true, ...await searchData(user, url.searchParams.get("q") || "") });
   }
 
   if (req.method === "GET" && pathname === "/api/inventory/export") {

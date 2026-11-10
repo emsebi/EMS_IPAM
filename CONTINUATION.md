@@ -1,3 +1,41 @@
+# Current checkpoint — unregistered IP results in quick search (2026-11-11, Tehran)
+
+[PR #26](https://github.com/emsebi/EMS_IPAM/pull/26) now integrates its existing scoped search API with quick search on main `dc9fcdd364f747855b53bc8979e16bad642e3dcd`. Prior backend head `346cf809d006e8cb67a90df2f223593a35e31c97` passed all four jobs on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349722184) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349718439). Those runs predate the panel changes.
+
+The mixed search API returns a continuation offset only if another authorized Space contains the queried IPv4 without a registered host. The panel continues at that offset, including zero when other result types occupy all 40 slots. Each page checks current access. The panel retains the existing hits and distinguishes candidates by Space in this exact-IP query. Its Persian/English button uses the existing retry and stale-response handling. Opening a candidate selects its Space. Inventory absence does not verify network availability. No schema changes.
+
+The HTTP regression passed locally with 43 synthetic branches and both zero and nonzero continuation offsets. The Playwright regression uses 42 overlapping branches, one active registration, two candidates beyond the mixed limit, then checks the selected Space and absence of an unintended write. Local Chromium could not start because the process-singleton socket was denied. The PR description records the new commit's Actions run IDs and test results. Next: check the browser scenario and all four CI jobs on this exact head, recheck current main/PR refs, then merge with the expected head if green and conflict-free. If a check fails, fix the first failing assertion on this branch.
+
+The installed Radio-only 2.3 trial has a [successful deployment run](https://github.com/emsebi/EMS_IPAM/actions/runs/42467626009). Main contains the earlier Radio 2.2 port. A full deployment would replace that multi-AP trial. Preserve it pending AP/Station GPS and uplink save/reload and user acceptance on [draft #12](https://github.com/emsebi/EMS_IPAM/pull/12). RouterOS login and Full/Read still require device evidence. No deployment from this step. Reconcile inherited release manifest drift before packaging.
+
+---
+
+# Checkpoint — Geographic Radio Map and real GitHub screenshots, 2026-11-08
+
+Radio geographic map PR #28 was merged to main at 4c567bb5b00fe625c3b14fbca533aa39b5319390. All four exact-head gates (test, browser, PostgreSQL, Docker/SSH) passed on each PR workflow. The real browser test saved GPS for fixture AP2/Station2, verified location persistence, the map frame pins, the AP–Station line and geographic distance. The map is displayed above the detailed Radio topology list; no network devices are polled automatically.
+
+Main-push CI 42466631002 passed four gates plus the new publish-browser-screenshots job. Six real browser PNG images have been committed in docs/screenshots/real: radio-geographic-map, operations-ipam, operations-sites, operations-radio, operations-radius and operations-network-snapshot. README now embeds all six (commit 3402b5fe0989573fde56a393376a6a97f9e5c39d). Screenshots use temporary fixture records and real API/browser tests, not generated imagery or a capture from the user's physical VM.
+
+VM remains unchanged. Preserve the Radio-only installation and user data; actual AP/Station location Save→reload, GPS link/distance, and AP uplink Save→reload acceptance are still open. RADIUS login/Full/Read on real RouterOS remains OPEN and NAC remains Preview. The legacy draft PR #12 contains historical changes and must not be merged wholesale; Radio module was ported in isolation through PR #28. Main can now include Radio PostgreSQL migrations without reverting that module's code, but do not claim VM validation from CI or replace deployed files without data backup and deployment comparison.
+
+Next: physical VM user acceptance for Radio GPS/AP/Station/uplink and RADIUS RouterOS login. Continue full network discovery, NAC and other mockup-to-functional work as separate bounded increments, each with exact-head CI and actual browser evidence.
+
+---
+# Current integration work — five-tab real-data Operations Overview (2026-11-08)
+
+PR #27 (`work/live-ops-dashboard-20261108`) adds an admin-only read-only module under `modules/operations-overview/`, without modifying core schema, NAS/RADIUS policies, existing Radio files or network collection routes. The source reuses existing APIs and has IPAM/Inventory, Sites/Branches, Radio AP–Station relationships, RADIUS groups/NAS Collections/access assignment/events, and saved topology tabs. GPS distance appears only if both endpoints have valid coordinates; ping/scan status is never fabricated. Deep links return to existing management pages.
+
+New Node contract tests and actual Playwright browser checks verify five tabs, AP membership (AP Two shows Station Two, not Station One), reading real RADIUS collection, no automatic network-map write/scan, and screenshots from PGlite-backed HTTP fixtures. Both exact-head runs on `0770a77250a28785fee092e0f55700545cd1b119` had all four gates SUCCESS: Core/tests, browser, real PostgreSQL/multisite and Docker/SSH. Representative browser artifact on [run 42414198797](https://github.com/emsebi/EMS_IPAM/actions/runs/42414198797) contains five `operations-*.png` screenshots. Screenshots are actual app browser tests with synthetic test data, **not current user's VM**. Further docs-only commits need their own exact-head CI before merge.
+
+IMPORTANT: This is a first functional integrated overview, **not** completion of the five conceptual mockups. Full IP utilization/availability, geographic Radio basemap and position persistence, live-status monitoring, active Cisco/MikroTik discovery verification and RouterOS Full/Read acceptance are separate pending milestones. No invention of data, credentials, devices, online state or claimed deployment.
+
+Next:
+1. Recheck PR #27 exact-head CI after README/continuation changes, plus fresh main. Merge only if all four checks on the same head succeed and it is conflict-free. The new module can be installed on a fresh isolated test VM via existing README installer, but user VM deployment is **held**.
+2. Preserve open Radio PR #12 with installed EACCES fix until user verifies GPS/AP/Station/uplink save–reload on VM; deploying main now could overwrite that correction.
+3. Continue the user-requested real functionality in bounded increments: branch IPAM utilization from authoritative allocations; branch contact/detail UI actions; Radio map based on persisted GPS with AP/station lines and distance; richer RADIUS NAS Collection/group policy maps and real RouterOS login acceptance; Smart Network Map using explicit saved/manual discovery and status timestamps. Each step requires test evidence and genuine browser screenshots before presentation.
+4. PR #26 unregistered-IP pagination is separate and must be evaluated on its own exact head; preserve its existing behavior.
+
+---
 # Scoped unregistered IP search pages (2026-11-07)
 
 PR #25 merged at `8218f8010c202732676c648b40ff9ee198b975ba` with expected head `703ccf8bdb78f9809aa6a7e687cbcafaad4b0312`. Both runs [42345676840](https://github.com/emsebi/EMS_IPAM/actions/runs/42345676840) and [42345659184](https://github.com/emsebi/EMS_IPAM/actions/runs/42345659184) passed all four jobs. The browser job recorded 27 passing scenarios including overlapping host/range pages. [Main merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349370320) also succeeded.
@@ -8,8 +46,8 @@ All 10 local HTTP/PGlite checks passed. The new fixture exercises 43 synthetic o
 
 Radio #12 awaits the user's AP/Station GPS and AP uplink save/reload on the installed lab version. No deployment. Actual RouterOS login and Full/Read remain open. Before packaging, reconcile the inherited SHA256SUMS mismatch for docs/test-results/embedded-server.log (reproduced on the exact merge tree before tests).
 
----
 
+---
 # Concurrent host and range search pages (2026-11-07)
 
 PR #24 merged at `8cc30ffe28b47d2855341834344b15a3f2c00a14` with expected head `65e4c31c038e349ed1d9c3ac210014c87405d429`. Its PR run [42340841020](https://github.com/emsebi/EMS_IPAM/actions/runs/42340841020) and push run [42340807406](https://github.com/emsebi/EMS_IPAM/actions/runs/42340807406) both passed all four jobs. The browser job logged 26 passing scenarios, including failed first/later pages and successful retry. The [main merge run 42345298002](https://github.com/emsebi/EMS_IPAM/actions/runs/42345298002) also passed all four jobs.

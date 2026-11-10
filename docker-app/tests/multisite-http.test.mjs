@@ -295,6 +295,18 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(mixed.items.length, 40);
     assert.deepEqual(mixed.items.filter(h => h.kind === 'host').map(h => h.spaceId), [registered.spaceId]);
     assert.deepEqual(mixed.items.filter(h => h.kind === 'free-ip'), all.slice(0,39));
+    assert.equal(mixed.nextFreeIpOffset, 39);
+    const rest = await admin('GET', url + '&offset=' + mixed.nextFreeIpOffset);
+    assert.deepEqual(rest.items, all.slice(39));
+    // Other kinds may fill the entire mixed page. The first candidate still has offset zero.
+    for (let i = 0; i < 25; i++) {
+      await admin('PUT', '/api/hosts', { spaceId: registered.spaceId, ip: '203.0.113.' + (100 + i), name: 'Reference to ' + ip });
+      await admin('POST', '/api/prefixes', { spaceId: registered.spaceId, cidr: '203.0.113.' + i + '/32', name: 'Reference to ' + ip });
+    }
+    const full = await admin('GET', '/api/search?q=' + ip);
+    assert.equal(full.items.length, 40);
+    assert.equal(full.items.some(item => item.kind === 'free-ip'), false);
+    assert.equal(full.nextFreeIpOffset, 0);
     for (const query of ['', '203.0.113', '203.0.113.999']) {
       const empty = await admin('GET', '/api/search?kind=free-ip&q=' + query);
       assert.deepEqual(empty.items, []);

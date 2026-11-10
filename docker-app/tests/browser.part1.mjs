@@ -154,7 +154,24 @@ try {
   await page.screenshot({ path: path.join(outputDir, 'device-types.png'), fullPage: true });
 
   await page.locator('#radiosButton').click();
+
+  // Persist real map coordinates via the Radio API, then verify the actual OSM-frame overlay.
+  await api('/api/radio/location','PUT',{hostId:'ap2',latitude:35.689200,longitude:51.389000});
+  await api('/api/radio/location','PUT',{hostId:'st2',latitude:35.696900,longitude:51.395600});
   await page.locator('.radio-ap-choice[data-id=ap2]').click();
+  await page.locator('#radioGeoFrame').waitFor({state:'visible'});
+  await page.waitForFunction(()=>document.querySelector('#radioGeoDistances')?.textContent.includes('Station Two'));
+  await page.waitForFunction(()=>document.querySelector('#radioGeoDistances')?.textContent.includes('km') ||
+    document.querySelector('#radioGeoDistances')?.textContent.includes(' m'));
+  const geographicFrame=page.frameLocator('#radioGeoFrame');
+  await geographicFrame.locator('.radio-pin.ap').waitFor();
+  await geographicFrame.locator('.radio-pin.station').waitFor();
+  assert.equal(await geographicFrame.locator('.radio-link').count(),1);
+  const savedRadioLocations=await api('/api/radio/locations?apId=ap2');
+  assert.equal(savedRadioLocations.items.length,2);
+  await page.locator('.radio-geo-panel').screenshot({path:path.join(outputDir,'radio-geographic-map.png')});
+  check('Radio geographic map persists AP and station GPS and renders actual OSM overlay, link and distance');
+
   await page.locator('.radio-station-list').getByText('Station Two', { exact: true }).waitFor();
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
   await page.locator('#addSelectedStation').click();
@@ -313,6 +330,40 @@ try {
   await page.locator('.r-tabs button[data-tab="clients"]').click();
   await page.locator('.r-list').getByText('Browser NAS', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(outputDir, 'radius.png'), fullPage: true });
+
+  // New integration panel: real DB records, no synthetic product screenshot.
+  await page.locator('button.module-nav-link[data-module-id="operations-overview"]').click();
+  await page.locator('.ov-tabs button').first().waitFor();
+  assert.equal(await page.locator('.ov-tabs button').count(),5);
+  await page.locator('.ov-root .ov-stat').first().waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-ipam.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(1).click();
+  await page.locator('.ov-facts').waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-sites.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(2).click();
+  await page.locator('.ov-panel select.ov-select').selectOption('ap2');
+  await page.locator('.ov-graph').waitFor();
+  await page.locator('.ov-table').getByText('Station Two',{exact:true}).waitFor();
+  assert.equal(await page.locator('.ov-table').getByText('Station One',{exact:true}).count(),0);
+  await page.screenshot({path:path.join(outputDir,'operations-radio.png'),fullPage:true});
+  await page.locator('.ov-tabs button').nth(3).click();
+  await page.locator('.ov-table').getByText('Browser Hotspot',{exact:true}).waitFor();
+  await page.screenshot({path:path.join(outputDir,'operations-radius.png'),fullPage:true});
+  let unexpectedScan=false;
+  const countMapWrites = req => {
+    if (req.url().includes('/api/network-map/') && req.method()!=='GET') unexpectedScan=true;
+  };
+  page.on('request',countMapWrites);
+  await page.locator('.ov-tabs button').nth(4).click();
+  await page.locator('.ov-toolbar select.ov-select').selectOption('test-co');
+  await page.locator('.ov-root .ov-metrics').waitFor();
+  assert.equal(unexpectedScan,false,'overview must not initiate collection or layout writes');
+  page.off('request',countMapWrites);
+  await page.screenshot({path:path.join(outputDir,'operations-network-snapshot.png'),fullPage:true});
+  check('Operations Overview five tabs use saved records, preserve AP ownership and avoid automatic scans');
+  await page.locator('button.module-nav-link[data-module-id="radius"]').click();
+  await page.locator('.r-tabs').waitFor();
+
 
   // Keep map-only overlapping inventory out of earlier module layout fixtures.
   const inventoryBeforeTrace=(await api('/api/inventory')).items.map(h=>h.id).sort();
@@ -871,6 +922,48 @@ try {
   assert.deepEqual(visibleRows.sort(), expectedRows.sort(), 'both page orders must retain every host and range in its branch exactly once');
   assert.equal(await page.locator('#searchMoreHosts, #searchMorePrefixes').count(), 0);
   check('overlapping host and range pages preserve every branch result in both response orders');
+
+  // The mixed page holds one host and 39 candidates. Two more Spaces share the IP.
+  const candidateIp = '203.0.113.77';
+  const candidateSites = new Map();
+  for (let i = 0; i < 42; i++) {
+    const name = 'Synthetic candidate branch ' + String(i).padStart(2, '0');
+    const company = await api('/api/companies', 'POST', { name, kind: 'branch' }, 201);
+    const space = await api('/api/spaces', 'POST', { companyId: company.id, name: 'Shared LAN', cidr: '203.0.113.0/24' }, 201);
+    candidateSites.set(name, space.id);
+    if (i === 0) await api('/api/hosts', 'PUT', { spaceId: space.id, ip: candidateIp, name: 'Registered in branch 00' });
+  }
+  await page.reload();
+  await page.locator('#deviceTypesButton').waitFor();
+  await page.locator('#searchInput').fill(candidateIp);
+  const moreCandidateSpaces = page.getByRole('button', { name: 'More networks where this IP is unregistered', exact: true });
+  await moreCandidateSpaces.waitFor();
+  const hits = page.locator('#searchResults .search-item');
+  const branchNames = () => hits.locator('small').filter({ hasText: /^Branch: / }).allTextContents();
+  const before = await branchNames();
+  assert.equal(before.length, 40);
+  const laterName = [...candidateSites.keys()].find(name => !before.includes('Branch: ' + name));
+  assert.ok(laterName);
+  await Promise.all([
+    page.waitForResponse(r => r.ok() && r.url().includes('kind=free-ip') && r.url().includes('offset=39')),
+    moreCandidateSpaces.click(),
+  ]);
+  await moreCandidateSpaces.waitFor({ state: 'hidden' });
+  assert.deepEqual((await branchNames()).sort(), [...candidateSites.keys()].map(name => 'Branch: ' + name).sort());
+  assert.equal(await hits.filter({ hasText: 'Registered in branch 00' }).count(), 1);
+  const laterCandidate = hits.filter({ hasText: 'Branch: ' + laterName });
+  assert.ok((await laterCandidate.textContent()).includes('Not in inventory; availability unverified'));
+  await Promise.all([
+    page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/spaces/' + candidateSites.get(laterName) + '/data'),
+    laterCandidate.click(),
+  ]);
+  await page.locator('#hostDialog').waitFor();
+  assert.equal(await page.locator('#hostIp').inputValue(), candidateIp);
+  assert.equal(await page.locator('#hostName').inputValue(), '');
+  await page.locator('#hostDialog [data-close]').first().click();
+  const saved = (await api('/api/inventory')).items.filter(host => host.ip === candidateIp);
+  assert.deepEqual(saved.map(host => host.spaceId), [candidateSites.get('Synthetic candidate branch 00')]);
+  check('unregistered IP paging preserves mixed results and opens a later branch without creating a host');
 
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
