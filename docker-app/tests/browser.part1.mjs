@@ -604,6 +604,23 @@ try {
   await page.locator('#aboutDialog [data-close]').click();
   check('Donation addresses, wallet links, bundled QRs, copy/fallback, English/Persian labels and responsive About dialog');
 
+  await page.goto(baseURL + '/#/company/test-co');
+  await page.locator('#addCurrentSpace').click();
+  await page.locator('#spaceName').fill('Second VRF');
+  await page.locator('#spaceCidr').fill('192.0.2.0/24');
+  const duplicateResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/spaces' && r.request().method() === 'POST');
+  await page.locator('#spaceForm [type=submit]').click();
+  assert.equal((await duplicateResponse).status(), 409);
+  await page.locator('#spaceFormError').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#spaceFormError').textContent(), 'Each CIDR can be registered only once per branch. Reusing it in separate VRFs within a branch is not yet supported.');
+  assert.equal(await page.locator('#spaceName').inputValue(), 'Second VRF');
+  assert.equal(await page.locator('#spaceCidr').inputValue(), '192.0.2.0/24');
+  await page.locator('#spaceDialog [data-close]').first().click();
+  await page.locator('#addCurrentSpace').click();
+  assert.equal(await page.locator('#spaceFormError').textContent(), '');
+  await page.locator('#spaceDialog [data-close]').first().click();
+  check('same-branch duplicate CIDR explains the VRF limit and preserves the form');
+
   // Add these synthetic branches after Radio/report checks to keep their fixtures isolated.
   const searchSites = [];
   for (const label of ['North', 'South']) {
