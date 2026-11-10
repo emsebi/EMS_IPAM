@@ -107,6 +107,7 @@ jobs:
         run: |
           node --test tests/network-map-postgres.mjs
           node --test tests/multisite-http.test.mjs
+          node --test tests/routing-domain-upgrade.test.mjs
 
   network-map-docker:
     runs-on: ubuntu-latest

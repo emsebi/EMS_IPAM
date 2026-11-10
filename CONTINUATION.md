@@ -1,3 +1,15 @@
+# Current checkpoint — MS-03 default-domain upgrade rehearsal (2026-11-11, Tehran)
+
+[PR #29](https://github.com/emsebi/EMS_IPAM/pull/29) merged with expected head `f450d2dd362a255e2481be339514f459b5c05a02` at `91835cde6ba23f0b5bc72655b829fb411a52fa7e`. All four gates passed on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42911993805) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42911944577). The browser logged 31 passing scenarios including retention of form values on a duplicate CIDR. PostgreSQL verified the create/edit conflict with both original Spaces and hosts intact. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920110806) also succeeded. Base `014b53867ea15ba6caca485b64d85a8da1cdce40` includes the automatic screenshot publication.
+
+Branch `work/ms03-default-domain-rehearsal` adds a test-only rehearsal using the current baseline schema. Two branches share a CIDR and host IP. The test checks active and recycled Spaces, an empty branch, original hosts/prefixes and Company/Space grants. A cross-branch assignment fails the composite foreign key after backfill; rolling back restores the original schema and data. Retrying assigns one stable default per company. An old-style Space insert still succeeds and a repeat backfill catches it, while the old duplicate-CIDR constraint remains effective. The rehearsal passed locally on PGlite. Nothing invokes this SQL at application startup.
+
+Next: inspect the new test by name in the PostgreSQL 16 job and all four gates on the exact PR head. Run IDs and handoff are in the PR description. If green, merge using its expected head. Before enabling a production migration, rehearse a real backup/restore round trip and writes by the old application during the compatibility window, including creation and transfer of Spaces. Keep the existing CIDR constraint through import/export/search compatibility checks.
+
+The VM retains the [Radio 2.3 trial](https://github.com/emsebi/EMS_IPAM/pull/12) pending AP/Station coordinate and uplink save/reload acceptance. RouterOS Full/Read device login remains open. No deployment.
+
+---
+
 # Current checkpoint — same-branch CIDR conflicts (MS-03), 2026-11-11
 
 [PR #26](https://github.com/emsebi/EMS_IPAM/pull/26) merged at `6b2c0814c16fa98834bd05f9ed787a269ca3885c` with expected head `3b0619afc805a4d5617a97cc22bc7fd269d6a24c`. Both [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42901691973) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42901682406) passed all four gates. Browser logged 30 passing scenarios including selection beyond 40 mixed results without creating a host. [Merge CI 42911053587](https://github.com/emsebi/EMS_IPAM/actions/runs/42911053587) succeeded. The next main commit `535fec9f24c3b47a9e249f19c8bbcad240db87db` changed only the published Radio screenshot.
