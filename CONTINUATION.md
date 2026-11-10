@@ -1,3 +1,15 @@
+# Current checkpoint — unregistered IP results in quick search (2026-11-11, Tehran)
+
+[PR #26](https://github.com/emsebi/EMS_IPAM/pull/26) now integrates its existing scoped search API with quick search on main `dc9fcdd364f747855b53bc8979e16bad642e3dcd`. Prior backend head `346cf809d006e8cb67a90df2f223593a35e31c97` passed all four jobs on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349722184) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349718439). Those runs predate the panel changes.
+
+The mixed search API returns a continuation offset only if another authorized Space contains the queried IPv4 without a registered host. The panel continues at that offset, including zero when other result types occupy all 40 slots. Each page checks current access. The panel retains the existing hits and distinguishes candidates by Space in this exact-IP query. Its Persian/English button uses the existing retry and stale-response handling. Opening a candidate selects its Space. Inventory absence does not verify network availability. No schema changes.
+
+All 227 local Node core tests passed, including the HTTP regression with 43 synthetic branches and both zero and nonzero continuation offsets. The Playwright regression uses 42 overlapping branches, one active registration, two candidates beyond the mixed limit, then checks the selected Space and absence of an unintended write. Local Chromium could not start because the process-singleton socket was denied. The PR description records the new commit's Actions run IDs and test results. Next: check the browser scenario and all four CI jobs on this exact head, recheck current main/PR refs, then merge with the expected head if green and conflict-free. If a check fails, fix the first failing assertion on this branch.
+
+The installed Radio-only 2.3 trial has a [successful deployment run](https://github.com/emsebi/EMS_IPAM/actions/runs/42467626009). Main contains the earlier Radio 2.2 port. A full deployment would replace that multi-AP trial. Preserve it pending AP/Station GPS and uplink save/reload and user acceptance on [draft #12](https://github.com/emsebi/EMS_IPAM/pull/12). RouterOS login and Full/Read still require device evidence. No deployment from this step. Reconcile inherited release manifest drift before packaging.
+
+---
+
 # Checkpoint — Geographic Radio Map and real GitHub screenshots, 2026-11-08
 
 Radio geographic map PR #28 was merged to main at 4c567bb5b00fe625c3b14fbca533aa39b5319390. All four exact-head gates (test, browser, PostgreSQL, Docker/SSH) passed on each PR workflow. The real browser test saved GPS for fixture AP2/Station2, verified location persistence, the map frame pins, the AP–Station line and geographic distance. The map is displayed above the detailed Radio topology list; no network devices are polled automatically.
@@ -22,6 +34,18 @@ Next:
 2. Preserve open Radio PR #12 with installed EACCES fix until user verifies GPS/AP/Station/uplink save–reload on VM; deploying main now could overwrite that correction.
 3. Continue the user-requested real functionality in bounded increments: branch IPAM utilization from authoritative allocations; branch contact/detail UI actions; Radio map based on persisted GPS with AP/station lines and distance; richer RADIUS NAS Collection/group policy maps and real RouterOS login acceptance; Smart Network Map using explicit saved/manual discovery and status timestamps. Each step requires test evidence and genuine browser screenshots before presentation.
 4. PR #26 unregistered-IP pagination is separate and must be evaluated on its own exact head; preserve its existing behavior.
+
+---
+# Scoped unregistered IP search pages (2026-11-07)
+
+PR #25 merged at `8218f8010c202732676c648b40ff9ee198b975ba` with expected head `703ccf8bdb78f9809aa6a7e687cbcafaad4b0312`. Both runs [42345676840](https://github.com/emsebi/EMS_IPAM/actions/runs/42345676840) and [42345659184](https://github.com/emsebi/EMS_IPAM/actions/runs/42345659184) passed all four jobs. The browser job recorded 27 passing scenarios including overlapping host/range pages. [Main merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42349370320) also succeeded.
+
+`GET /api/search?kind=free-ip&q=<IPv4>` pages through the authorized Spaces containing that address, most-specific CIDR first with Space ID breaking ties. It excludes active host registrations before applying limit/offset. The mixed endpoint retains its original 40-result limit. Candidate evidence is inventory-only, availability unverified, with no observation or edit time. Alternate decimal spellings of an exact IPv4 query use the stored canonical address. Each page reads current grants. Like existing host/range paging, offsets do not give snapshot isolation during concurrent changes. No schema or UI change.
+
+All 10 local HTTP/PGlite checks passed. The new fixture exercises 43 synthetic overlapping Spaces, registered and soft-deleted hosts, both page boundaries, revoked access, branch/Space metadata and the mixed endpoint. Next: check both exact-head Actions runs recorded in this PR, particularly the multisite test on PostgreSQL 16. Only merge with a fresh base and expected head after all four jobs pass. Next UI step: expose free-IP paging for an exact address even when the mixed list has no candidate in its first 40 rows. Deduplicate by Space and IP, retain other result types, and verify selecting a later candidate opens the correct Space without writing a host.
+
+Radio #12 awaits the user's AP/Station GPS and AP uplink save/reload on the installed lab version. No deployment. Actual RouterOS login and Full/Read remain open. Before packaging, reconcile the inherited SHA256SUMS mismatch for docs/test-results/embedded-server.log (reproduced on the exact merge tree before tests).
+
 
 ---
 # Concurrent host and range search pages (2026-11-07)

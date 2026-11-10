@@ -22,6 +22,7 @@ import {
   contains,
   defaultGateway,
   intToIpv4,
+  ipv4ToInt,
   parseCidr,
   validateChildCidr,
   validateHostIp,
@@ -657,6 +658,11 @@ async function inventoryData(user) {
   return hosts.rows.map((item) => ({ ...item, devicePorts: portsByHost.get(item.id) || [] }));
 }
 
+function exactSearchIp(query) {
+  const ip = ipv4ToInt(query);
+  return ip === null ? null : intToIpv4(ip);
+}
+
 async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset = 0) {
   return pool.query(
       `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
@@ -664,7 +670,7 @@ async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset 
               'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
-          (h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
+          (h.ip=$3 OR h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
            ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
            translate(h.owner,'كيى','کیی') ILIKE $2 OR translate(h.notes,'كيى','کیی') ILIKE $2 OR h.custom_fields::text ILIKE $2)
         ORDER BY CASE WHEN h.ip=$3 THEN 0 ELSE 1 END,h.ip,h.id LIMIT $5 OFFSET $6`,
@@ -685,16 +691,38 @@ async function searchPrefixes(spaceIds, q, limit, offset = 0) {
     );
 }
 
+async function searchFreeIps(spaces, ip, limit, offset = 0) {
+  if (!ip) return { rows: [] };
+  const address = parseCidr(`${ip}/32`);
+  const containing = spaces.map(space => ({ id: space.id, network: parseCidr(space.cidr) }))
+    .filter(({ network }) => network && contains(network, address))
+    .sort((a, b) => b.network.prefix - a.network.prefix || a.id.localeCompare(b.id));
+  if (!containing.length) return { rows: [] };
+
+  // Exclude registered hosts in their own Space before applying the page boundary.
+  return pool.query(
+    `SELECT $2::text AS ip,s.id AS "spaceId",s.name AS "spaceName",s.cidr AS "spaceCidr",
+            c.id AS "companyId",c.name AS "companyName",'ipam-inventory'::text AS source,
+            NULL::timestamptz AS "recordUpdatedAt",NULL::timestamptz AS "observedAt",'unverified'::text AS availability
+       FROM unnest($1::text[]) WITH ORDINALITY AS candidate(id,position)
+       JOIN address_spaces s ON s.id=candidate.id JOIN companies c ON c.id=s.company_id
+      WHERE s.deleted_at IS NULL AND c.deleted_at IS NULL AND NOT EXISTS (
+        SELECT 1 FROM hosts h WHERE h.space_id=s.id AND h.ip=$2 AND h.deleted_at IS NULL
+      )
+      ORDER BY candidate.position LIMIT $3 OFFSET $4`,
+    [containing.map(space => space.id), ip, limit, offset],
+  );
+}
+
 async function searchData(user, query) {
   const q = normalizePersian(query).slice(0, 160);
-  if (!q) return [];
+  if (!q) return { items: [] };
   const bootstrap = await listBootstrap(user);
   const spaces = bootstrap.spaces;
-  const companyNames = new Map(bootstrap.companies.map(item => [item.id, item.name]));
   const spaceIds = spaces.map((item) => item.id);
-  if (!spaceIds.length) return [];
+  if (!spaceIds.length) return { items: [] };
   const items = [];
-  const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
+  const exactIp = exactSearchIp(q);
   const compactMacQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
   const [hosts, prefixes, companies, personnel] = await Promise.all([
@@ -726,24 +754,15 @@ async function searchData(user, query) {
   items.push(...personnel.rows.map((item) => ({ kind: "personnel", ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
-  if (exactIp) {
-    const address = parseCidr(`${exactIp}/32`);
-    // Do not infer absence from the capped host search result.
-    const registered = await pool.query(
-      'SELECT DISTINCT space_id AS "spaceId" FROM hosts WHERE space_id=ANY($1::text[]) AND ip=$2 AND deleted_at IS NULL',
-      [spaceIds, exactIp],
-    );
-    const registeredSpaces = new Set(registered.rows.map(item => item.spaceId));
-    const containing = spaces.map((item) => ({ item, info: parseCidr(item.cidr) }))
-      .filter(({ item, info }) => info && address && contains(info, address) && !registeredSpaces.has(item.id))
-      .sort((a, b) => b.info.prefix - a.info.prefix || a.item.id.localeCompare(b.item.id));
-    items.push(...containing.map(({ item }) => ({
-      kind: "free-ip", ip: exactIp, spaceId: item.id, spaceName: item.name, spaceCidr: item.cidr,
-      companyId: item.companyId, companyName: companyNames.get(item.companyId),
-      source: "ipam-inventory", recordUpdatedAt: null, observedAt: null, availability: "unverified",
-    })));
-  }
-  return items.slice(0, 40);
+  const visible = items.slice(0, 40);
+  if (!exactIp) return { items: visible };
+
+  // Fetch one extra candidate even when other result kinds fill all 40 slots.
+  const remaining = 40 - visible.length;
+  const candidates = await searchFreeIps(spaces, exactIp, remaining + 1);
+  visible.push(...candidates.rows.slice(0, remaining).map(item => ({ kind: "free-ip", ...item })));
+  if (candidates.rows.length > remaining) return { items: visible, nextFreeIpOffset: remaining };
+  return { items: visible };
 }
 
 async function getMapForUser(user, mapId, { write = false } = {}) {
@@ -898,7 +917,7 @@ async function api(req, res, url, user) {
 
   if (req.method === "GET" && pathname === "/api/search") {
     const kind = url.searchParams.get("kind");
-    if (kind === "host" || kind === "prefix") {
+    if (kind === "host" || kind === "prefix" || kind === "free-ip") {
       const readPageInteger = (key, fallback, max) => {
         const raw = url.searchParams.get(key);
         if (raw === null) return fallback;
@@ -910,16 +929,22 @@ async function api(req, res, url, user) {
       const offset = readPageInteger("offset", 0, 2147483647);
       const q = normalizePersian(url.searchParams.get("q") || "").slice(0, 160);
       // Re-evaluate authorization on every page. Offset paging is not a snapshot.
-      const spaceIds = (await listBootstrap(user)).spaces.map(item => item.id);
-      const exactIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(q) ? q : null;
-      const rows = q && spaceIds.length ? (await (kind === "prefix"
-        ? searchPrefixes(spaceIds, q, limit + 1, offset)
-        : searchHosts(spaceIds, q, exactIp, q.toLowerCase().replace(/[^0-9a-f]/g, ""), limit + 1, offset))).rows : [];
+      const { spaces } = await listBootstrap(user);
+      const spaceIds = spaces.map(item => item.id);
+      let rows = [];
+      if (q && spaceIds.length) {
+        const exactIp = exactSearchIp(q);
+        let result;
+        if (kind === "free-ip") result = await searchFreeIps(spaces, exactIp, limit + 1, offset);
+        else if (kind === "prefix") result = await searchPrefixes(spaceIds, q, limit + 1, offset);
+        else result = await searchHosts(spaceIds, q, exactIp, q.toLowerCase().replace(/[^0-9a-f]/g, ""), limit + 1, offset);
+        rows = result.rows;
+      }
       const hasMore = rows.length > limit;
       return json(res, 200, { ok: true, items: rows.slice(0, limit).map(item => ({ kind, ...item })),
         pagination: { kind, limit, offset, hasMore, nextOffset: hasMore ? offset + limit : null } });
     }
-    return json(res, 200, { ok: true, items: await searchData(user, url.searchParams.get("q") || "") });
+    return json(res, 200, { ok: true, ...await searchData(user, url.searchParams.get("q") || "") });
   }
 
   if (req.method === "GET" && pathname === "/api/inventory/export") {

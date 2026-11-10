@@ -1463,6 +1463,7 @@ async function chooseSearchItem(item) {
 
 let searchGeneration = 0;
 let searchPages = {};
+const searchPageButtons = { host: "searchMoreHosts", prefix: "searchMorePrefixes", "free-ip": "searchMoreFreeIps" };
 
 function renderSearchItems() {
   const resultsNode = $("searchResults");
@@ -1486,19 +1487,14 @@ function renderSearchItems() {
   for (const [kind, page] of Object.entries(searchPages)) {
     if (page.nextOffset !== null) {
       const button = document.createElement("button");
-      button.id = kind === "host" ? "searchMoreHosts" : "searchMorePrefixes";
+      button.id = searchPageButtons[kind];
       button.className = "btn";
       button.disabled = page.loading;
-      const en = state.language === "en";
-      const more = kind === "host" ? (en ? "More hosts" : "میزبان‌های بیشتر") : (en ? "More ranges" : "رنج‌های بیشتر");
-      const first = kind === "host" ? (en ? "Browse all matching hosts" : "نمایش همه میزبان‌های منطبق") : (en ? "Browse all matching ranges" : "نمایش همه رنج‌های منطبق");
-      button.textContent = page.started ? more : first;
       if (page.loading) {
-        button.textContent = en ? "Loading…" : "در حال دریافت…";
-      } else if (page.error) {
-        button.textContent = kind === "host"
-          ? (en ? "Retry loading hosts" : "تلاش دوباره برای دریافت میزبان‌ها")
-          : (en ? "Retry loading ranges" : "تلاش دوباره برای دریافت رنج‌ها");
+        button.textContent = t("search.page.loading");
+      } else {
+        const action = page.error ? "retry" : page.started ? "more" : "first";
+        button.textContent = t(`search.page.${kind}.${action}`);
       }
       button.addEventListener("click", event => {
         // Rendering detaches this button before the document outside-click handler runs.
@@ -1525,8 +1521,16 @@ async function loadMoreSearchItems(kind) {
     const result = await request(`/api/search?kind=${kind}&q=${encodeURIComponent(page.query)}&limit=40&offset=${page.nextOffset}`);
     if (searchPages[kind] !== page || page.generation !== searchGeneration) return;
     const retained = page.started ? state.searchItems : state.searchItems.filter(item => item.kind !== kind);
-    const ids = new Set(retained.filter(item => item.kind === kind).map(item => item.id));
-    state.searchItems = [...retained, ...(result.items || []).filter(item => item.kind === kind && !ids.has(item.id) && ids.add(item.id))];
+    // Each unregistered result represents this query's IP in one Space and has no host ID.
+    const key = item => kind === "free-ip" ? item.spaceId : item.id;
+    const seen = new Set(retained.filter(item => item.kind === kind).map(key));
+    const merged = [...retained];
+    for (const item of result.items || []) {
+      if (item.kind !== kind || seen.has(key(item))) continue;
+      seen.add(key(item));
+      merged.push(item);
+    }
+    state.searchItems = merged;
     state.searchIndex = -1;
     page.started = true;
     page.nextOffset = result.pagination?.hasMore ? result.pagination.nextOffset : null;
@@ -1559,6 +1563,9 @@ function doSearch(query) {
       const items = result.items || [];
       state.searchItems = items;
       searchPages = Object.fromEntries(["host", "prefix"].map(kind => [kind, { query: value, generation, nextOffset: 0, started: false, loading: false, error: "" }]));
+      if (Number.isInteger(result.nextFreeIpOffset)) {
+        searchPages["free-ip"] = { query: value, generation, nextOffset: result.nextFreeIpOffset, started: true, loading: false, error: "" };
+      }
       renderSearchItems();
     } catch (error) { if (generation === searchGeneration) resultsNode.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; }
   }, 180);

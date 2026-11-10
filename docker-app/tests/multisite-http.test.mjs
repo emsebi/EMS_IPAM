@@ -260,4 +260,73 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const legacy=await admin('GET','/api/search?q=Paging%20fixture');
     assert.equal(legacy.items.length,30);assert.equal(legacy.pagination,undefined);
   });
+  await t.test('unregistered IP pages retain ordered authorized Spaces and recheck grants', async () => {
+    const ip = '203.0.113.77';
+    const url = '/api/search?kind=free-ip&q=' + ip;
+    const spaces = [];
+    for (let i = 0; i < 43; i++) {
+      const companyName = 'Synthetic paging branch ' + i;
+      const { id: companyId } = await admin('POST', '/api/companies', { name: companyName, kind: 'branch', parentCompanyId: parent }, 201);
+      const cidr = i % 2 ? '203.0.112.0/23' : '203.0.113.0/24';
+      const { id: spaceId } = await admin('POST', '/api/spaces', { companyId, name: 'Shared LAN', cidr }, 201);
+      spaces.push({ companyId, companyName, spaceId, cidr });
+    }
+    const ordered = spaces.sort((a, b) => Number(b.cidr.split('/')[1]) - Number(a.cidr.split('/')[1]) || a.spaceId.localeCompare(b.spaceId));
+    const [registered, ...candidates] = ordered;
+    await admin('PUT', '/api/hosts', { spaceId: registered.spaceId, ip, name: 'Registered only here' });
+    // A soft-deleted host is no longer registered.
+    await admin('PUT', '/api/hosts', { spaceId: candidates[0].spaceId, ip, name: 'Retired fixture' });
+    await admin('DELETE', '/api/hosts/' + candidates[0].spaceId + '/' + ip);
+
+    const first = await admin('GET', url);
+    assert.deepEqual(first.pagination, { kind: 'free-ip', limit: 40, offset: 0, hasMore: true, nextOffset: 40 });
+    const last = await admin('GET', url + '&offset=' + first.pagination.nextOffset);
+    assert.deepEqual(last.pagination, { kind: 'free-ip', limit: 40, offset: 40, hasMore: false, nextOffset: null });
+    const all = [...first.items, ...last.items];
+    assert.deepEqual(all.map(h => h.spaceId), candidates.map(s => s.spaceId));
+    for (const [index, hit] of all.entries()) {
+      const space = candidates[index];
+      assert.deepEqual(hit, { kind: 'free-ip', ip, companyId: space.companyId, companyName: space.companyName,
+        spaceId: space.spaceId, spaceCidr: space.cidr, spaceName: 'Shared LAN', source: 'ipam-inventory',
+        availability: 'unverified', observedAt: null, recordUpdatedAt: null });
+    }
+    const mixed = await admin('GET', '/api/search?q=203.000.113.077');
+    assert.equal(mixed.pagination, undefined);
+    assert.equal(mixed.items.length, 40);
+    assert.deepEqual(mixed.items.filter(h => h.kind === 'host').map(h => h.spaceId), [registered.spaceId]);
+    assert.deepEqual(mixed.items.filter(h => h.kind === 'free-ip'), all.slice(0,39));
+    assert.equal(mixed.nextFreeIpOffset, 39);
+    const rest = await admin('GET', url + '&offset=' + mixed.nextFreeIpOffset);
+    assert.deepEqual(rest.items, all.slice(39));
+    // Other kinds may fill the entire mixed page. The first candidate still has offset zero.
+    for (let i = 0; i < 25; i++) {
+      await admin('PUT', '/api/hosts', { spaceId: registered.spaceId, ip: '203.0.113.' + (100 + i), name: 'Reference to ' + ip });
+      await admin('POST', '/api/prefixes', { spaceId: registered.spaceId, cidr: '203.0.113.' + i + '/32', name: 'Reference to ' + ip });
+    }
+    const full = await admin('GET', '/api/search?q=' + ip);
+    assert.equal(full.items.length, 40);
+    assert.equal(full.items.some(item => item.kind === 'free-ip'), false);
+    assert.equal(full.nextFreeIpOffset, 0);
+    for (const query of ['', '203.0.113', '203.0.113.999']) {
+      const empty = await admin('GET', '/api/search?kind=free-ip&q=' + query);
+      assert.deepEqual(empty.items, []);
+      assert.equal(empty.pagination.nextOffset, null);
+    }
+    await admin('GET', url + '&limit=0', undefined, 400);
+    const grants = { companyIds: [candidates[0].companyId], spaceIds: [candidates[1].spaceId] };
+    const { id: readerId } = await admin('POST', '/api/users', { username: 'candidate-reader', password: 'Test-Password-01',
+      role: 'viewer', moduleIds: ['ipam'], ...grants }, 201);
+    const reader = await client('candidate-reader');
+    const page = await reader('GET', url + '&limit=1');
+    assert.deepEqual(page.items, [all[0]]);
+    assert.equal(page.pagination.nextOffset, 1);
+    const continuation = url + '&limit=1&offset=' + page.pagination.nextOffset;
+    const allowed = await reader('GET', continuation);
+    assert.deepEqual(allowed.items, [all[1]]);
+    assert.equal(allowed.pagination.hasMore, false);
+    await admin('PUT', '/api/users/' + readerId, { role: 'viewer', companyIds: [], spaceIds: [], moduleIds: ['ipam'] });
+    const revoked = await reader('GET', continuation);
+    assert.deepEqual(revoked.items, []);
+    assert.equal(revoked.pagination.nextOffset, null);
+  });
 });

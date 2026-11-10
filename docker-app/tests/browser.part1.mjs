@@ -923,6 +923,48 @@ try {
   assert.equal(await page.locator('#searchMoreHosts, #searchMorePrefixes').count(), 0);
   check('overlapping host and range pages preserve every branch result in both response orders');
 
+  // The mixed page holds one host and 39 candidates. Two more Spaces share the IP.
+  const candidateIp = '203.0.113.77';
+  const candidateSites = new Map();
+  for (let i = 0; i < 42; i++) {
+    const name = 'Synthetic candidate branch ' + String(i).padStart(2, '0');
+    const company = await api('/api/companies', 'POST', { name, kind: 'branch' }, 201);
+    const space = await api('/api/spaces', 'POST', { companyId: company.id, name: 'Shared LAN', cidr: '203.0.113.0/24' }, 201);
+    candidateSites.set(name, space.id);
+    if (i === 0) await api('/api/hosts', 'PUT', { spaceId: space.id, ip: candidateIp, name: 'Registered in branch 00' });
+  }
+  await page.reload();
+  await page.locator('#deviceTypesButton').waitFor();
+  await page.locator('#searchInput').fill(candidateIp);
+  const moreCandidateSpaces = page.getByRole('button', { name: 'More networks where this IP is unregistered', exact: true });
+  await moreCandidateSpaces.waitFor();
+  const hits = page.locator('#searchResults .search-item');
+  const branchNames = () => hits.locator('small').filter({ hasText: /^Branch: / }).allTextContents();
+  const before = await branchNames();
+  assert.equal(before.length, 40);
+  const laterName = [...candidateSites.keys()].find(name => !before.includes('Branch: ' + name));
+  assert.ok(laterName);
+  await Promise.all([
+    page.waitForResponse(r => r.ok() && r.url().includes('kind=free-ip') && r.url().includes('offset=39')),
+    moreCandidateSpaces.click(),
+  ]);
+  await page.locator('#searchMoreFreeIps').waitFor({ state: 'detached' });
+  assert.deepEqual((await branchNames()).sort(), [...candidateSites.keys()].map(name => 'Branch: ' + name).sort());
+  assert.equal(await hits.filter({ hasText: 'Registered in branch 00' }).count(), 1);
+  const laterCandidate = hits.filter({ hasText: 'Branch: ' + laterName });
+  assert.ok((await laterCandidate.textContent()).includes('Not in inventory; availability unverified'));
+  await Promise.all([
+    page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/spaces/' + candidateSites.get(laterName) + '/data'),
+    laterCandidate.click(),
+  ]);
+  await page.locator('#hostDialog').waitFor();
+  assert.equal(await page.locator('#hostIp').inputValue(), candidateIp);
+  assert.equal(await page.locator('#hostName').inputValue(), '');
+  await page.locator('#hostDialog [data-close]').first().click();
+  const saved = (await api('/api/inventory')).items.filter(host => host.ip === candidateIp);
+  assert.deepEqual(saved.map(host => host.spaceId), [candidateSites.get('Synthetic candidate branch 00')]);
+  check('unregistered IP paging preserves mixed results and opens a later branch without creating a host');
+
   await api('/api/users', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123', role: 'viewer', companyIds: ['test-co'], moduleIds: ['ipam', 'inventory', 'radio'] }, 201);
   const viewer = await browser.newContext({ baseURL });
   await api('/api/auth/login', 'POST', { username: 'viewer-test', password: 'ReadOnly-Test-123' }, 200, viewer.request);
