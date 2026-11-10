@@ -948,7 +948,7 @@ try {
     page.waitForResponse(r => r.ok() && r.url().includes('kind=free-ip') && r.url().includes('offset=39')),
     moreCandidateSpaces.click(),
   ]);
-  await moreCandidateSpaces.waitFor({ state: 'hidden' });
+  await page.locator('#searchMoreFreeIps').waitFor({ state: 'detached' });
   assert.deepEqual((await branchNames()).sort(), [...candidateSites.keys()].map(name => 'Branch: ' + name).sort());
   assert.equal(await hits.filter({ hasText: 'Registered in branch 00' }).count(), 1);
   const laterCandidate = hits.filter({ hasText: 'Branch: ' + laterName });
