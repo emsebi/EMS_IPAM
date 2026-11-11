@@ -39,9 +39,10 @@ test("browser modules are served with a JavaScript MIME type", async () => {
     fs.readFile(new URL("../public/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(server, /["']\.mjs["']:\s*["']text\/javascript; charset=utf-8["']/);
-  assert.match(html, /app\.js\?v=1\.7\.0-rc\.3/);
+  const version=(await fs.readFile(new URL('../../VERSION',import.meta.url),'utf8')).trim();
+  assert.ok(html.includes('app.js?v='+version), 'HTML asset cache key matches VERSION');
   assert.match(html, /<html[^>]+data-theme=["']light["']/);
-  assert.match(script, /subnet-model\.mjs\?v=1\.7\.0-rc\.3/);
+  assert.ok(script.includes('subnet-model.mjs?v='+version), 'JS asset cache key matches VERSION');
 });
 
 test("Windows client is downloadable from the installed web service", async () => {
