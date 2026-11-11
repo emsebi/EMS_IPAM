@@ -158,6 +158,7 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     await t.test(username+' sees only its authorized branch/space in reads and exports',async()=>{
       const boot=await call('GET','/api/bootstrap');
       assert.deepEqual(boot.spaces.map(s=>s.id),[site.spaceId]);
+      assert.ok(boot.companies.every(company => !Object.hasOwn(company, 'routingDomains')));
       const inventory=(await call('GET','/api/inventory')).items;
       assert.deepEqual(inventory.map(h=>h.id),[site.id]);
       const hits=(await call('GET','/api/search?q=192.0.2.50')).items.filter(h=>h.kind==='host');
@@ -382,6 +383,10 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const readers = [await client('north-reader'), await client('south-space-reader')];
     const boot = await admin('GET', '/api/bootstrap');
     const domains = sites.map(site => boot.spaces.find(s => s.id === site.spaceId).routingDomainId);
+    for (const [index, site] of sites.entries()) {
+      const company = boot.companies.find(c => c.id === site.companyId);
+      assert.deepEqual(company.routingDomains, [{ id: domains[index], name: 'Default', isDefault: true }]);
+    }
     for (const id of domains) assert.match(id, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
     assert.notEqual(domains[0], domains[1]);
 

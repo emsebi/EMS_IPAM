@@ -1147,7 +1147,17 @@ function openSpaceDialog(companyId, id = null) {
   $("spaceDescription").value = item?.description || "";
   const ownerId = item?.companyId || companyId;
   $("spaceForm").dataset.company = ownerId;
-  $("spaceOwnerName").value = state.bootstrap.companies.find(company => company.id === ownerId)?.name || ownerId;
+  const owner = state.bootstrap.companies.find(company => company.id === ownerId);
+  $("spaceOwnerName").value = owner?.name || ownerId;
+  const domains = owner?.routingDomains || [];
+  const select = $("spaceRoutingDomain");
+  const initial = item ? item.routingDomainId : domains.find(domain => domain.isDefault)?.id;
+  select.replaceChildren(...domains.map(domain => new Option(domain.name, domain.id)));
+  if (!initial || !domains.some(domain => domain.id === initial)) {
+    select.prepend(new Option(item?.routingDomainName ?? t(item ? "space.domain.unbound" : "space.domain.default"), initial || ""));
+  }
+  select.value = initial || "";
+  select.dataset.initialValue = select.value;
   $("spaceDialogTitle").textContent = item ? "ویرایش رنج اصلی" : "افزودن رنج اصلی";
   $("deleteSpaceButton").classList.toggle("hidden", !item);
   $("spaceDialog").showModal();
@@ -2074,13 +2084,15 @@ $("spaceForm").addEventListener("submit", async (event) => {
     companyId: form.dataset.company, name: $("spaceName").value, cidr: $("spaceCidr").value,
     color: $("spaceColor").value, description: $("spaceDescription").value,
   };
+  const domain = $("spaceRoutingDomain");
+  if (domain.value && domain.value !== domain.dataset.initialValue) body.routingDomainId = domain.value;
   const errorBox = $("spaceFormError");
   errorBox.textContent = "";
   let result;
   try {
     result = await request(id ? `/api/spaces/${encodeURIComponent(id)}` : "/api/spaces", { method: id ? "PUT" : "POST", body });
   } catch (error) {
-    const messages = { SPACE_CIDR_CONFLICT: "space.error.duplicateCidr", SPACE_OWNER_MISMATCH: "space.error.ownerMismatch" };
+    const messages = { SPACE_CIDR_CONFLICT: "space.error.duplicateCidr", SPACE_OWNER_MISMATCH: "space.error.ownerMismatch", SPACE_DOMAIN_MISMATCH: "space.error.domainMismatch" };
     errorBox.textContent = messages[error.code] ? t(messages[error.code]) : error.message;
     return;
   }

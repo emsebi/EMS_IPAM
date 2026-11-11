@@ -434,7 +434,7 @@ function broadcast(event) {
   }
 }
 
-async function listBootstrap(user) {
+async function listBootstrap(user, { includeEditorDomains = false } = {}) {
   const ipamAllowed = await hasModuleAccess(user, "ipam");
   const companyWhere = !ipamAllowed
     ? { sql: "WHERE 1=0", params: [] }
@@ -443,11 +443,16 @@ async function listBootstrap(user) {
       : { sql: `WHERE c.deleted_at IS NULL AND (EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=c.id AND a.user_id=$1)
                     OR EXISTS (SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
                                 WHERE s.company_id=c.id AND s.deleted_at IS NULL AND usa.user_id=$1))`, params: [user.id] };
+  const editorDomains = includeEditorDomains && user.role === "admin"
+    ? `,(SELECT COALESCE(jsonb_agg(jsonb_build_object('id',d.id,'name',d.name,'isDefault',d.is_default)
+                 ORDER BY d.is_default DESC,d.name,d.id),'[]'::jsonb)
+           FROM routing_domains d WHERE d.company_id=c.id) AS "routingDomains"`
+    : "";
   const companies = await pool.query(
     `SELECT DISTINCT c.id,c.parent_company_id AS "parentCompanyId",c.kind,c.code,c.name,c.description,c.address,
             c.postal_code AS "postalCode",c.phone,c.manager_name AS "managerName",c.latitude,c.longitude,c.notes,
             (SELECT count(*)::int FROM company_contacts cc WHERE cc.company_id=c.id) AS "contactCount",
-            (SELECT count(*)::int FROM company_connections cn WHERE cn.company_id=c.id) AS "connectionCount"
+            (SELECT count(*)::int FROM company_connections cn WHERE cn.company_id=c.id) AS "connectionCount"${editorDomains}
        FROM companies c ${companyWhere.sql} ORDER BY c.name`,
     companyWhere.params,
   );
@@ -930,7 +935,7 @@ async function api(req, res, url, user) {
     return json(res, 200, { ok: true }, { "Set-Cookie": clearSessionCookie(COOKIE_SECURE) });
   }
 
-  if (req.method === "GET" && pathname === "/api/bootstrap") return json(res, 200, await listBootstrap(user));
+  if (req.method === "GET" && pathname === "/api/bootstrap") return json(res, 200, await listBootstrap(user, { includeEditorDomains: true }));
   if (req.method === "GET" && pathname === "/api/modules") {
     const moduleIds = await moduleIdsForUser(user);
     const allowed = new Set(moduleIds);

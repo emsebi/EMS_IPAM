@@ -1,3 +1,15 @@
+# MS-03 checkpoint — Space editor routing-domain selection (2026-11-11 UTC)
+
+[PR #38](https://github.com/emsebi/EMS_IPAM/pull/38) merged at `9ee8cf09ff5e4512572536783af2ce471be5370e` after [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43025337351) passed. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43034180364) is tracked separately.
+
+The Space form shows the owning branch's stored domain options. Only the admin's editor bootstrap receives these lists, including unused domains. Internal search bootstrap calls omit them. A new Space starts on the branch default; an existing Space opens on its saved domain or shows an unbound value. The form submits an ID only when the operator changes the selection. Stored option names are rendered as text and excluded from legacy UI translation.
+
+Local multisite HTTP tests passed 15 with two native-only skips. The browser fixture exercises creation in a second domain, ordinary editing without resubmitting the ID, and opening other branches that only have their own default. The source is recorded IPAM configuration. No router or VM operation was performed.
+
+Next: use the run IDs in the PR to verify the named Space editor browser check and all PostgreSQL, Docker and core gates, then merge with expected head after rechecking refs. After merge CI, verify portable import/export compatibility with non-default domains before changing CIDR uniqueness. Radio GPS/uplink persistence and real RouterOS login acceptance remain open.
+
+---
+
 # MS-03 checkpoint — explicit routing domain on Space writes (2026-11-11 UTC)
 
 [PR #37](https://github.com/emsebi/EMS_IPAM/pull/37) merged at `ff71db58f32434805090f6a915e272fca91b4fb6` and [merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43000370623) passed. Base `a9e9230d0f9a644094f0b33c67794c8e274c8aa7` includes the published screenshot.
