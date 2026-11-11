@@ -147,7 +147,7 @@ jobs:
           for image in \
             operations-ipam.png operations-sites.png operations-radio.png \
             operations-radius.png operations-network-snapshot.png \
-            radio-geographic-map.png; do
+            radio-geographic-map.png radio-multi-ap-dashboard.png; do
             test -s "/tmp/ems-browser-results/$image"
             cp "/tmp/ems-browser-results/$image" "docs/screenshots/real/$image"
           done
