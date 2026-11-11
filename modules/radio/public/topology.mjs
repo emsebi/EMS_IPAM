@@ -13,7 +13,7 @@ export function vendorForMac(mac, recorded = "") {
   if ((parseInt(raw.slice(0,2),16)&2)!==0) return {name:"",source:"locally-administered"};
   return {name:lookup.get(raw.slice(0,6))||"",source:lookup.has(raw.slice(0,6))?"oui":"unknown"};
 }
-export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEdit=false,escapeHtml,language="en"}) {
+export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEdit=false,compact=false,escapeHtml,language="en"}) {
   const esc=(v)=>escapeHtml(String(v??""));
   const fa=String(language).toLowerCase().startsWith("fa");
   const tr=(en,persian)=>fa?persian:en;
@@ -30,6 +30,33 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
     :tr("Configure connection in Inventory","اتصال را در Inventory ثبت کنید");
   const controls=(host)=>`<div class="radio-doc-actions"><button type="button" class="btn sm radio-connect" data-id="${esc(host.id)}">${esc(tr("Connect","اتصال"))}</button><button type="button" class="btn sm ping-radio" data-id="${esc(host.id)}">${esc(tr("Ping","پینگ"))}</button></div>`;
 
+  if (compact) {
+    // Use one compact topology summary inside the AP/Station master-detail panel.
+    // This replaces the former duplicate Station cards and overview table.
+    return `<section class="radio-doc-compact" aria-label="${esc(tr("Radio Topology","نقشه اتصالات رادیو"))}">
+      <div class="radio-doc-compact-head"><strong>${esc(tr("Radio Topology","نقشه اتصالات رادیو"))}</strong><small>${esc(tr("Documented connections only","فقط ارتباطات ثبت‌شده"))}</small></div>
+      <div class="radio-doc-compact-chain">
+        <div class="radio-doc-compact-node"><small>${esc(tr("Switch / System","سوئیچ / سیستم"))}</small>
+          <strong>${esc(uplink?short(uplink):tr("Not documented","ثبت نشده"))}</strong>
+          <span class="mono ltr">${esc(uplink?.ip||"—")}</span>
+          <span>${esc(link?.port||"—")}</span></div>
+        <span class="radio-doc-arrow" aria-hidden="true">→</span>
+        <div class="radio-doc-compact-node radio-doc-compact-ap"><small>AP · ${esc(brand(ap))}</small>
+          <strong>${esc(short(ap))}</strong><span class="mono ltr">${esc(ap.ip||"—")}</span>
+          <span>${esc(ap.model||"—")} · ${esc(ap.location||"—")}</span>
+          <span>${esc(ping(ap)+lastPing(ap))}</span>${controls(ap)}</div>
+        <span class="radio-doc-arrow" aria-hidden="true">→</span>
+        <div class="radio-doc-compact-node"><small>${esc(tr("Stations","استیشن‌ها"))}</small><strong>${esc(stations.length)}</strong>
+          <span>${esc(tr("Listed below","در فهرست زیر"))}</span></div>
+      </div>
+      <div class="radio-doc-edit"><h4>${esc(tr("Uplink destination","مقصد اتصال AP"))}</h4>
+      ${canEdit?`<div class="radio-doc-controls"><label>${esc(tr("Switch / System","سوئیچ / سیستم"))}<select id="radioDocDestination"><option value="">${esc(tr("Not specified","ثبت نشده"))}</option>${peers.map(x=>`<option value="${esc(x.id)}" ${x.id===link?.destinationId?"selected":""}>${esc(short(x))} · ${esc(x.ip)}</option>`).join("")}</select></label>
+        <label>${esc(tr("Port / Interface","پورت اتصال"))}<input id="radioDocPort" maxlength="64" value="${esc(link?.port||"")}" placeholder="ether1 / Gi1/0/24"></label>
+        <button type="button" class="btn primary sm" id="radioDocSave">${esc(tr("Save link","ذخیره اتصال"))}</button></div>`:
+        `<p>${esc(tr("Read-only uplink information","مقصد اتصال فقط خواندنی است"))}</p>`}
+      </div>
+    </section>`;
+  }
   const vendors=stations.filter(x=>vendorForMac(x.mac,x.vendor).name).length;
   const locations=new Set(stations.map(x=>String(x.location||"").trim()).filter(Boolean)).size;
   const cards=stations.map((st)=>`<article class="radio-doc-node radio-doc-station">
@@ -73,3 +100,10 @@ export function renderRadioTopology({ap,stations=[],inventory=[],link=null,canEd
 export function radioUplinkSaved(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'اتصال ذخیره شد.' : 'Uplink saved.'; }
 
 export function radioConnectionHint(language = 'en') { return String(language).toLowerCase().startsWith('fa') ? 'روش اتصال را در Inventory دستگاه ثبت کنید.' : 'Set a connection method in Inventory first.'; }
+
+export function radioPanelLabels(language='en'){
+  const fa=String(language).toLowerCase().startsWith('fa');
+  return fa
+    ? {connect:'اتصال',topologyAndStations:'توپولوژی رادیو و استیشن‌ها',subtitle:'AP → استیشن‌های ثبت‌شده · مستندسازی Inventory'}
+    : {connect:'Connect',topologyAndStations:'Radio Topology & Stations',subtitle:'AP → registered Stations · Inventory documentation'};
+}
