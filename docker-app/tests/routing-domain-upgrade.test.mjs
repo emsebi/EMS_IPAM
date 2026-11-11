@@ -79,7 +79,7 @@ test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers acr
 
 test('MS-03 PostgreSQL backups recover selected non-default domains, legacy identities and grants', {
   skip: !process.env.EMS_TEST_POSTGRES_URL && 'requires native PostgreSQL and its backup clients',
-}, async () => {
+}, async t => {
   const connectionString = process.env.EMS_TEST_POSTGRES_URL;
   const control = new pg.Client({ connectionString });
   const created = [];
@@ -173,6 +173,45 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       assert.deepEqual((await copy.client.query(sql)).rows, (await recovered.query(sql)).rows);
     }
     assert.deepEqual(await legacyRows(copy.client), original);
+    await t.test('restored branch accepts an overlapping CIDR only in a different domain and rolls back cleanly', async () => {
+      const db = copy.client;
+      const addDefaultLan = `INSERT INTO address_spaces(id, company_id, name, cidr)
+        VALUES ($1, 'b', 'Default LAN', '192.0.2.0/24')`;
+      await db.query('BEGIN');
+      try {
+        await db.query(`ALTER TABLE address_spaces
+          ALTER COLUMN routing_domain_id SET NOT NULL,
+          ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr)`);
+        await db.query('ALTER TABLE address_spaces DROP CONSTRAINT address_spaces_company_id_cidr_key');
+        assert.deepEqual(await legacyRows(db), original);
+
+        // b1 is bound to Voice. An old writer omitting the domain creates b2 in the branch default.
+        await db.query(addDefaultLan, ['b2']);
+        await db.query("INSERT INTO hosts(id, space_id, ip) VALUES ('hb2', 'b2', '192.0.2.10')");
+        const { rows } = await db.query(`SELECT s.id AS space, h.id AS host, d.is_default,
+            EXISTS (SELECT 1 FROM user_space_access a WHERE a.space_id=s.id AND a.user_id='reader') AS granted
+          FROM address_spaces s JOIN routing_domains d ON d.id=s.routing_domain_id AND d.company_id=s.company_id
+          JOIN hosts h ON h.space_id=s.id
+          WHERE s.company_id='b' AND s.cidr='192.0.2.0/24' AND h.ip='192.0.2.10' ORDER BY s.id`);
+        assert.deepEqual(rows, [
+          { space: 'b1', host: 'hb', is_default: false, granted: true },
+          { space: 'b2', host: 'hb2', is_default: true, granted: false },
+        ]);
+
+        await db.query('SAVEPOINT duplicate_in_default');
+        await assert.rejects(db.query(addDefaultLan, ['b3']), { code: '23505', constraint: 'space_domain_cidr_key' });
+        await db.query('ROLLBACK TO SAVEPOINT duplicate_in_default');
+
+        // Restoring the old uniqueness rule with committed overlaps would require data recovery.
+        await assert.rejects(db.query(`ALTER TABLE address_spaces
+          ADD CONSTRAINT address_spaces_company_id_cidr_key UNIQUE (company_id, cidr)`), { code: '23505' });
+      } finally {
+        await db.query('ROLLBACK');
+      }
+      assert.deepEqual(await legacyRows(db), original);
+      await assert.rejects(db.query(addDefaultLan, ['b2']), { code: '23505', constraint: 'address_spaces_company_id_cidr_key' });
+    });
+
     await copy.client.query("INSERT INTO companies(id,name) VALUES ('new','New branch')");
     await copy.client.query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES ('new1','new','LAN','192.0.2.0/24')");
     const newBinding = await copy.client.query(`SELECT d.company_id FROM address_spaces s
