@@ -117,7 +117,7 @@ function translateTree(root = document) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (!node.nodeValue?.trim() || node.parentElement?.closest("script,style,textarea,[contenteditable]")) continue;
+    if (!node.nodeValue?.trim() || node.parentElement?.closest("script,style,textarea,[contenteditable],[translate=no]")) continue;
     const previous = sourceTextNodes.get(node);
     const original = previous && previous.output === node.nodeValue ? previous.original : node.nodeValue;
     const output = translateValue(original);
@@ -1480,11 +1480,12 @@ function renderSearchItems() {
         const hostContext = (item.kind === "host" || item.kind === "prefix" || item.kind === "free-ip") ? [
           `${en ? "Branch" : "شعبه"}: ${item.companyName || "—"}`,
           `Space: ${item.spaceName || "—"} (${item.spaceCidr || "—"})`,
+          `${en ? "Routing domain" : "دامنهٔ مسیریابی"}: ${item.routingDomainName ?? (en ? "Not recorded" : "ثبت نشده")}`,
           `${en ? "Source" : "منبع"}: ${item.source || "—"}`,
           `${en ? "Record updated" : "ویرایش رکورد"}: ${item.recordUpdatedAt && Number.isFinite(Date.parse(item.recordUpdatedAt)) ? formatDateTime(item.recordUpdatedAt) : "—"}`,
           en ? "Live observation: unavailable" : "مشاهده زنده: ناموجود",
           ...(item.kind === "free-ip" ? [en ? "Not in inventory; availability unverified" : "در موجودی ثبت نشده؛ آزادبودن تأیید نشده"] : []),
-        ].map(value => `<small>${escapeHtml(value)}</small>`).join("") : "";
+        ].map(value => `<small translate="no">${escapeHtml(value)}</small>`).join("") : "";
         return `<button class="search-item" data-index="${index}"><span><b>${escapeHtml(title)}</b><em>${escapeHtml(badge)}</em></span><small>${escapeHtml(detail)}${!hostContext && item.spaceName ? ` — ${escapeHtml(item.spaceName)}` : ""}</small>${hostContext}</button>`;
       }).join("") || `<div class="empty-state">نتیجه‌ای پیدا نشد.</div>`;
       resultsNode.querySelectorAll(".search-item").forEach((node) => node.addEventListener("click", () => chooseSearchItem(items[Number(node.dataset.index)])));

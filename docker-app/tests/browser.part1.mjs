@@ -623,9 +623,12 @@ try {
 
   // Add these synthetic branches after Radio/report checks to keep their fixtures isolated.
   const searchSites = [];
+  // The stored name contains English and Persian dictionary entries. Search must display stored identity verbatim.
+  const sharedSpaceName = 'Shared LAN / شعبه Default';
+  const sharedSpaceLabel = `Space: ${sharedSpaceName} (198.51.100.0/24)`;
   for (const label of ['North', 'South']) {
     const company = await api('/api/companies', 'POST', { name: 'Synthetic ' + label, kind: 'branch' }, 201);
-    const space = await api('/api/spaces', 'POST', { companyId: company.id, name: 'Shared LAN', cidr: '198.51.100.0/24' }, 201);
+    const space = await api('/api/spaces', 'POST', { companyId: company.id, name: sharedSpaceName, cidr: '198.51.100.0/24' }, 201);
     await api('/api/hosts', 'PUT', { spaceId: space.id, ip: '198.51.100.50', name: label + ' search fixture' });
     searchSites.push({ label, companyId: company.id, spaceId: space.id });
   }
@@ -639,7 +642,8 @@ try {
     assert.equal(await candidates.count(), 2);
     const candidate = candidates.filter({ hasText: 'Branch: Synthetic ' + site.label });
     const content = await candidate.textContent();
-    assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+    assert.ok(content.includes(sharedSpaceLabel));
+    assert.ok(content.includes('Routing domain: Default'));
     assert.ok(content.includes('Source: ipam-inventory'));
     assert.ok(content.includes('Record updated: '));
     assert.equal(content.includes('Record updated: —'), false);
@@ -685,7 +689,8 @@ try {
       assert.equal(await candidates.count(), 2);
       const candidate = candidates.filter({ hasText: branchLabel + ': Synthetic ' + site.label });
       const content = await candidate.textContent();
-      assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes(sharedSpaceLabel));
+      assert.ok(content.includes((language === 'en' ? 'Routing domain' : 'دامنهٔ مسیریابی') + ': Default'));
       assert.ok(content.includes(sourceLabel + ': ipam-inventory'));
       assert.ok(content.includes(updatedLabel + ': '));
       assert.equal(content.includes(updatedLabel + ': —'), false);
@@ -716,7 +721,8 @@ try {
       assert.equal(await candidates.count(), 2);
       const candidate = candidates.filter({ hasText: 'شعبه: Synthetic ' + site.label });
       const content = await candidate.textContent();
-      assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes(sharedSpaceLabel));
+      assert.ok(content.includes('دامنهٔ مسیریابی: Default'));
       assert.ok(content.includes('منبع: ipam-inventory'));
       assert.ok(content.includes('مشاهده زنده: ناموجود'));
       assert.equal(content.includes('در موجودی ثبت نشده؛ آزادبودن تأیید نشده'), !registered);
