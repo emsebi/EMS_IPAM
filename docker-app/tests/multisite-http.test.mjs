@@ -489,6 +489,57 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(unbound.items.map(hit => [hit.spaceId, hit.routingDomainId, hit.routingDomainName]), [[id, null, null]]);
   });
 
+  await t.test('MS-03 explicit Space writes enforce domain ownership and preserve legacy edits', {
+    skip: !postgres && 'seeds a non-default domain in the isolated PostgreSQL database',
+  }, async t => {
+    const db = new pg.Client({ connectionString: env.DATABASE_URL });
+    await db.connect();
+    t.after(() => db.end());
+    const { rows: [alternate] } = await db.query(
+      'INSERT INTO routing_domains(company_id,name) VALUES($1,$2) RETURNING id', [north.companyId, 'North voice'],
+    );
+    const branchUser = await client('north-editor');
+    const northDefault = (await branchUser('GET', '/api/spaces/' + north.spaceId + '/data')).space.routingDomainId;
+    const southDefault = (await admin('GET', '/api/spaces/' + south.spaceId + '/data')).space.routingDomainId;
+    const draft = { companyId: north.companyId, name: 'Voice LAN', cidr: '198.19.0.0/24' };
+    const invalidDomains = [southDefault, randomUUID()];
+    for (const id of invalidDomains) {
+      const rejected = await admin('POST', '/api/spaces', { ...draft, routingDomainId: id }, 409);
+      assert.equal(rejected.code, 'SPACE_DOMAIN_MISMATCH');
+    }
+    await admin('POST', '/api/spaces', { ...draft, routingDomainId: 'invalid' }, 400);
+    const { id } = await admin('POST', '/api/spaces', { ...draft, routingDomainId: alternate.id }, 201);
+    const url = '/api/spaces/' + id;
+    const read = async () => (await branchUser('GET', url + '/data')).space;
+    assert.equal((await read()).routingDomainId, alternate.id);
+    await admin('PUT', url, { ...draft, name: 'Ordinary edit' });
+    const before = await read();
+    assert.deepEqual([before.name, before.routingDomainId], ['Ordinary edit', alternate.id]);
+    for (const foreign of invalidDomains) {
+      const rejected = await admin('PUT', url, { ...draft, routingDomainId: foreign }, 409);
+      assert.equal(rejected.code, 'SPACE_DOMAIN_MISMATCH');
+      assert.deepEqual(await read(), before);
+    }
+    const duplicate = await admin('POST', '/api/spaces', { ...draft, routingDomainId: northDefault }, 409);
+    assert.equal(duplicate.code, 'SPACE_CIDR_CONFLICT');
+    const editConflict = await admin('PUT', url, { ...draft, cidr: '192.0.2.0/24', routingDomainId: northDefault }, 409);
+    assert.equal(editConflict.code, 'SPACE_CIDR_CONFLICT');
+    await branchUser('PUT', url, { ...draft, routingDomainId: northDefault }, 403);
+    assert.deepEqual(await read(), before);
+    await admin('PUT', url, { ...draft, routingDomainId: null });
+    assert.equal((await read()).routingDomainId, alternate.id);
+    await admin('PUT', url, { ...draft, routingDomainId: northDefault });
+    assert.equal((await read()).routingDomainId, northDefault);
+    const southReader = await client('south-space-reader');
+    await southReader('GET', url + '/data', undefined, 404);
+    const recorded = await db.query(
+      'SELECT action,detail FROM audit_log WHERE entity_type=$1 AND entity_id=$2 ORDER BY id', ['space', id],
+    );
+    assert.deepEqual(recorded.rows.map(row => [row.action, row.detail.routingDomainId]), [
+      ['create', alternate.id], ['update', alternate.id], ['update', alternate.id], ['update', northDefault],
+    ]);
+  });
+
   await t.test('portable subnet round-trip remaps radio parents only inside the selected branch', async () => {
     const prefix = await admin('POST', '/api/prefixes', {
       spaceId: north.spaceId, name: 'Portable radios', cidr: '192.0.2.224/29',
