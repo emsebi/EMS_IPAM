@@ -1,3 +1,13 @@
+# MS-03 recovery of selected routing domains (2026-11-11 UTC)
+
+[PR #41](https://github.com/emsebi/EMS_IPAM/pull/41) merged at `183f0b2575fd98cd101d5a12f580eacd0c8b1130`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43073833560) passed, including browser, PostgreSQL and Docker.
+
+The native PostgreSQL recovery fixture now assigns a distinct non-default domain named Voice to each of two branches with the same CIDR and host IP before taking the upgraded backup. It restores the custom-format dump into an empty database, starts the application migrations, and compares stored domain IDs, Space bindings, hosts, prefixes and grants with the pre-backup data. The pre-upgrade recovery and recycled Space checks remain in the same test.
+
+Next: inspect the named PostgreSQL backup test and the remaining CI jobs linked in the PR. If green, recheck main and the expected PR head before merging. The production uniqueness constraint still prevents duplicate CIDRs within one branch. The VM Radio GPS/uplink trial and real MikroTik login remain open.
+
+---
+
 # MS-03 portable subnet source identity (2026-11-11 UTC)
 
 [PR #39](https://github.com/emsebi/EMS_IPAM/pull/39) merged at `a00e0a77d60dbf2dceb52a3c9d21dbbede756122`. [Main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43054820108) passed, including the browser, PostgreSQL and Docker gates.
