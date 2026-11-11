@@ -176,9 +176,17 @@ try {
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
 
   // Radio 2.3: two actual saved AP→Station groups, independently selectable on one map.
-  await api('/api/radio/location','PUT',{hostId:'ap1',latitude:35.6800,longitude:51.3800});
-  await api('/api/radio/location','PUT',{hostId:'st1',latitude:35.6810,longitude:51.3810});
   await page.locator('.radio-ap-choice[data-id="ap1"]').click();
+  await page.locator('#radioGeoTarget').selectOption('ap1');
+  await page.locator('#radioGeoLatitude').fill('35.6800');
+  await page.locator('#radioGeoLongitude').fill('51.3800');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
+  await page.locator('#radioGeoTarget').selectOption('st1');
+  await page.locator('#radioGeoLatitude').fill('35.6810');
+  await page.locator('#radioGeoLongitude').fill('51.3810');
+  await page.locator('#radioGeoSave').click();
+  await page.waitForFunction(() => !document.getElementById('radioGeoSave')?.disabled);
   await page.locator('.radio-ap-choice[data-id="ap2"]').click();
   await page.locator('#radioMapAll').click();
   const multiFrame=page.frameLocator('#radioGeoFrame');
