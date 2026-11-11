@@ -77,7 +77,7 @@ test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers acr
   }
 });
 
-test('MS-03 PostgreSQL backups before and after migration preserve domain bindings, legacy identities and grants', {
+test('MS-03 PostgreSQL backups recover selected non-default domains, legacy identities and grants', {
   skip: !process.env.EMS_TEST_POSTGRES_URL && 'requires native PostgreSQL and its backup clients',
 }, async () => {
   const connectionString = process.env.EMS_TEST_POSTGRES_URL;
@@ -146,6 +146,19 @@ test('MS-03 PostgreSQL backups before and after migration preserve domain bindin
       ['a1', 'a', true], ['b1', 'b', true], ['old', 'a', true],
     ]);
     assert.deepEqual(await legacyRows(recovered), original);
+
+    // Two branches use the same CIDR and domain name but select different stored domains.
+    const selected = await recovered.query(`
+      WITH voice AS (
+        INSERT INTO routing_domains(company_id, name) VALUES ('a', 'Voice'), ('b', 'Voice')
+        RETURNING company_id, id
+      )
+      UPDATE address_spaces s SET routing_domain_id = voice.id
+      FROM voice WHERE s.company_id = voice.company_id AND s.id IN ('a1', 'b1')
+      RETURNING s.id, s.routing_domain_id
+    `);
+    assert.deepEqual(selected.rows.map(row => row.id).sort(), ['a1', 'b1']);
+    assert.equal(new Set(selected.rows.map(row => row.routing_domain_id)).size, 2);
 
     // Recovery after a real upgrade must preserve the generated IDs as well as the legacy data.
     const copy = await database('upgraded_copy');
