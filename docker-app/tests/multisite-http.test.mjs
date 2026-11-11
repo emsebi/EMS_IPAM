@@ -190,6 +190,31 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       await call('DELETE','/api/hosts/'+other.spaceId+'/'+other.host.ip,undefined,[403,404]);
     });
   }
+  await t.test('ordinary Space edits reject a different branch without changing either branch or its grants', async () => {
+    const northReader = await client('north-reader');
+    const southReader = await client('south-space-reader');
+    const northUrl = '/api/spaces/' + north.spaceId;
+    const southUrl = '/api/spaces/' + south.spaceId;
+    const beforeNorth = await northReader('GET', northUrl + '/data');
+    const beforeSouth = await southReader('GET', southUrl + '/data');
+    const edit = { name: 'Wrong-branch edit', cidr: beforeNorth.space.cidr, description: 'Must not be saved' };
+
+    const conflict = await admin('PUT', northUrl, { ...edit, companyId: south.companyId }, 409);
+    assert.equal(conflict.code, 'SPACE_OWNER_MISMATCH');
+    assert.deepEqual(await northReader('GET', northUrl + '/data'), beforeNorth);
+    assert.deepEqual(await southReader('GET', southUrl + '/data'), beforeSouth);
+    await southReader('GET', northUrl + '/data', undefined, 404);
+    await northReader('GET', southUrl + '/data', undefined, 404);
+    await southReader('PUT', northUrl, { ...edit, companyId: south.companyId }, 403);
+
+    // Current and legacy clients may respectively send or omit the existing owner.
+    const { name, cidr, color, description } = beforeNorth.space;
+    const metadata = { name, cidr, color, description };
+    await admin('PUT', northUrl, { ...metadata, companyId: north.companyId, name: 'Same-owner edit' });
+    assert.equal((await northReader('GET', northUrl + '/data')).space.name, 'Same-owner edit');
+    await admin('PUT', northUrl, metadata);
+    assert.equal((await northReader('GET', northUrl + '/data')).space.name, name);
+  });
   const final=(await admin('GET','/api/inventory')).items.filter(h=>h.ip==='192.0.2.50');
   assert.deepEqual(final.map(h=>[h.id,h.name]).sort(),[[north.id,'North edited'],[south.id,'South fixture']].sort());
   await t.test('prefix pages exceed old caps with stable branch identity and fresh authorization',async()=>{

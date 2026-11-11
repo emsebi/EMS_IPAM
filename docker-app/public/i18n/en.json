@@ -343,6 +343,7 @@
   "settings.close": "Close Settings",
   "settings.general.manageDevices": "Manage Devices",
   "settings.general.manageDeviceTypes": "Manage Device Types",
+  "space.error.ownerMismatch": "The requested branch differs from the owner of this network. Editing a network cannot transfer it to another branch.",
   "space.error.duplicateCidr": "Each CIDR can be registered only once per branch. Reusing it in separate VRFs within a branch is not yet supported.",
   "inventory.error.noSpaces": "Create an address space before adding a device.",
   "inventory.error.ipAlreadyRegistered": "This IP is already registered. Edit the existing device in Inventory.",

@@ -1512,6 +1512,9 @@ async function api(req, res, url, user) {
     requireWriter(user);
     const current = await getSpaceForUser(user, spaceMutation[1]);
     const body = await readBody(req);
+    if (body.companyId !== undefined && body.companyId !== current.companyId) {
+      return json(res, 409, { ok: false, code: "SPACE_OWNER_MISMATCH", error: "شعبهٔ این شبکه با شعبهٔ درخواست یکسان نیست. ویرایش شبکه نمی‌تواند آن را به شعبهٔ دیگری منتقل کند." });
+    }
     const next = validateRootCidr(body.cidr);
     const [prefixes, hosts] = await Promise.all([
       pool.query("SELECT cidr FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL", [current.id]),
@@ -1521,10 +1524,11 @@ async function api(req, res, url, user) {
       throw Object.assign(new Error("رنج جدید شامل همه زیررنج‌ها و IPهای ثبت‌شده نیست."), { status: 409 });
     }
     const name = cleanText(body.name, 120) || next.cidr;
-    await pool.query(
-      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5 AND deleted_at IS NULL",
-      [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id],
+    const updated = await pool.query(
+      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5 AND company_id=$6 AND deleted_at IS NULL",
+      [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id, current.companyId],
     );
+    if (!updated.rowCount) return errorResponse(res, 404, "فضای آدرس پیدا نشد یا دسترسی ندارید.");
     await audit(user, "update", "space", current.id, { companyId: current.companyId, spaceId: current.id, detail: { name, cidr: next.cidr } });
     broadcast({ type: "space", companyId: current.companyId, spaceId: current.id });
     return json(res, 200, { ok: true });
