@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Run browser integration
         run: npm run test:browser
       - name: Save browser screenshots and report
