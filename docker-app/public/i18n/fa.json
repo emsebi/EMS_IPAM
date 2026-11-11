@@ -343,6 +343,7 @@
   "settings.close": "بستن تنظیمات",
   "settings.general.manageDevices": "مدیریت تجهیزات",
   "settings.general.manageDeviceTypes": "مدیریت انواع تجهیزات",
+  "space.error.ownerMismatch": "شعبهٔ این شبکه با شعبهٔ درخواست یکسان نیست. ویرایش شبکه نمی‌تواند آن را به شعبهٔ دیگری منتقل کند.",
   "space.error.duplicateCidr": "در هر شعبه، هر CIDR فقط یک‌بار قابل ثبت است. ثبت همان CIDR در دو VRF داخل یک شعبه هنوز پشتیبانی نمی‌شود.",
   "inventory.error.noSpaces": "برای افزودن تجهیز ابتدا یک رنج IP تعریف کنید.",
   "inventory.error.ipAlreadyRegistered": "این IP قبلاً ثبت شده است. تجهیز موجود را از فهرست تجهیزات ویرایش کنید.",

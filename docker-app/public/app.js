@@ -1145,7 +1145,9 @@ function openSpaceDialog(companyId, id = null) {
   $("spaceCidr").value = item?.cidr || "";
   $("spaceColor").value = item?.color || COLORS[(state.bootstrap.spaces.length + 1) % COLORS.length];
   $("spaceDescription").value = item?.description || "";
-  $("spaceForm").dataset.company = item?.companyId || companyId;
+  const ownerId = item?.companyId || companyId;
+  $("spaceForm").dataset.company = ownerId;
+  $("spaceOwnerName").value = state.bootstrap.companies.find(company => company.id === ownerId)?.name || ownerId;
   $("spaceDialogTitle").textContent = item ? "ویرایش رنج اصلی" : "افزودن رنج اصلی";
   $("deleteSpaceButton").classList.toggle("hidden", !item);
   $("spaceDialog").showModal();
@@ -2077,7 +2079,8 @@ $("spaceForm").addEventListener("submit", async (event) => {
   try {
     result = await request(id ? `/api/spaces/${encodeURIComponent(id)}` : "/api/spaces", { method: id ? "PUT" : "POST", body });
   } catch (error) {
-    errorBox.textContent = error.code === "SPACE_CIDR_CONFLICT" ? t("space.error.duplicateCidr") : error.message;
+    const messages = { SPACE_CIDR_CONFLICT: "space.error.duplicateCidr", SPACE_OWNER_MISMATCH: "space.error.ownerMismatch" };
+    errorBox.textContent = messages[error.code] ? t(messages[error.code]) : error.message;
     return;
   }
   markFormClean(form);

@@ -627,7 +627,7 @@ try {
     const company = await api('/api/companies', 'POST', { name: 'Synthetic ' + label, kind: 'branch' }, 201);
     const space = await api('/api/spaces', 'POST', { companyId: company.id, name: 'Shared LAN', cidr: '198.51.100.0/24' }, 201);
     await api('/api/hosts', 'PUT', { spaceId: space.id, ip: '198.51.100.50', name: label + ' search fixture' });
-    searchSites.push({ label, spaceId: space.id });
+    searchSites.push({ label, companyId: company.id, spaceId: space.id });
   }
   await page.reload();
   await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
@@ -653,6 +653,15 @@ try {
     await page.locator('#hostDialog [data-close]').first().click();
   }
   check('duplicate-IP search shows Branch/Space and honest source/time; each selection loads its own Space');
+
+  for (const site of searchSites) {
+    await page.goto(baseURL + '/#/company/' + site.companyId);
+    await page.locator('.edit-space[data-space="' + site.spaceId + '"]').click();
+    assert.equal(await page.locator('#spaceOwnerName').inputValue(), 'Synthetic ' + site.label);
+    assert.ok(await page.locator('#spaceOwnerName').evaluate(input => input.readOnly));
+    await page.locator('#spaceDialog [data-close]').first().click();
+  }
+  check('Space editor shows the owning branch for both identically named ranges');
 
   for (const site of searchSites) {
     site.prefixId = (await api('/api/prefixes', 'POST', {
