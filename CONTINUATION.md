@@ -1,3 +1,15 @@
+# MS-03 checkpoint — recovering the pre-upgrade database (2026-11-11, Tehran)
+
+[PR #30](https://github.com/emsebi/EMS_IPAM/pull/30) merged at `991d6edc601b64afafac747ad2537d7d82d0a0ca` with expected head `c76995fd9b4babe123519e02f7869734dc823ed9`. All four gates passed on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920708907) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920671320), including the named native PostgreSQL rollback/retry test. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42928612859) succeeded. Base `5413c8b541eda2faf9e26076ef7c50f892d8b789` adds only a published screenshot.
+
+Branch `work/ms03-native-recovery` tests a full legacy PostgreSQL custom-format dump before the trial upgrade, restores it into a separate blank database, compares rows and old schema shape, and retries the trial upgrade on the recovered database. The fixture covers overlapping branches, recycled Space, two hosts and prefixes, a user and both types of grants. Local PGlite rollback/retry passed. Native recovery runs in the PostgreSQL 16 CI job with the service's own pg_dump and pg_restore binaries. Exact run IDs and results belong in the PR description.
+
+Next: inspect the named “MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants into a fresh database” result on the branch head and all four CI gates. If green, merge with expected SHA. Then exercise legacy HTTP create/edit and scoped reads against the expanded schema; check transfer semantics separately before implementing MS-10. Keep the original CIDR constraint and production schema until the compatibility plan is tested.
+
+VM still runs the [Radio 2.3 trial](https://github.com/emsebi/EMS_IPAM/pull/12), pending coordinate and uplink save/reload acceptance. RouterOS Full/Read login still needs device evidence. No deployment.
+
+---
+
 # Current checkpoint — MS-03 default-domain upgrade rehearsal (2026-11-11, Tehran)
 
 [PR #29](https://github.com/emsebi/EMS_IPAM/pull/29) merged with expected head `f450d2dd362a255e2481be339514f459b5c05a02` at `91835cde6ba23f0b5bc72655b829fb411a52fa7e`. All four gates passed on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42911993805) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42911944577). The browser logged 31 passing scenarios including retention of form values on a duplicate CIDR. PostgreSQL verified the create/edit conflict with both original Spaces and hosts intact. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920110806) also succeeded. Base `014b53867ea15ba6caca485b64d85a8da1cdce40` includes the automatic screenshot publication.

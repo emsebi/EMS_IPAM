@@ -103,6 +103,7 @@ jobs:
         run: npm ci
       - name: Run network-map PostgreSQL gate
         env:
+          EMS_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
           EMS_TEST_POSTGRES_URL: postgresql://ems_test:ems_test_password@127.0.0.1:5432/ems_ipam_test
         run: |
           node --test tests/network-map-postgres.mjs
