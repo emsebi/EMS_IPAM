@@ -5,29 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
-
-// Candidate additive phase of MS-03. Only this test executes the SQL.
-const expand = `
-  CREATE TABLE routing_domains (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id text NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    name text NOT NULL,
-    is_default boolean NOT NULL DEFAULT false,
-    UNIQUE (company_id, id)
-  );
-  CREATE UNIQUE INDEX routing_domains_one_default ON routing_domains(company_id) WHERE is_default;
-  ALTER TABLE address_spaces ADD COLUMN routing_domain_id uuid,
-    ADD CONSTRAINT space_domain_company_fk FOREIGN KEY (company_id, routing_domain_id)
-      REFERENCES routing_domains(company_id, id);
-`;
-const backfill = `
-  INSERT INTO routing_domains(company_id, name, is_default)
-    SELECT id, 'Default', true FROM companies
-    ON CONFLICT (company_id) WHERE is_default DO NOTHING;
-  UPDATE address_spaces s SET routing_domain_id = d.id
-    FROM routing_domains d
-    WHERE s.company_id = d.company_id AND d.is_default AND s.routing_domain_id IS NULL;
-`;
+import { expand, backfill } from './helpers/routing-domain-trial.mjs';
 
 const seed = `
   INSERT INTO companies(id,name) VALUES ('a','Branch A'), ('b','Branch B'), ('empty','Empty branch');

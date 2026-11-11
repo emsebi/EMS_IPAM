@@ -10,6 +10,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
+import { expand, backfill } from './helpers/routing-domain-trial.mjs';
 
 test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Space scopes', {timeout:60000}, async t=>{
   const appDir=path.resolve(import.meta.dirname,'..');
@@ -348,5 +349,55 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const revoked = await reader('GET', continuation);
     assert.deepEqual(revoked.items, []);
     assert.equal(revoked.pagination.nextOffset, null);
+  });
+
+  await t.test('MS-03 legacy HTTP writes and scoped reads survive the default-domain backfill', {
+    skip: !postgres && 'requires a separate SQL connection to the running fixture database',
+  }, async t => {
+    const db = new pg.Client({ connectionString: env.DATABASE_URL });
+    await db.connect();
+    t.after(() => db.end());
+    // Keep these sessions live while the fixture schema changes.
+    const northReader = await client('north-reader');
+    const southReader = await client('south-space-reader');
+    await db.query(expand);
+    await db.query(backfill);
+
+    const binding = async id => {
+      const result = await db.query('SELECT routing_domain_id FROM address_spaces WHERE id=$1', [id]);
+      assert.equal(result.rowCount, 1);
+      return result.rows[0].routing_domain_id;
+    };
+    const defaults = await db.query('SELECT id FROM routing_domains WHERE company_id=$1 AND is_default', [north.companyId]);
+    assert.equal(defaults.rowCount, 1);
+    const northDomain = defaults.rows[0].id;
+    assert.equal(await binding(north.spaceId), northDomain);
+    const edited = { name: 'Renamed North LAN', cidr: '192.0.2.0/24' };
+    await admin('PUT', '/api/spaces/' + north.spaceId, edited);
+    const data = await northReader('GET', '/api/spaces/' + north.spaceId + '/data');
+    assert.equal(data.space.name, edited.name);
+    assert.ok(data.hosts.some(h => h.id === north.id));
+    assert.ok(data.prefixes.some(p => p.id === north.prefixId));
+    assert.equal(await binding(north.spaceId), northDomain);
+
+    const fresh = { companyId: north.companyId, name: 'Compatibility LAN', cidr: '198.18.0.0/24' };
+    const { id } = await admin('POST', '/api/spaces', fresh, 201);
+    assert.equal(await binding(id), null);
+    const conflict = await admin('POST', '/api/spaces', fresh, 409);
+    assert.equal(conflict.code, 'SPACE_CIDR_CONFLICT');
+
+    async function checkScope() {
+      const created = await northReader('GET', '/api/spaces/' + id + '/data');
+      assert.deepEqual([created.space.id, created.space.companyId, created.space.cidr], [id, north.companyId, fresh.cidr]);
+      const southData = await southReader('GET', '/api/spaces/' + south.spaceId + '/data');
+      assert.ok(southData.hosts.some(h => h.id === south.id));
+      await southReader('GET', '/api/spaces/' + id + '/data', undefined, 404);
+      const visible = await southReader('GET', '/api/bootstrap');
+      assert.deepEqual(visible.spaces.map(s => s.id), [south.spaceId]);
+    }
+    await checkScope();
+    await db.query(backfill);
+    assert.equal(await binding(id), northDomain);
+    await checkScope();
   });
 });
