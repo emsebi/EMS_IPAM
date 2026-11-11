@@ -1,3 +1,11 @@
+# MS-03 integration with Radio 2.3 (2026-11-11 15:05 UTC)
+
+PR #39 now includes main `dae9f0272e3950761236943855f0dd7f16e674fe` and its tested Chromium setup on Ubuntu 24.04. The earlier [PR browser job](https://github.com/emsebi/EMS_IPAM/actions/runs/43035020689/job/130571464967) stopped during the Ubuntu package install, before the Space scenario ran. The [1.7.1 main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43040612289) passed before this integration.
+
+The integrated HTTP and Radio tests passed 18 cases locally, with two PostgreSQL-only cases skipped. Follow the new run IDs in [PR #39](https://github.com/emsebi/EMS_IPAM/pull/39). Check the browser report for both the Space domain selector and Radio multi-AP scenarios, and the native PostgreSQL and Docker results before merging at the expected head. The live Radio GPS/uplink save-and-reload and real MikroTik login still require operator evidence.
+
+---
+
 # MS-03 checkpoint — Space editor routing-domain selection (2026-11-11 UTC)
 
 [PR #38](https://github.com/emsebi/EMS_IPAM/pull/38) merged at `9ee8cf09ff5e4512572536783af2ce471be5370e` after [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43025337351) passed. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43034180364) is tracked separately.
