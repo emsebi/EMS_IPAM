@@ -375,6 +375,43 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(revoked.pagination.nextOffset, null);
   });
 
+  await t.test('MS-03 Space reads distinguish routing domains and count only granted Spaces', async () => {
+    const readers = [await client('north-reader'), await client('south-space-reader')];
+    const boot = await admin('GET', '/api/bootstrap');
+    const domains = sites.map(site => boot.spaces.find(s => s.id === site.spaceId).routingDomainId);
+    for (const id of domains) assert.match(id, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+    assert.notEqual(domains[0], domains[1]);
+
+    const sibling = await admin('POST', '/api/spaces', {
+      companyId: south.companyId, name: 'Other South LAN', cidr: '203.0.113.0/24',
+    }, 201);
+    try {
+      await admin('PUT', '/api/hosts', { spaceId: sibling.id, ip: '203.0.113.1', name: 'Sibling radio', radioMode: 'ap' });
+      await admin('POST', '/api/prefixes', { spaceId: sibling.id, name: 'Sibling prefix', cidr: '203.0.113.0/25' });
+      for (const [index, site] of sites.entries()) {
+        const reader = readers[index];
+        const listed = (await reader('GET', '/api/bootstrap')).spaces;
+        const company = await reader('GET', '/api/companies/' + site.companyId);
+        const { space } = await reader('GET', '/api/spaces/' + site.spaceId + '/data');
+        assert.deepEqual(listed.map(s => s.id), [site.spaceId]);
+        assert.deepEqual(company.spaces.map(s => s.id), [site.spaceId]);
+        for (const row of [listed[0], company.spaces[0], space]) {
+          assert.deepEqual([row.companyId, row.cidr, row.routingDomainId, row.routingDomainName],
+            [site.companyId, '192.0.2.0/24', domains[index], 'Default']);
+        }
+        const denied = await reader('GET', '/api/spaces/' + sites[1 - index].spaceId + '/data', undefined, 404);
+        assert.ok(!JSON.stringify(denied).includes(domains[1 - index]));
+      }
+      const full = await admin('GET', '/api/companies/' + south.companyId);
+      const limited = await readers[1]('GET', '/api/companies/' + south.companyId);
+      assert.ok(full.spaces.some(s => s.id === sibling.id));
+      for (const key of ['hosts', 'prefixes', 'radios']) assert.equal(full.stats[key], limited.stats[key] + 1, key);
+      await readers[1]('GET', '/api/spaces/' + sibling.id + '/data', undefined, 404);
+    } finally {
+      await admin('DELETE', '/api/spaces/' + sibling.id);
+    }
+  });
+
   await t.test('MS-03 startup migration assigns branch defaults to legacy HTTP writes and preserves read scopes', {
     skip: !postgres && 'requires a separate SQL connection to the running fixture database',
   }, async t => {
@@ -393,10 +430,12 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(defaults.rowCount, 1);
     const northDomain = defaults.rows[0].id;
     assert.equal(await binding(north.spaceId), northDomain);
+    await db.query('UPDATE routing_domains SET name=$1 WHERE id=$2', ['North recorded VRF', northDomain]);
     const edited = { name: 'Renamed North LAN', cidr: '192.0.2.0/24' };
     await admin('PUT', '/api/spaces/' + north.spaceId, edited);
     const data = await northReader('GET', '/api/spaces/' + north.spaceId + '/data');
     assert.equal(data.space.name, edited.name);
+    assert.deepEqual([data.space.routingDomainId, data.space.routingDomainName], [northDomain, 'North recorded VRF']);
     assert.ok(data.hosts.some(h => h.id === north.id));
     assert.ok(data.prefixes.some(p => p.id === north.prefixId));
     assert.equal(await binding(north.spaceId), northDomain);

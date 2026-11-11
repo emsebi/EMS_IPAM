@@ -386,8 +386,9 @@ async function canAccessSpace(user, spaceId) {
 async function getSpaceForUser(user, spaceId) {
   const found = await pool.query(
     `SELECT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
-            c.name AS "companyName"
+            c.name AS "companyName",d.id AS "routingDomainId",d.name AS "routingDomainName"
        FROM address_spaces s JOIN companies c ON c.id=s.company_id
+       LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
       WHERE s.id=$1 AND s.deleted_at IS NULL AND c.deleted_at IS NULL`,
     [spaceId],
   );
@@ -446,13 +447,18 @@ async function listBootstrap(user) {
   const spaces = ids.length
     ? user.role === "admin"
       ? await pool.query(
-        `SELECT id,company_id AS "companyId",name,cidr,color,description
-           FROM address_spaces WHERE company_id=ANY($1::text[]) AND deleted_at IS NULL ORDER BY company_id,cidr`,
+        `SELECT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
+                d.id AS "routingDomainId",d.name AS "routingDomainName"
+           FROM address_spaces s
+           LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
+          WHERE s.company_id=ANY($1::text[]) AND s.deleted_at IS NULL ORDER BY s.company_id,s.cidr`,
         [ids],
       )
       : await pool.query(
-        `SELECT DISTINCT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description
+        `SELECT DISTINCT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
+                d.id AS "routingDomainId",d.name AS "routingDomainName"
            FROM address_spaces s
+           LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
            LEFT JOIN user_company_access uca ON uca.company_id=s.company_id AND uca.user_id=$1
            LEFT JOIN user_space_access usa ON usa.space_id=s.id AND usa.user_id=$1
           WHERE s.company_id=ANY($2::text[]) AND s.deleted_at IS NULL
@@ -478,6 +484,10 @@ async function listBootstrap(user) {
 
 async function companyData(user, companyId) {
   if (!(await canAccessCompany(user, companyId))) throw Object.assign(new Error("شرکت پیدا نشد یا دسترسی ندارید."), { status: 404 });
+  const visibleSpaces = `s.company_id=$1 AND s.deleted_at IS NULL AND
+    ($2::boolean OR EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=s.company_id AND a.user_id=$3)
+                 OR EXISTS (SELECT 1 FROM user_space_access a WHERE a.space_id=s.id AND a.user_id=$3))`;
+  const spaceParams = [companyId, user.role === "admin", user.id];
   const [company, contacts, connections, spaces, personnel, stats] = await Promise.all([
     pool.query(
       `SELECT id,parent_company_id AS "parentCompanyId",kind,code,name,description,address,postal_code AS "postalCode",
@@ -497,12 +507,14 @@ async function companyData(user, companyId) {
       [companyId],
     ),
     pool.query(
-      `SELECT s.id,s.name,s.cidr,s.color,s.description,
+      `SELECT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
+              d.id AS "routingDomainId",d.name AS "routingDomainName",
               (SELECT count(*)::int FROM prefixes p WHERE p.space_id=s.id AND p.deleted_at IS NULL) AS "prefixCount",
               (SELECT count(*)::int FROM hosts h WHERE h.space_id=s.id AND h.deleted_at IS NULL) AS "hostCount"
          FROM address_spaces s
-        WHERE s.company_id=$1 AND s.deleted_at IS NULL ORDER BY s.cidr`,
-      [companyId],
+         LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
+        WHERE ${visibleSpaces} ORDER BY s.cidr`,
+      spaceParams,
     ),
     pool.query(
       `SELECT id,employee_code AS "employeeCode",full_name AS "fullName",phone,mobile,email,department,job_title AS "jobTitle",notes,active
@@ -515,8 +527,8 @@ async function companyData(user, companyId) {
          FROM address_spaces s
          LEFT JOIN hosts h ON h.space_id=s.id AND h.deleted_at IS NULL
          LEFT JOIN prefixes p ON p.space_id=s.id AND p.deleted_at IS NULL
-        WHERE s.company_id=$1 AND s.deleted_at IS NULL`,
-      [companyId],
+        WHERE ${visibleSpaces}`,
+      spaceParams,
     ),
   ]);
   if (!company.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });

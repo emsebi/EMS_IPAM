@@ -1,3 +1,15 @@
+# MS-03 checkpoint — routing domains on authorized Space reads (2026-11-11 UTC)
+
+[PR #35](https://github.com/emsebi/EMS_IPAM/pull/35) merged at `3252ca89509ba528d9e6007fe9c50265b8d45d1e` after [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42976797467) passed the startup and backup/restore tests. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42984619078) succeeded. The next branch starts at `d6420408a140a7296777ecbe91aa174eec8bcde9`.
+
+Bootstrap, company Space lists and individual Space data now return the recorded routing domain ID and name from the owning company's IPAM record. An unbound Space returns null. The company page's Space list and its host, prefix and radio totals now respect individual Space grants. There is no router observation timestamp for this stored relationship.
+
+The production HTTP fixture passed all 15 tests on native PostgreSQL 16.15. It checks distinct domain IDs for an identical CIDR in two branches, a renamed domain from the database, and a Space-only reader with an ungranted sibling in the same branch. The embedded run passed 14 with the native-only check skipped.
+
+Next: read the PR's linked CI runs on its exact head. Check the named MS-03 Space-read test in the PostgreSQL job, then recheck main and the PR head before merging. After merge CI, carry domain identity into authorized search results and their branch/Space labels. The Radio 2.3 VM trial still awaits the user's AP/Station GPS and uplink save/reload check. The RouterOS Full/Read login incident still awaits real-device evidence.
+
+---
+
 # MS-03 checkpoint — versioned default routing domains (2026-11-11, Tehran)
 
 [PR #34](https://github.com/emsebi/EMS_IPAM/pull/34) merged at `da51bae3c4cb037064b4ba2334a2fa42ccf5f4b9` using expected head `3368f927a05366bf3a9b2ce37581c387d7dc0802`. The [browser](https://github.com/emsebi/EMS_IPAM/actions/runs/42956914683/job/130314080157) verified the owning branch on identically named Spaces. The [PostgreSQL job](https://github.com/emsebi/EMS_IPAM/actions/runs/42956914683/job/130314080467) verified rejection of wrong-branch edits. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42962605230) passed. Base `3b76256f276e1a8b6787e6525145cee003b391a2` adds the published Radio screenshot.
