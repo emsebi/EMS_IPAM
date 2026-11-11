@@ -1,3 +1,13 @@
+# MS-03 rehearsal of CIDR uniqueness within a routing domain (2026-11-11 UTC)
+
+[PR #42](https://github.com/emsebi/EMS_IPAM/pull/42) merged at `9bbc26e9b88e9a7d3032694aa5ce49fa1b02cd89`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43074668042) passed.
+
+The new PostgreSQL subtest runs inside a transaction in the disposable restored database. It makes the domain mandatory, adds uniqueness on (company, domain, CIDR), then removes the old branch-wide constraint. Two Spaces in one branch share a CIDR and host IP across Voice and Default. The test checks the original Space grant and host IDs, rejects a duplicate in Default, tries to restore the old constraint with both networks present, and rolls back the transaction. It checks the original records and legacy constraint again after rollback.
+
+Next: verify the named restored-branch subtest in native PostgreSQL and all CI gates linked in the PR. After merge CI, exercise the production HTTP search and Space-scoped reads with these same-branch overlaps in an isolated PostgreSQL fixture before changing the production migration. VM Radio GPS/uplink and real MikroTik login acceptance remain open.
+
+---
+
 # MS-03 recovery of selected routing domains (2026-11-11 UTC)
 
 [PR #41](https://github.com/emsebi/EMS_IPAM/pull/41) merged at `183f0b2575fd98cd101d5a12f580eacd0c8b1130`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43073833560) passed, including browser, PostgreSQL and Docker.
