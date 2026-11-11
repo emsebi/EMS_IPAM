@@ -1,5 +1,5 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.0-rc.3";
-import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.0-rc.3";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.1";
+import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.1";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -71,7 +71,7 @@ const sourceTextNodes = new WeakMap();
 const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
   try {
-    const response = await fetch("/i18n/languages.json?v=1.7.0-rc.3", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.1", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
     state.languages = Array.isArray(items)
       ? items.filter((item) => /^[a-z0-9_-]+$/i.test(String(item?.id || "")) && item?.label)
@@ -93,9 +93,9 @@ async function readLanguageFile(path) {
 }
 async function loadLanguagePack(lang) {
   const [english, localized, legacy] = await Promise.all([
-    readLanguageFile("/i18n/en.json?v=1.7.0-rc.3"),
-    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.0-rc.3`),
-    readLanguageFile("/i18n/legacy-fa.json?v=1.7.0-rc.3"),
+    readLanguageFile("/i18n/en.json?v=1.7.1"),
+    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.1`),
+    readLanguageFile("/i18n/legacy-fa.json?v=1.7.1"),
   ]);
   translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
   translateKey = createKeyTranslator({ english, translations: localized, language: lang });

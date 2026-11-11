@@ -1,8 +1,8 @@
 {
   "id": "radio",
   "name": "Radio Management",
-  "version": "2.2.0-lab.3",
-  "description": "Documentation-first radio map with PostgreSQL-backed saved locations and uplinks; with AP-station geographic links with GPS distances, existing connection tools and manual Ping.",
+  "version": "2.3.0",
+  "description": "Documentation-first multi-AP map with selective AP/Station visibility, parent links, saved locations, uplink records and manual Ping.",
   "enabled": true,
   "permissions": [
     "radio.read",

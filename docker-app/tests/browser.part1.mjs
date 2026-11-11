@@ -174,6 +174,38 @@ try {
 
   await page.locator('.radio-station-list').getByText('Station Two', { exact: true }).waitFor();
   assert.equal(await page.locator('.radio-station-list').getByText('Station One', { exact: true }).count(), 0);
+
+  // Radio 2.3: two actual saved AP→Station groups, independently selectable on one map.
+  await api('/api/radio/location','PUT',{hostId:'ap1',latitude:35.6800,longitude:51.3800});
+  await api('/api/radio/location','PUT',{hostId:'st1',latitude:35.6810,longitude:51.3810});
+  await page.locator('.radio-ap-choice[data-id="ap1"]').click();
+  await page.locator('.radio-ap-choice[data-id="ap2"]').click();
+  await page.locator('#radioMapAll').click();
+  const multiFrame=page.frameLocator('#radioGeoFrame');
+  await multiFrame.locator('line.radio-link[data-station-id="st1"][data-ap-id="ap1"]').waitFor({state:'attached'});
+  await multiFrame.locator('line.radio-link[data-station-id="st2"][data-ap-id="ap2"]').waitFor({state:'attached'});
+  assert.equal(await multiFrame.locator('line.radio-link').count(),2);
+  assert.equal(await multiFrame.locator('.radio-pin.ap').count(),2);
+  assert.equal(await multiFrame.locator('.radio-pin.station').count(),2);
+  assert.equal(await page.locator('.radio-doc-grid').count(),0);
+  assert.equal(await page.locator('.radio-doc-compact').count(),1);
+  assert.ok((await page.locator('#radioGeoFrame').evaluate(el=>el.getBoundingClientRect().height))>=540);
+  await page.locator('.radio-map-choose-station[data-id="st1"]').uncheck();
+  await multiFrame.locator('line.radio-link[data-station-id="st1"]').waitFor({state:'detached'});
+  assert.equal(await multiFrame.locator('line.radio-link[data-station-id="st2"]').count(),1);
+  await page.locator('.radio-map-choose-station[data-id="st1"]').check();
+  await multiFrame.locator('line.radio-link[data-station-id="st1"]').waitFor({state:'attached'});
+  await page.locator('.radio-map-choose-ap[data-id="ap1"]').uncheck();
+  await multiFrame.locator('line.radio-link[data-station-id="st1"]').waitFor({state:'detached'});
+  assert.equal(await multiFrame.locator('line.radio-link[data-station-id="st2"]').count(),1);
+  await page.locator('#radioMapNone').click();
+  await page.waitForFunction(() => document.getElementById('radioMapSelectedCount')?.textContent.includes('0 AP'));
+  await page.locator('#radioMapAll').click();
+  await multiFrame.locator('line.radio-link[data-station-id="st1"][data-ap-id="ap1"]').waitFor({state:'attached'});
+  assert.equal(await multiFrame.locator('line.radio-link').count(),2);
+  check('Radio 2.3 multi-AP map, parent links, visibility controls and unified Station panel');
+  await page.screenshot({path:path.join(outputDir,'radio-multi-ap-dashboard.png'),fullPage:true});
+
   await page.locator('#addSelectedStation').click();
   assert.equal(await page.locator('#radioQuickParent').inputValue(), 'ap2');
   assert.equal(await page.locator('#radioQuickMode').inputValue(), 'station');

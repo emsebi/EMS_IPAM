@@ -1,6 +1,6 @@
 services:
   ssh_fixture:
-    image: ems-ipam-base:1.7.0-rc.3
+    image: ems-ipam-base:1.7.1
     command: ["node", "/app/network-map-ssh-fixture.mjs"]
     volumes:
       - ./modules/network-map/tests/ssh-fixture.mjs:/app/network-map-ssh-fixture.mjs:ro

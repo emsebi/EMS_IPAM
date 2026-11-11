@@ -1,8 +1,14 @@
-# Radio Management (2.2.0-lab.3)
+# Radio Management (2.3.0)
 
 Documentation-focused AP / Station topology on the existing EMS_IPAM module.
 No background device polling, RouterOS scripts, new device credentials, SSH logins,
 SNMP polling, signal/CCQ measurements, alert engine or router configuration changes.
+
+## Multi-AP view (2.3.0)
+- The map has a larger central area with a right-hand selector for multiple APs, and independently selectable Stations.
+- Show all / Hide all controls and each AP's registered Stations can appear together. Every link connects to its saved real parent AP, never an arbitrary first AP.
+- The single lower **Radio Topology & Stations** area combines AP details, uplink, actions and Station inventory. Saved GPS and uplink remain in PostgreSQL. No automatic polling or device configuration.
+- Geographic imagery is a documentation view; pin visibility depends on saved valid coordinates. Validate visually with live permitted data before broad production rollout.
 
 ## Features
 - Select an AP from the existing shared IPAM/Inventory records and display its registered Stations.
