@@ -1,3 +1,15 @@
+# MS-03 checkpoint — live legacy HTTP writes during the routing-domain trial (2026-11-11, Tehran)
+
+[PR #31](https://github.com/emsebi/EMS_IPAM/pull/31) merged at `8d922a97060879682f61867ecfe6448d640da0bf` using expected head `7d498b963d634974e3b384cb54dd9b118a865dd5`. [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42929239692) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42929206814) succeeded. The [PostgreSQL 16 job](https://github.com/emsebi/EMS_IPAM/actions/runs/42929239692/job/130223481309) restored a pre-upgrade dump and compared original records and grants in a second database. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42942949067) succeeded. Its screenshot-only follow-up is the base for this step, `3061e0a0e1241f2c93e3e8c7b32a21bd42400334`.
+
+Branch `work/ms03-legacy-http-writes` exercises the running production HTTP server in a disposable native PostgreSQL database. A separate connection applies the trial schema and backfill. Current admin requests edit an already-assigned Space and create a new Space without specifying a domain. The existing host/prefix IDs survive, a duplicate receives 409, and a second backfill attaches the new Space to its own branch default. During and after backfill the Company-scoped reader can open the new Space and the other branch’s Space-scoped reader receives 404. The reader’s allowed Space and host stay accessible. All 12 multisite HTTP tests passed locally on PostgreSQL 16.15, with zero skips. Both upgrade tests continue to share the same test-only SQL. Exact CI run IDs are recorded in the PR description.
+
+Next: verify the named “MS-03 legacy HTTP writes and scoped reads survive the default-domain backfill” test ran in the PostgreSQL job and both CI runs passed on the PR head, then merge with its expected SHA. Before production DDL, check the existing Space edit and portable import/export paths for ownership changes. The ordinary Space PUT updates name/CIDR/metadata and currently does not transfer ownership; model transfers and grant reevaluation separately (MS-10). Keep the legacy CIDR constraint through compatibility tests.
+
+VM remains on [Radio 2.3](https://github.com/emsebi/EMS_IPAM/pull/12) pending user confirmation of GPS and uplink after save/reload. Actual RouterOS Full/Read login remains open. No deployment or production schema change. Reconcile pre-existing release manifest differences before packaging.
+
+---
+
 # MS-03 checkpoint — recovering the pre-upgrade database (2026-11-11, Tehran)
 
 [PR #30](https://github.com/emsebi/EMS_IPAM/pull/30) merged at `991d6edc601b64afafac747ad2537d7d82d0a0ca` with expected head `c76995fd9b4babe123519e02f7869734dc823ed9`. All four gates passed on [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920708907) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42920671320), including the named native PostgreSQL rollback/retry test. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42928612859) succeeded. Base `5413c8b541eda2faf9e26076ef7c50f892d8b789` adds only a published screenshot.
