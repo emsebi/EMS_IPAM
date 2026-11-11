@@ -10,7 +10,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
-import { expand, backfill } from './helpers/routing-domain-trial.mjs';
 
 test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Space scopes', {timeout:60000}, async t=>{
   const appDir=path.resolve(import.meta.dirname,'..');
@@ -376,17 +375,14 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(revoked.pagination.nextOffset, null);
   });
 
-  await t.test('MS-03 legacy HTTP writes and scoped reads survive the default-domain backfill', {
+  await t.test('MS-03 startup migration assigns branch defaults to legacy HTTP writes and preserves read scopes', {
     skip: !postgres && 'requires a separate SQL connection to the running fixture database',
   }, async t => {
     const db = new pg.Client({ connectionString: env.DATABASE_URL });
     await db.connect();
     t.after(() => db.end());
-    // Keep these sessions live while the fixture schema changes.
     const northReader = await client('north-reader');
     const southReader = await client('south-space-reader');
-    await db.query(expand);
-    await db.query(backfill);
 
     const binding = async id => {
       const result = await db.query('SELECT routing_domain_id FROM address_spaces WHERE id=$1', [id]);
@@ -407,23 +403,17 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
 
     const fresh = { companyId: north.companyId, name: 'Compatibility LAN', cidr: '198.18.0.0/24' };
     const { id } = await admin('POST', '/api/spaces', fresh, 201);
-    assert.equal(await binding(id), null);
+    assert.equal(await binding(id), northDomain);
     const conflict = await admin('POST', '/api/spaces', fresh, 409);
     assert.equal(conflict.code, 'SPACE_CIDR_CONFLICT');
 
-    async function checkScope() {
-      const created = await northReader('GET', '/api/spaces/' + id + '/data');
-      assert.deepEqual([created.space.id, created.space.companyId, created.space.cidr], [id, north.companyId, fresh.cidr]);
-      const southData = await southReader('GET', '/api/spaces/' + south.spaceId + '/data');
-      assert.ok(southData.hosts.some(h => h.id === south.id));
-      await southReader('GET', '/api/spaces/' + id + '/data', undefined, 404);
-      const visible = await southReader('GET', '/api/bootstrap');
-      assert.deepEqual(visible.spaces.map(s => s.id), [south.spaceId]);
-    }
-    await checkScope();
-    await db.query(backfill);
-    assert.equal(await binding(id), northDomain);
-    await checkScope();
+    const created = await northReader('GET', '/api/spaces/' + id + '/data');
+    assert.deepEqual([created.space.id, created.space.companyId, created.space.cidr], [id, north.companyId, fresh.cidr]);
+    const southData = await southReader('GET', '/api/spaces/' + south.spaceId + '/data');
+    assert.ok(southData.hosts.some(h => h.id === south.id));
+    await southReader('GET', '/api/spaces/' + id + '/data', undefined, 404);
+    const visible = await southReader('GET', '/api/bootstrap');
+    assert.deepEqual(visible.spaces.map(s => s.id), [south.spaceId]);
   });
 
   await t.test('portable subnet round-trip remaps radio parents only inside the selected branch', async () => {

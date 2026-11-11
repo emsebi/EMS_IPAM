@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
-import { expand, backfill } from './helpers/routing-domain-trial.mjs';
+import { migrateDatabase } from '../server/migrations.mjs';
+
+const domainMigration = await readFile(new URL('../server/migrations/002-default-routing-domains.sql', import.meta.url), 'utf8');
 
 const seed = `
   INSERT INTO companies(id,name) VALUES ('a','Branch A'), ('b','Branch B'), ('empty','Empty branch');
@@ -47,8 +49,7 @@ test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers acr
 
     // Deliberately fail after the backfill. Roll back both the new schema and the data.
     await exec('SAVEPOINT before_upgrade');
-    await exec(expand);
-    await exec(backfill);
+    await exec(domainMigration);
     const crossBranch = "UPDATE address_spaces SET routing_domain_id = (SELECT id FROM routing_domains WHERE company_id = 'b' AND is_default) WHERE id = 'a1'";
     await assert.rejects(exec(crossBranch), { code: '23503', constraint: 'space_domain_company_fk' });
     await exec('ROLLBACK TO SAVEPOINT before_upgrade');
@@ -56,23 +57,17 @@ test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers acr
     assert.deepEqual(await rows("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'address_spaces' AND column_name = 'routing_domain_id'"), []);
     assert.deepEqual(await legacyRows(db), original);
 
-    await exec(expand);
-    await exec(backfill);
+    await exec(domainMigration);
     const domains = await defaults();
     assert.deepEqual(domains.map(d => d.company_id), ['a', 'b', 'empty']);
     const domainByCompany = new Map(domains.map(d => [d.company_id, d.id]));
     const assigned = await bindings();
     assert.equal(assigned.length, 3);
     for (const space of assigned) assert.equal(space.routing_domain_id, domainByCompany.get(space.company_id));
-    await exec(backfill);
-    assert.deepEqual(await defaults(), domains);
-    assert.deepEqual(await bindings(), assigned);
     assert.deepEqual(await legacyRows(db), original);
 
     // Simulate reverting to a writer that knows only the original Space columns.
     await exec("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES ('legacy','a','Legacy write','203.0.113.0/24')");
-    assert.deepEqual(await rows("SELECT routing_domain_id FROM address_spaces WHERE id='legacy'"), [{ routing_domain_id: null }]);
-    await exec(backfill);
     assert.deepEqual(await rows("SELECT routing_domain_id FROM address_spaces WHERE id='legacy'"), [{ routing_domain_id: domainByCompany.get('a') }]);
     await exec('SAVEPOINT before_duplicate');
     await assert.rejects(exec("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES ('dup','a','Second VRF','192.0.2.0/24')"), { code: '23505', constraint: 'address_spaces_company_id_cidr_key' });
@@ -82,7 +77,7 @@ test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers acr
   }
 });
 
-test('MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants into a fresh database', {
+test('MS-03 PostgreSQL backups before and after migration preserve domain bindings, legacy identities and grants', {
   skip: !process.env.EMS_TEST_POSTGRES_URL && 'requires native PostgreSQL and its backup clients',
 }, async () => {
   const connectionString = process.env.EMS_TEST_POSTGRES_URL;
@@ -114,6 +109,15 @@ test('MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants 
     return execFileSync(command, argv, options);
   }
 
+  async function startCore(target) {
+    const pool = new pg.Pool({ connectionString: target.url.href });
+    try {
+      await migrateDatabase(pool);
+    } finally {
+      await pool.end();
+    }
+  }
+
   await control.connect();
   try {
     const source = await database('source');
@@ -123,8 +127,7 @@ test('MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants 
     const original = await legacyRows(source.client);
     const archive = runUtility('pg_dump', source.url, ['--format=custom']);
     assert.equal(archive.subarray(0, 5).toString(), 'PGDMP');
-    await source.client.query(expand);
-    await source.client.query(backfill);
+    await source.client.query(domainMigration);
 
     runUtility('pg_restore', restored.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], archive);
     const recovered = restored.client;
@@ -133,8 +136,8 @@ test('MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants 
     assert.deepEqual(await legacyRows(recovered), original);
 
     // Rehearse the upgrade against the recovered data, including the recycled Space.
-    await recovered.query(expand);
-    await recovered.query(backfill);
+    await startCore(restored);
+    await startCore(restored);
     const bindings = await recovered.query(`
       SELECT s.id, d.company_id, d.is_default FROM address_spaces s
       LEFT JOIN routing_domains d ON d.id = s.routing_domain_id ORDER BY s.id
@@ -143,6 +146,25 @@ test('MS-03 pre-upgrade PostgreSQL backup restores legacy identities and grants 
       ['a1', 'a', true], ['b1', 'b', true], ['old', 'a', true],
     ]);
     assert.deepEqual(await legacyRows(recovered), original);
+
+    // Recovery after a real upgrade must preserve the generated IDs as well as the legacy data.
+    const copy = await database('upgraded_copy');
+    const upgradedArchive = runUtility('pg_dump', restored.url, ['--format=custom']);
+    runUtility('pg_restore', copy.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], upgradedArchive);
+    await startCore(copy);
+    for (const sql of [
+      'SELECT * FROM routing_domains ORDER BY id',
+      'SELECT id, routing_domain_id FROM address_spaces ORDER BY id',
+      'SELECT * FROM schema_migrations ORDER BY module_id, version',
+    ]) {
+      assert.deepEqual((await copy.client.query(sql)).rows, (await recovered.query(sql)).rows);
+    }
+    assert.deepEqual(await legacyRows(copy.client), original);
+    await copy.client.query("INSERT INTO companies(id,name) VALUES ('new','New branch')");
+    await copy.client.query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES ('new1','new','LAN','192.0.2.0/24')");
+    const newBinding = await copy.client.query(`SELECT d.company_id FROM address_spaces s
+      JOIN routing_domains d ON d.id=s.routing_domain_id WHERE s.id='new1' AND d.is_default`);
+    assert.deepEqual(newBinding.rows, [{ company_id: 'new' }]);
   } finally {
     try {
       for (const client of clients) await client.end();
