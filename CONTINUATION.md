@@ -1,3 +1,15 @@
+# MS-03 checkpoint — explicit routing domain on Space writes (2026-11-11 UTC)
+
+[PR #37](https://github.com/emsebi/EMS_IPAM/pull/37) merged at `ff71db58f32434805090f6a915e272fca91b4fb6` and [merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43000370623) passed. Base `a9e9230d0f9a644094f0b33c67794c8e274c8aa7` includes the published screenshot.
+
+The existing admin-only create and edit Space endpoints accept an explicit routingDomainId. The composite foreign key checks domain ownership in the write itself. Unknown and other-branch domain UUIDs produce the same 409 response; malformed IDs produce 400. An omitted or null selection uses the branch default on creation and preserves the stored binding on edit. Audit records the resulting stored domain. The per-company CIDR constraint remains active; the UI does not yet offer domain selection.
+
+All 17 multisite HTTP tests passed on isolated PostgreSQL 16.15. The new test seeds a second domain in the North fixture and verifies explicit creation and reassignment, ordinary edits, atomic conflict responses, admin-only writes, other-branch read denial, and the audit trail. These are IPAM record operations; no device observation or deployment occurred.
+
+Next: check the named "MS-03 explicit Space writes enforce domain ownership and preserve legacy edits" test in the PostgreSQL job and the core, Docker and browser gates linked in the PR. Recheck main and PR head before merging with expected SHA. After merge CI, expose a branch-scoped list of eligible routing domains to the Space editor and test default/explicit selection and an unchanged legacy edit. Keep the existing CIDR constraint while import/export/restore compatibility is verified. Radio 2.3 user GPS/uplink acceptance and real RouterOS Full/Read login remain open.
+
+---
+
 # MS-03 checkpoint — preserve recorded names in bilingual search (2026-11-11 UTC)
 
 [PR #37](https://github.com/emsebi/EMS_IPAM/pull/37) at `48f22e00b414424452956ec7debc908ad6f15fff` passed the [native PostgreSQL search test](https://github.com/emsebi/EMS_IPAM/actions/runs/42991858994/job/130426412007), core and Docker. Both browser jobs failed the same bilingual prefix assertion ([PR](https://github.com/emsebi/EMS_IPAM/actions/runs/42991858994/job/130426411638), [push](https://github.com/emsebi/EMS_IPAM/actions/runs/42991808652/job/130426244291)). The Persian DOM translator replaced the stored domain name `Default` with `پیش‌فرض` after rendering.

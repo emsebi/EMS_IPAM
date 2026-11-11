@@ -229,6 +229,14 @@ function normalizeCustomFields(value) {
   return out;
 }
 
+function requestedRoutingDomainId(value) {
+  if (value == null) return null;
+  if (typeof value !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw Object.assign(new Error("شناسهٔ دامنهٔ مسیریابی معتبر نیست."), { status: 400 });
+  }
+  return value.toLowerCase();
+}
+
 function nullableCoordinate(value, minimum, maximum) {
   if (value === "" || value === null || value === undefined) return null;
   const number = Number(value);
@@ -1515,11 +1523,14 @@ async function api(req, res, url, user) {
     const cidr = validateRootCidr(body.cidr).cidr;
     const name = cleanText(body.name, 120) || cidr;
     const id = crypto.randomUUID();
-    await pool.query(
-      "INSERT INTO address_spaces(id,company_id,name,cidr,color,description) VALUES($1,$2,$3,$4,$5,$6)",
-      [id, body.companyId, name, cidr, validColor(body.color), cleanText(body.description, 1000)],
+    const routingDomainId = requestedRoutingDomainId(body.routingDomainId);
+    const created = await pool.query(
+      `INSERT INTO address_spaces(id,company_id,name,cidr,color,description,routing_domain_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING routing_domain_id AS "routingDomainId"`,
+      [id, body.companyId, name, cidr, validColor(body.color), cleanText(body.description, 1000), routingDomainId],
     );
-    await audit(user, "create", "space", id, { companyId: body.companyId, spaceId: id, detail: { name, cidr } });
+    await audit(user, "create", "space", id, { companyId: body.companyId, spaceId: id,
+      detail: { name, cidr, routingDomainId: created.rows[0].routingDomainId } });
     broadcast({ type: "space", companyId: body.companyId, spaceId: id });
     return json(res, 201, { ok: true, id });
   }
@@ -1532,6 +1543,7 @@ async function api(req, res, url, user) {
     if (body.companyId !== undefined && body.companyId !== current.companyId) {
       return json(res, 409, { ok: false, code: "SPACE_OWNER_MISMATCH", error: "شعبهٔ این شبکه با شعبهٔ درخواست یکسان نیست. ویرایش شبکه نمی‌تواند آن را به شعبهٔ دیگری منتقل کند." });
     }
+    const routingDomainId = requestedRoutingDomainId(body.routingDomainId);
     const next = validateRootCidr(body.cidr);
     const [prefixes, hosts] = await Promise.all([
       pool.query("SELECT cidr FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL", [current.id]),
@@ -1542,11 +1554,13 @@ async function api(req, res, url, user) {
     }
     const name = cleanText(body.name, 120) || next.cidr;
     const updated = await pool.query(
-      "UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now() WHERE id=$5 AND company_id=$6 AND deleted_at IS NULL",
-      [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id, current.companyId],
+      `UPDATE address_spaces SET name=$1,cidr=$2,color=$3,description=$4,updated_at=now(),
+              routing_domain_id=COALESCE($7::uuid,routing_domain_id)
+        WHERE id=$5 AND company_id=$6 AND deleted_at IS NULL RETURNING routing_domain_id AS "routingDomainId"`,
+      [name, next.cidr, validColor(body.color), cleanText(body.description, 1000), current.id, current.companyId, routingDomainId],
     );
     if (!updated.rowCount) return errorResponse(res, 404, "فضای آدرس پیدا نشد یا دسترسی ندارید.");
-    await audit(user, "update", "space", current.id, { companyId: current.companyId, spaceId: current.id, detail: { name, cidr: next.cidr } });
+    await audit(user, "update", "space", current.id, { companyId: current.companyId, spaceId: current.id, detail: { name, cidr: next.cidr, routingDomainId: updated.rows[0].routingDomainId } });
     broadcast({ type: "space", companyId: current.companyId, spaceId: current.id });
     return json(res, 200, { ok: true });
   }
@@ -2012,6 +2026,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && await staticFile(res, url.pathname)) return;
     errorResponse(res, 404, "فایل پیدا نشد.");
   } catch (error) {
+    if (error.code === "23503" && error.constraint === "space_domain_company_fk") {
+      return json(res, 409, { ok: false, code: "SPACE_DOMAIN_MISMATCH", error: "دامنهٔ مسیریابی انتخاب‌شده برای این شعبه معتبر نیست." });
+    }
     if (error.code === "23505" && error.constraint === "address_spaces_company_id_cidr_key") {
       return json(res, 409, { ok: false, code: "SPACE_CIDR_CONFLICT", error: "در هر شعبه، هر CIDR فقط یک‌بار قابل ثبت است. ثبت همان CIDR در دو VRF داخل یک شعبه هنوز پشتیبانی نمی‌شود." });
     }

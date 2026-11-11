@@ -19,7 +19,7 @@ a81aeff2c10a0fa73cb45fd093ded84e37c513b7297007359d01e6cb5b15c796  ./docker-app/p
 c2158fa00a8851228b871975e29f85ea929933f3fee4e93257fe880679f0e6e2  ./docker-app/server/auth.mjs
 f134f6d361c7f8290083226e5f98adba7440b7abccf64fc448adea48e88c10f9  ./docker-app/server/db.mjs
 6384f4d1e7d4f2bad7ca422ddb4535093fcb709ff0f036f5ba91b6b08331b93c  ./docker-app/server/ip.mjs
-c40965d0d7a893eb971080fe5d6f2c574b88e2b5612fb0da281b74a9c9994aac  ./docker-app/server/main.mjs
+df6234e22c2ee4f6e5409f9dbdb6252324c00001f518a762ed7ec377d44015ac  ./docker-app/server/main.mjs
 906bad42596f088da7248ed4ec86c676643ddcfc2a9ef9d65cf3990f2b3e98a1  ./docker-app/server/mikrotik.mjs
 10bad9cc1209889955adfee6d4b891cff0965ac6a0b6458e3ea4051ff68ba80e  ./docker-app/server/ping.mjs
 d7babcdbb65ca9dd753aa7484c2d0701289d13f7dbab4f5e8d8fd541da632183  ./docker-app/server/portable.mjs
