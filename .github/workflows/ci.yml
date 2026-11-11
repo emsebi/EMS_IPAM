@@ -42,7 +42,7 @@ jobs:
           python3 -m unittest discover -s modules/radius-ops/tests -p 'udp_probe_test.py'
 
   browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: docker-app
