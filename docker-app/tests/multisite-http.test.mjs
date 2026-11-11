@@ -629,4 +629,53 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(reexported.hosts, pkg.hosts);
     assert.deepEqual(reexported.source, pkg.source);
   });
+
+  await t.test('MS-03 HTTP search and direct reads isolate overlapping Spaces in the same branch', {
+    skip: !postgres && 'requires the disposable PostgreSQL database with domain-scoped uniqueness',
+  }, async t => {
+    const db = new pg.Client({ connectionString: env.DATABASE_URL });
+    await db.connect();
+    t.after(() => db.end());
+    // This suite drops its own database on exit. Only this final fixture uses the proposed CIDR key.
+    await db.query(`ALTER TABLE address_spaces
+      ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr),
+      DROP CONSTRAINT address_spaces_company_id_cidr_key`);
+    const reader = await client('south-space-reader');
+    const readSpace = (call, id) => call('GET', '/api/spaces/' + id + '/data');
+    const { space: first } = await readSpace(reader, south.spaceId);
+    const { rows: [domain] } = await db.query(
+      'INSERT INTO routing_domains(company_id, name) VALUES ($1, $2) RETURNING id, name',
+      [south.companyId, 'Sibling voice'],
+    );
+    const { id: siblingId } = await admin('POST', '/api/spaces', {
+      companyId: south.companyId, cidr: first.cidr, name: first.name, routingDomainId: domain.id,
+    }, 201);
+    assert.notEqual(first.routingDomainId, domain.id);
+    const ip = '192.0.2.79';
+    const visible = { spaceId: first.id, routingDomainId: first.routingDomainId, routingDomainName: first.routingDomainName };
+    const sibling = { spaceId: siblingId, routingDomainId: domain.id, routingDomainName: domain.name };
+    for (const entry of [visible, sibling]) {
+      const { id } = await admin('PUT', '/api/hosts', { spaceId: entry.spaceId, ip, name: 'Overlap host' });
+      entry.id = id;
+    }
+    assert.notEqual(visible.id, sibling.id);
+
+    for (const [call, expected] of [[admin, [visible, sibling]], [reader, [visible]]]) {
+      const { items, pagination } = await call('GET', '/api/search?kind=host&q=' + ip);
+      assert.equal(pagination.hasMore, false);
+      assert.deepEqual(items.map(hit => hit.id).sort(), expected.map(entry => entry.id).sort());
+      for (const entry of expected) {
+        const hit = items.find(item => item.id === entry.id);
+        assert.deepEqual([hit.companyId, hit.spaceId, hit.spaceCidr, hit.routingDomainId, hit.routingDomainName, hit.ip],
+          [south.companyId, entry.spaceId, first.cidr, entry.routingDomainId, entry.routingDomainName, ip]);
+        assert.equal(hit.source, 'ipam-inventory');
+        assert.ok(Number.isFinite(Date.parse(hit.recordUpdatedAt)));
+        assert.equal(hit.observedAt, null);
+        const { space, hosts } = await readSpace(call, entry.spaceId);
+        assert.deepEqual([space.id, space.companyId, space.routingDomainId], [entry.spaceId, south.companyId, entry.routingDomainId]);
+        assert.deepEqual(hosts.filter(host => host.ip === ip).map(host => host.id), [entry.id]);
+      }
+    }
+    await reader('GET', '/api/spaces/' + siblingId + '/data', undefined, 404);
+  });
 });

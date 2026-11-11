@@ -1,3 +1,13 @@
+# MS-03 HTTP reads for overlapping Spaces in a single branch (2026-11-11 UTC)
+
+[PR #43](https://github.com/emsebi/EMS_IPAM/pull/43) merged at `03a9c8b0585a7f2af4af7096dcb40a3896831978`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43092858972) passed.
+
+The PostgreSQL HTTP fixture uses the proposed uniqueness key in its disposable database. Two Spaces in one branch have the same name and CIDR, and contain distinct hosts with the same name and IP. The test checks exact-IP search and direct Space reads with admin and single-Space reader sessions. It checks the stored identity, source and record timestamp of each authorized result, and a 404 for a direct read of the ungranted sibling.
+
+Next: check the named MS-03 HTTP subtest in the native PostgreSQL job and all CI gates linked in the PR. After merge CI, verify the Space editor and result selection in the browser for same-branch overlaps before enabling the new production constraint. The Radio GPS/uplink trial and real MikroTik login still need operator evidence.
+
+---
+
 # MS-03 rehearsal of CIDR uniqueness within a routing domain (2026-11-11 UTC)
 
 [PR #42](https://github.com/emsebi/EMS_IPAM/pull/42) merged at `9bbc26e9b88e9a7d3032694aa5ce49fa1b02cd89`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43074668042) passed.
