@@ -109,8 +109,12 @@ export async function buildSubnetPackage({ pool, space, cidr, appVersion, parseC
     exportedAt: new Date().toISOString(),
     passwordPolicy: "excluded",
     source: {
+      companyId: space.companyId,
       companyName: clean(space.companyName, 160),
+      spaceId: space.id,
       spaceName: clean(space.name, 160),
+      routingDomainId: space.routingDomainId ?? null,
+      routingDomainName: space.routingDomainName ?? null,
       spaceCidr: space.cidr,
       cidr: scope.cidr,
     },

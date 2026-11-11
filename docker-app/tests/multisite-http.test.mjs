@@ -545,7 +545,21 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     ]);
   });
 
-  await t.test('portable subnet round-trip remaps radio parents only inside the selected branch', async () => {
+  await t.test('portable v1 subnet files identify their source and keep the selected destination domain and radio parents', async t => {
+    if (postgres) {
+      const db = new pg.Client({ connectionString: env.DATABASE_URL });
+      await db.connect();
+      t.after(() => db.end());
+      for (const site of sites) {
+        await db.query(
+          `WITH domain AS (
+             INSERT INTO routing_domains(company_id,name) VALUES($1,'Portable voice') RETURNING id
+           )
+           UPDATE address_spaces SET routing_domain_id=(SELECT id FROM domain) WHERE id=$2 AND company_id=$1`,
+          [site.companyId, site.spaceId],
+        );
+      }
+    }
     const prefix = await admin('POST', '/api/prefixes', {
       spaceId: north.spaceId, name: 'Portable radios', cidr: '192.0.2.224/29',
     });
@@ -570,6 +584,17 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const url = '/api/prefixes/' + prefix.id + '/export';
     await southReader('GET', url, undefined, 404);
     const pkg = await northReader('GET', url);
+    const readSpace = async (reader, id) => (await reader('GET', '/api/spaces/' + id + '/data')).space;
+    const source = await readSpace(northReader, north.spaceId);
+    const destination = await readSpace(southReader, south.spaceId);
+    assert.notEqual(source.routingDomainId, destination.routingDomainId);
+    if (postgres) assert.deepEqual([source.routingDomainName, destination.routingDomainName], ['Portable voice', 'Portable voice']);
+    assert.equal(pkg.formatVersion, 1);
+    assert.ok(Number.isFinite(Date.parse(pkg.exportedAt)));
+    assert.deepEqual(
+      [pkg.source.companyId, pkg.source.spaceId, pkg.source.routingDomainId, pkg.source.routingDomainName],
+      [north.companyId, north.spaceId, source.routingDomainId, source.routingDomainName],
+    );
     const station = pkg.hosts.find(h => h.ip === stationIp);
     assert.deepEqual([station.sourceId, station.sourceRadioParentHostId], [northStation, northAp]);
     const body = { destinationSpaceId: south.spaceId, package: pkg, mode: 'skip' };
@@ -579,7 +604,9 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       const data = await southReader('GET', '/api/spaces/' + south.spaceId + '/data');
       return new Map(data.hosts.map(h => [h.ip, h]));
     }
-    const skipped = (await admin('POST', '/api/imports/subnet', body)).result;
+    const { cidr, companyName, spaceName, spaceCidr } = pkg.source;
+    const legacy = { ...pkg, source: { cidr, companyName, spaceName, spaceCidr } };
+    const skipped = (await admin('POST', '/api/imports/subnet', { ...body, package: legacy })).result;
     assert.deepEqual([skipped.hostsSkipped, skipped.hostsCreated], [3, 2]);
     const afterSkip = await destinationHosts();
     assert.equal(afterSkip.get(stationIp).radioParentHostId, otherAp);
@@ -597,6 +624,9 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(afterReplace.get(newIp).id, afterSkip.get(newIp).id);
     assert.equal(afterReplace.get(stationIp).radioParentHostId, southAp);
     assert.equal(afterReplace.get(newIp).radioParentHostId, southAp);
-    assert.deepEqual((await northReader('GET', url)).hosts, pkg.hosts);
+    assert.equal((await readSpace(southReader, south.spaceId)).routingDomainId, destination.routingDomainId);
+    const reexported = await northReader('GET', url);
+    assert.deepEqual(reexported.hosts, pkg.hosts);
+    assert.deepEqual(reexported.source, pkg.source);
   });
 });
