@@ -1,3 +1,13 @@
+# MS-03 browser selection for overlapping Spaces (2026-11-11 UTC)
+
+[PR #44](https://github.com/emsebi/EMS_IPAM/pull/44) merged at `9000e66f64e7c7e6bc6876250a6bab0ef39d1f2b`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43100247391) passed.
+
+The Chromium fixture enables the proposed uniqueness key in its disposable database after the legacy checks. Two identically named Spaces in one branch have the same CIDR, host name and IP. The test selects each visible routing-domain label and checks the requested Space ID and the host ID shown in the dialog. A separate single-Space reader session exercises the non-default domain alone.
+
+Next: inspect the named same-branch host selection in the browser job and all gates linked in the PR. After merge CI, check the migration preflight for unbound and recycled Spaces before changing the production constraint. The VM Radio GPS/uplink trial and real MikroTik login still need operator evidence.
+
+---
+
 # MS-03 HTTP reads for overlapping Spaces in a single branch (2026-11-11 UTC)
 
 [PR #43](https://github.com/emsebi/EMS_IPAM/pull/43) merged at `03a9c8b0585a7f2af4af7096dcb40a3896831978`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43092858972) passed.

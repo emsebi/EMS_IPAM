@@ -41,4 +41,17 @@ await db.query('INSERT INTO network_map_state(company_id,topology) VALUES($1,$2:
  {id:'192.0.2.12',address:'192.0.2.12',name:'Disconnected fixture switch',platform:'cisco',status:'online',collectedAt:'2020-01-01T00:00:00Z',
   ports:[{name:'Gi9',status:'up',mode:'access',vlan:'30'}],macs:[{mac:'02:00:00:00:00:62',port:'Gi9',vlan:'30'}]}],links:[],updatedAt:'2020-01-01T00:00:00Z'
 })]);
+if (process.send) {
+  process.once('message', async message => {
+    if (message !== 'rehearse-domain-cidr') return;
+    try {
+      await db.exec(`ALTER TABLE address_spaces
+        ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr),
+        DROP CONSTRAINT address_spaces_company_id_cidr_key`);
+      process.send({ ok: true });
+    } catch (error) {
+      process.send({ ok: false, error: error.message });
+    }
+  });
+}
 console.log('TEST_FIXTURES_READY');

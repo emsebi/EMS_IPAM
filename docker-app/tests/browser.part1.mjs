@@ -14,7 +14,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 const outputDir = path.resolve(appDir, '../docs/test-results');
 await fs.mkdir(outputDir, { recursive: true });
 const server = spawn(process.execPath, ['tests/helpers/embedded-server.mjs'], {
-  cwd: appDir, env: { ...process.env, EMS_TEST_PORT: port }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: appDir, env: { ...process.env, EMS_TEST_PORT: port }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
 });
 let serverLog = '';
 const checks = [];
@@ -1075,6 +1075,54 @@ try {
   await api(`/api/radius-ops/secret-profiles/${browserNas.secretProfileId}/reveal`, 'POST', {}, 403, viewer.request);
   await viewer.close();
   check('viewer can read assigned inventory; cannot mutate hosts/types or list personnel');
+
+  // Earlier checks exercise the production CIDR rule. Change only this disposable fixture here.
+  const ready = once(server, 'message', { signal: AbortSignal.timeout(12000) });
+  server.send('rehearse-domain-cidr');
+  const [reply] = await ready;
+  assert.equal(reply.ok, true, reply.error);
+
+  const overlapIp = '198.19.72.19';
+  const overlapSpaces = [];
+  for (const [domainName, domainId] of [['Default', null], ['Fixture voice / Default', voiceDomain]]) {
+    const { id: spaceId } = await api('/api/spaces', 'POST', {
+      companyId: 'test-co', name: 'Overlap LAN', cidr: '198.19.72.0/24', routingDomainId: domainId,
+    }, 201);
+    const { id: hostId } = await api('/api/hosts', 'PUT', { spaceId, ip: overlapIp, name: 'Overlap host' });
+    overlapSpaces.push({ spaceId, hostId, domainName });
+  }
+  await api('/api/users', 'POST', {
+    username: 'overlap-reader', password: 'ReadOnly-Test-123', role: 'viewer',
+    spaceIds: [overlapSpaces[1].spaceId], moduleIds: ['ipam', 'inventory'],
+  }, 201);
+  const restricted = await browser.newContext({ baseURL });
+  await restricted.addInitScript(() => localStorage.setItem('ems-language', 'en'));
+  await api('/api/auth/login', 'POST', { username: 'overlap-reader', password: 'ReadOnly-Test-123' }, 200, restricted.request);
+  const readerPage = await restricted.newPage();
+  await readerPage.goto(baseURL);
+  await page.reload();
+  for (const [tab, allowed] of [[page, overlapSpaces], [readerPage, [overlapSpaces[1]]]]) {
+    const input = tab.locator('#searchInput');
+    const results = tab.locator('#searchResults .search-item');
+    for (const target of allowed) {
+      await input.fill('');
+      await input.fill(overlapIp);
+      const hit = results.filter({ has: tab.getByText('Routing domain: ' + target.domainName, { exact: true }) });
+      await hit.waitFor();
+      assert.equal(await results.count(), allowed.length);
+      assert.ok((await hit.textContent()).includes('Space: Overlap LAN (198.19.72.0/24)'));
+      await Promise.all([
+        tab.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/spaces/' + target.spaceId + '/data'),
+        hit.click(),
+      ]);
+      await tab.locator('#hostDialog').waitFor({ state: 'visible' });
+      assert.equal(await tab.locator('#hostId').inputValue(), target.hostId);
+      assert.equal(await tab.locator('#hostIp').inputValue(), overlapIp);
+      await tab.locator('#hostDialog [data-close]').first().click();
+    }
+  }
+  await restricted.close();
+  check('same-branch overlapping host results open the correct Space and host for admin and scoped reader');
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');
   await fs.writeFile(path.join(outputDir, 'browser-result.json'), JSON.stringify({ status: 'passed', timestamp: new Date().toISOString(), database: 'PGlite test adapter; production pg driver not exercised', browser: browser.version(), checks }, null, 2) + '\n');
