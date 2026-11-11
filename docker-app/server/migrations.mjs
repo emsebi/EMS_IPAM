@@ -30,6 +30,9 @@ export async function migrateDatabase(pool) {
         WHERE u.role <> 'admin' ON CONFLICT DO NOTHING`);
       await client.query('INSERT INTO schema_migrations(module_id,version,checksum) VALUES($1,$2,$3)', ['core',version,checksum]);
     }
+    const domainVersion = '002-default-routing-domains';
+    const domains = await fs.readFile(new URL(`./migrations/${domainVersion}.sql`, import.meta.url), 'utf8');
+    await applySqlMigration(client, 'core', domainVersion, domains);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -39,6 +42,19 @@ export async function migrateDatabase(pool) {
 
 
 const moduleMigrationName = /^\d{3,4}-[a-z0-9][a-z0-9-]*\.sql$/;
+
+async function applySqlMigration(client, moduleId, version, sql) {
+  const checksum = crypto.createHash('sha256').update(sql).digest('hex');
+  const key = [moduleId, version];
+  const found = await client.query('SELECT checksum FROM schema_migrations WHERE module_id=$1 AND version=$2', key);
+  if (found.rows.length) {
+    if (found.rows[0].checksum !== checksum) throw new Error(`Applied module migration was modified: ${moduleId}/${version}`);
+    return false;
+  }
+  await client.query(sql);
+  await client.query('INSERT INTO schema_migrations(module_id,version,checksum) VALUES($1,$2,$3)', [...key, checksum]);
+  return true;
+}
 
 async function migrateOneModule(pool, module) {
   const root = await fs.realpath(module.dir);
@@ -65,22 +81,7 @@ async function migrateOneModule(pool, module) {
       if (!resolved.startsWith(migrationsDir + path.sep)) throw new Error(`Migration path escapes module: ${entry.name}`);
       const sql = await fs.readFile(resolved, 'utf8');
       const version = entry.name.slice(0, -4);
-      const checksum = crypto.createHash('sha256').update(sql).digest('hex');
-      const found = await client.query(
-        'SELECT checksum FROM schema_migrations WHERE module_id=$1 AND version=$2',
-        [module.id, version],
-      );
-      if (found.rows.length) {
-        if (found.rows[0].checksum !== checksum) {
-          throw new Error(`Applied module migration was modified: ${module.id}/${version}`);
-        }
-        continue;
-      }
-      await client.query(sql);
-      await client.query(
-        'INSERT INTO schema_migrations(module_id,version,checksum) VALUES($1,$2,$3)',
-        [module.id, version, checksum],
-      );
+      if (!await applySqlMigration(client, module.id, version, sql)) continue;
       applied.push({ moduleId: module.id, version });
     }
     await client.query('COMMIT');
