@@ -1,3 +1,15 @@
+# MS-03 checkpoint — portable subnet import across overlapping branches (2026-11-11, Tehran)
+
+[PR #32](https://github.com/emsebi/EMS_IPAM/pull/32) merged with expected head `5c7fc76dc119109ae1c7cfdf497aab89662831b1` at `8846c50ed427541b527fed9ad2851a1796eae917`. The [PR run](https://github.com/emsebi/EMS_IPAM/actions/runs/42943585916) and [push run](https://github.com/emsebi/EMS_IPAM/actions/runs/42943911280) passed. The [PostgreSQL job](https://github.com/emsebi/EMS_IPAM/actions/runs/42943585916/job/130270913588) ran the legacy HTTP writer test without skipping. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42949467057) passed. The next main commit `9e8891bae977a63d6da243dfb3b14d9e5db1d2d8` updates only the published Radio screenshot.
+
+Branch `work/ms03-portable-radio-links` fixes a format-v1 round-trip defect in Core IPAM. An exported host uses sourceId/sourceRadioParentHostId, while the importer read only the legacy field names. On an unmodified server the newly imported Station lost its AP. The importer now resolves only APs mapped within the explicit destination Space, preserves previously skipped Stations, and leaves a Station unlinked if its AP was skipped against an ordinary or deleted host. Replace retains destination host IDs. Ambiguous duplicate host identifiers or IP strings are rejected before writes. No change to the Radio module or production schema.
+
+Local native PostgreSQL 16.15 passed all 13 multisite HTTP tests with no skips, including a real prefix export and both import modes between two branches sharing the same CIDR and radio IPs, on the expanded trial schema. The four portable package tests passed. Check the PR description for the exact head, run IDs and any later results.
+
+Next: verify the named “portable subnet round-trip remaps radio parents only inside the selected branch” scenario in the PostgreSQL job, all four gates, and the current base and head before merge. After integration, check what an ordinary Space edit does when the requested Company differs, including the original host IDs and grants; keep an explicit transfer with ownership history separate (MS-10). The old unique constraint still applies. The VM stays on [Radio 2.3](https://github.com/emsebi/EMS_IPAM/pull/12) pending user save/reload acceptance of GPS and uplink. Real RouterOS Full/Read remains open.
+
+---
+
 # MS-03 checkpoint — live legacy HTTP writes during the routing-domain trial (2026-11-11, Tehran)
 
 [PR #31](https://github.com/emsebi/EMS_IPAM/pull/31) merged at `8d922a97060879682f61867ecfe6448d640da0bf` using expected head `7d498b963d634974e3b384cb54dd9b118a865dd5`. [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42929239692) and [push CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42929206814) succeeded. The [PostgreSQL 16 job](https://github.com/emsebi/EMS_IPAM/actions/runs/42929239692/job/130223481309) restored a pre-upgrade dump and compared original records and grants in a second database. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42942949067) succeeded. Its screenshot-only follow-up is the base for this step, `3061e0a0e1241f2c93e3e8c7b32a21bd42400334`.

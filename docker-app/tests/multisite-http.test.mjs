@@ -400,4 +400,59 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal(await binding(id), northDomain);
     await checkScope();
   });
+
+  await t.test('portable subnet round-trip remaps radio parents only inside the selected branch', async () => {
+    const prefix = await admin('POST', '/api/prefixes', {
+      spaceId: north.spaceId, name: 'Portable radios', cidr: '192.0.2.224/29',
+    });
+    async function radio(spaceId, ip, radioMode, name, radioParentHostId = null) {
+      const result = await admin('PUT', '/api/hosts', { spaceId, ip, name, type: 'Radio', radioMode, radioParentHostId });
+      return result.id;
+    }
+    const apIp = '192.0.2.229', stationIp = '192.0.2.225', newIp = '192.0.2.226';
+    const northAp = await radio(north.spaceId, apIp, 'ap', 'North AP');
+    const northStation = await radio(north.spaceId, stationIp, 'station', 'North station', northAp);
+    await radio(north.spaceId, newIp, 'station', 'New station', northAp);
+    const secondApIp = '192.0.2.227', secondStationIp = '192.0.2.228';
+    const secondAp = await radio(north.spaceId, secondApIp, 'ap', 'Second North AP');
+    await radio(north.spaceId, secondStationIp, 'station', 'Second AP station', secondAp);
+    const ordinaryHost = await radio(south.spaceId, secondApIp, '', 'South non-AP');
+    const southAp = await radio(south.spaceId, apIp, 'ap', 'South AP');
+    const otherAp = await radio(south.spaceId, '192.0.2.230', 'ap', 'Other AP');
+    const southStation = await radio(south.spaceId, stationIp, 'station', 'South station', otherAp);
+
+    const northReader = await client('north-reader');
+    const southReader = await client('south-space-reader');
+    const url = '/api/prefixes/' + prefix.id + '/export';
+    await southReader('GET', url, undefined, 404);
+    const pkg = await northReader('GET', url);
+    const station = pkg.hosts.find(h => h.ip === stationIp);
+    assert.deepEqual([station.sourceId, station.sourceRadioParentHostId], [northStation, northAp]);
+    const body = { destinationSpaceId: south.spaceId, package: pkg, mode: 'skip' };
+    await northReader('POST', '/api/imports/subnet', body, 403);
+
+    async function destinationHosts() {
+      const data = await southReader('GET', '/api/spaces/' + south.spaceId + '/data');
+      return new Map(data.hosts.map(h => [h.ip, h]));
+    }
+    const skipped = (await admin('POST', '/api/imports/subnet', body)).result;
+    assert.deepEqual([skipped.hostsSkipped, skipped.hostsCreated], [3, 2]);
+    const afterSkip = await destinationHosts();
+    assert.equal(afterSkip.get(stationIp).radioParentHostId, otherAp);
+    assert.equal(afterSkip.get(stationIp).name, 'South station');
+    assert.equal(afterSkip.get(newIp).radioParentHostId, southAp);
+    assert.equal(afterSkip.get(secondStationIp).radioParentHostId, null);
+
+    const replaced = (await admin('POST', '/api/imports/subnet', { ...body, mode: 'replace' })).result;
+    assert.equal(replaced.hostsUpdated, 5);
+    const afterReplace = await destinationHosts();
+    assert.equal(afterReplace.get(apIp).id, southAp);
+    assert.equal(afterReplace.get(secondApIp).radioMode, 'ap');
+    assert.equal(afterReplace.get(secondStationIp).radioParentHostId, ordinaryHost);
+    assert.equal(afterReplace.get(stationIp).id, southStation);
+    assert.equal(afterReplace.get(newIp).id, afterSkip.get(newIp).id);
+    assert.equal(afterReplace.get(stationIp).radioParentHostId, southAp);
+    assert.equal(afterReplace.get(newIp).radioParentHostId, southAp);
+    assert.deepEqual((await northReader('GET', url)).hosts, pkg.hosts);
+  });
 });
