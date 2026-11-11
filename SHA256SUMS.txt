@@ -8,7 +8,7 @@ d2cd68a12a04e4830b84eb3898162880c556a3f7de781d9e36cf8c7e467547db  ./compose.yml
 5c7eb4d86f3855199075fa2d54fd2c3f710f5f583bd610b27089b1c954ca2003  ./docker-app/Dockerfile
 b287107957fabf1c84f9c226ce5e9e06be965e6ac2ecb0c713bacb0619cc7ec8  ./docker-app/package-lock.json
 0b070a1a7140197d41f2d389ff9b033fa82b67782eae46540c102bc9826a5da5  ./docker-app/package.json
-4147997793dc4b1452df3501e5a7108bba9123d77531b8d2c569f0c36fc1da9e  ./docker-app/public/app.js
+781232b71856e458db21a75bba969642f38ee268ae962a587d2e301fc6371d29  ./docker-app/public/app.js
 bf8663745a28463fe512f220e85fad06bb4abef1d70ed1af784e1fec242103ad  ./docker-app/public/client.html
 a81aeff2c10a0fa73cb45fd093ded84e37c513b7297007359d01e6cb5b15c796  ./docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.5.1.zip
 1589fada362d110e2bdcf1f8f2ee2ba8706cbb5569c59adce56ce9617e41b48c  ./docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.6.0.zip

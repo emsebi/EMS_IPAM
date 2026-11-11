@@ -1,3 +1,13 @@
+# MS-03 checkpoint — preserve recorded names in bilingual search (2026-11-11 UTC)
+
+[PR #37](https://github.com/emsebi/EMS_IPAM/pull/37) at `48f22e00b414424452956ec7debc908ad6f15fff` passed the [native PostgreSQL search test](https://github.com/emsebi/EMS_IPAM/actions/runs/42991858994/job/130426412007), core and Docker. Both browser jobs failed the same bilingual prefix assertion ([PR](https://github.com/emsebi/EMS_IPAM/actions/runs/42991858994/job/130426411638), [push](https://github.com/emsebi/EMS_IPAM/actions/runs/42991808652/job/130426244291)). The Persian DOM translator replaced the stored domain name `Default` with `پیش‌فرض` after rendering.
+
+On the same PR, the labeled search metadata is already localized and now opts out of a second text translation. The branch, Space, domain and evidence strings remain escaped. The two-branch browser fixture now uses a Space name containing translation-dictionary entries in both languages and retains the exact domain-name assertions. A local DOM check reproduced the original failure and verified both languages with the production renderer and mutation observer, including null and mixed-language values. The HTTP and language suites passed 27 checks with one native-only skip.
+
+Next: check the replacement PR and push runs linked in the PR body. Inspect the Chromium job for bilingual duplicate-prefix selection and mixed registered/unregistered results, plus the native PostgreSQL, Docker and core jobs on the new head. If successful, recheck refs, merge with the expected SHA and check merge CI. Then test explicit domain selection on Space writes as described below. Radio 2.3 on the VM still awaits user GPS/uplink acceptance; RouterOS Full/Read login awaits real-device evidence.
+
+---
+
 # MS-03 checkpoint — recorded routing domain in multisite search (2026-11-11 UTC)
 
 [PR #36](https://github.com/emsebi/EMS_IPAM/pull/36) merged at `49a640b29ddea407abc1b76d7b1cfbc5a5f97409` using expected head `df3941a02d464c636d798f4610c401d7f1921386`. The [PostgreSQL job](https://github.com/emsebi/EMS_IPAM/actions/runs/42985290970/job/130404911670) passed the Space-grant list and count regression. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42991162041) passed. The search change starts at `a57ab3f018627de149a41109ba854fbf790cc7b8`.
