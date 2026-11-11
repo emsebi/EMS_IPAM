@@ -1480,6 +1480,7 @@ function renderSearchItems() {
         const hostContext = (item.kind === "host" || item.kind === "prefix" || item.kind === "free-ip") ? [
           `${en ? "Branch" : "شعبه"}: ${item.companyName || "—"}`,
           `Space: ${item.spaceName || "—"} (${item.spaceCidr || "—"})`,
+          `${en ? "Routing domain" : "دامنهٔ مسیریابی"}: ${item.routingDomainName ?? (en ? "Not recorded" : "ثبت نشده")}`,
           `${en ? "Source" : "منبع"}: ${item.source || "—"}`,
           `${en ? "Record updated" : "ویرایش رکورد"}: ${item.recordUpdatedAt && Number.isFinite(Date.parse(item.recordUpdatedAt)) ? formatDateTime(item.recordUpdatedAt) : "—"}`,
           en ? "Live observation: unavailable" : "مشاهده زنده: ناموجود",

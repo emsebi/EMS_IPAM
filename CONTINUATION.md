@@ -1,3 +1,15 @@
+# MS-03 checkpoint — recorded routing domain in multisite search (2026-11-11 UTC)
+
+[PR #36](https://github.com/emsebi/EMS_IPAM/pull/36) merged at `49a640b29ddea407abc1b76d7b1cfbc5a5f97409` using expected head `df3941a02d464c636d798f4610c401d7f1921386`. The [PostgreSQL job](https://github.com/emsebi/EMS_IPAM/actions/runs/42985290970/job/130404911670) passed the Space-grant list and count regression. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42991162041) passed. The search change starts at `a57ab3f018627de149a41109ba854fbf790cc7b8`.
+
+Mixed and paged search return routingDomainId and routingDomainName for hosts, prefixes and unregistered IP candidates. Search displays the name beside Branch/Space in both languages and marks a missing binding as unrecorded. The source is stored IPAM inventory; the existing record-update and live-observation fields retain their meaning.
+
+All 16 multisite HTTP tests passed on isolated PostgreSQL 16.15. Coverage includes identical addresses in two branches, company vs. Space grants, a renamed domain, an unbound Space and free-IP results after the first page. The local Chromium process could not create its singleton socket. The bilingual label assertions are in the CI browser suite.
+
+Next: use the run IDs in the PR description to check the named MS-03 search test in the PostgreSQL job, the bilingual search/selection checks in the browser job, and the two remaining jobs. Merge with the expected PR head after rechecking main. After merge CI, test explicit domain selection on Space writes: verify branch ownership, preserve the existing binding on an ordinary edit, and retain the current per-company CIDR constraint. The Radio 2.3 trial still awaits AP/Station GPS and uplink save/reload acceptance; real RouterOS Full/Read login is open.
+
+---
+
 # MS-03 checkpoint — routing domains on authorized Space reads (2026-11-11 UTC)
 
 [PR #35](https://github.com/emsebi/EMS_IPAM/pull/35) merged at `3252ca89509ba528d9e6007fe9c50265b8d45d1e` after [PR CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42976797467) passed the startup and backup/restore tests. [Merge CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42984619078) succeeded. The next branch starts at `d6420408a140a7296777ecbe91aa174eec8bcde9`.

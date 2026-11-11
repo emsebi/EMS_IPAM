@@ -678,9 +678,11 @@ function exactSearchIp(query) {
 async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset = 0) {
   return pool.query(
       `SELECT h.id,h.space_id AS "spaceId",h.ip,h.name,h.type,h.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
-              c.id AS "companyId",c.name AS "companyName",h.updated_at AS "recordUpdatedAt",
+              c.id AS "companyId",c.name AS "companyName",d.id AS "routingDomainId",d.name AS "routingDomainName",
+              h.updated_at AS "recordUpdatedAt",
               'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
          FROM hosts h JOIN address_spaces s ON s.id=h.space_id JOIN companies c ON c.id=s.company_id
+         LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
         WHERE h.space_id=ANY($1::text[]) AND h.deleted_at IS NULL AND
           (h.ip=$3 OR h.ip ILIKE $2 OR translate(h.name,'كيى','کیی') ILIKE $2 OR h.mac ILIKE $2 OR
            ($4 <> '' AND regexp_replace(lower(coalesce(h.mac,'')), '[^0-9a-f]', '', 'g') LIKE '%' || $4 || '%') OR
@@ -693,9 +695,11 @@ async function searchHosts(spaceIds, q, exactIp, compactMacQuery, limit, offset 
 async function searchPrefixes(spaceIds, q, limit, offset = 0) {
   return pool.query(
       `SELECT p.id,p.space_id AS "spaceId",p.cidr,p.name,p.status,s.name AS "spaceName",s.cidr AS "spaceCidr",
-              c.id AS "companyId",c.name AS "companyName",p.updated_at AS "recordUpdatedAt",
+              c.id AS "companyId",c.name AS "companyName",d.id AS "routingDomainId",d.name AS "routingDomainName",
+              p.updated_at AS "recordUpdatedAt",
               'ipam-inventory'::text AS source,NULL::timestamptz AS "observedAt"
          FROM prefixes p JOIN address_spaces s ON s.id=p.space_id JOIN companies c ON c.id=s.company_id
+         LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
         WHERE p.space_id=ANY($1::text[]) AND p.deleted_at IS NULL AND
           (p.cidr ILIKE $2 OR translate(p.name,'كيى','کیی') ILIKE $2 OR translate(p.role,'كيى','کیی') ILIKE $2 OR translate(p.description,'كيى','کیی') ILIKE $2)
         ORDER BY p.cidr,p.id LIMIT $3 OFFSET $4`,
@@ -714,10 +718,11 @@ async function searchFreeIps(spaces, ip, limit, offset = 0) {
   // Exclude registered hosts in their own Space before applying the page boundary.
   return pool.query(
     `SELECT $2::text AS ip,s.id AS "spaceId",s.name AS "spaceName",s.cidr AS "spaceCidr",
-            c.id AS "companyId",c.name AS "companyName",'ipam-inventory'::text AS source,
-            NULL::timestamptz AS "recordUpdatedAt",NULL::timestamptz AS "observedAt",'unverified'::text AS availability
+            c.id AS "companyId",c.name AS "companyName",d.id AS "routingDomainId",d.name AS "routingDomainName",
+            'ipam-inventory'::text AS source,NULL::timestamptz AS "recordUpdatedAt",NULL::timestamptz AS "observedAt",'unverified'::text AS availability
        FROM unnest($1::text[]) WITH ORDINALITY AS candidate(id,position)
        JOIN address_spaces s ON s.id=candidate.id JOIN companies c ON c.id=s.company_id
+       LEFT JOIN routing_domains d ON d.company_id=s.company_id AND d.id=s.routing_domain_id
       WHERE s.deleted_at IS NULL AND c.deleted_at IS NULL AND NOT EXISTS (
         SELECT 1 FROM hosts h WHERE h.space_id=s.id AND h.ip=$2 AND h.deleted_at IS NULL
       )

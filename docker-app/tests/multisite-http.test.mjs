@@ -323,6 +323,8 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     await admin('PUT', '/api/hosts', { spaceId: candidates[0].spaceId, ip, name: 'Retired fixture' });
     await admin('DELETE', '/api/hosts/' + candidates[0].spaceId + '/' + ip);
 
+    const listed = (await admin('GET', '/api/bootstrap')).spaces;
+    const domainBySpace = new Map(listed.map(space => [space.id, space.routingDomainId]));
     const first = await admin('GET', url);
     assert.deepEqual(first.pagination, { kind: 'free-ip', limit: 40, offset: 0, hasMore: true, nextOffset: 40 });
     const last = await admin('GET', url + '&offset=' + first.pagination.nextOffset);
@@ -333,6 +335,7 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       const space = candidates[index];
       assert.deepEqual(hit, { kind: 'free-ip', ip, companyId: space.companyId, companyName: space.companyName,
         spaceId: space.spaceId, spaceCidr: space.cidr, spaceName: 'Shared LAN', source: 'ipam-inventory',
+        routingDomainId: domainBySpace.get(space.spaceId), routingDomainName: 'Default',
         availability: 'unverified', observedAt: null, recordUpdatedAt: null });
     }
     const mixed = await admin('GET', '/api/search?q=203.000.113.077');
@@ -412,6 +415,29 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     }
   });
 
+  await t.test('MS-03 search preserves each authorized routing domain for hosts, prefixes and unregistered IPs', async () => {
+    const readers = [await client('north-reader'), await client('south-space-reader')];
+    const spaces = (await admin('GET', '/api/bootstrap')).spaces;
+    const recorded = sites.map(site => spaces.find(space => space.id === site.spaceId));
+    assert.ok(recorded.every(space => space.routingDomainId && space.routingDomainName));
+    assert.notEqual(recorded[0].routingDomainId, recorded[1].routingDomainId);
+
+    for (const [kind, query] of [['host', '192.0.2.50'], ['prefix', 'Shared prefix'], ['free-ip', '192.0.2.51']]) {
+      const url = '/api/search?q=' + encodeURIComponent(query);
+      const mixed = (await admin('GET', url)).items.filter(hit => hit.kind === kind);
+      for (const [index, space] of recorded.entries()) {
+        const page = await readers[index]('GET', url + '&kind=' + kind + '&limit=1');
+        assert.equal(page.pagination.hasMore, false);
+        const matches = mixed.filter(hit => hit.spaceId === space.id);
+        assert.equal(matches.length, 1);
+        assert.deepEqual(page.items, matches);
+        const hit = matches[0];
+        assert.deepEqual([hit.companyId, hit.spaceCidr, hit.routingDomainId, hit.routingDomainName],
+          [space.companyId, space.cidr, space.routingDomainId, space.routingDomainName]);
+      }
+    }
+  });
+
   await t.test('MS-03 startup migration assigns branch defaults to legacy HTTP writes and preserves read scopes', {
     skip: !postgres && 'requires a separate SQL connection to the running fixture database',
   }, async t => {
@@ -453,6 +479,14 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     await southReader('GET', '/api/spaces/' + id + '/data', undefined, 404);
     const visible = await southReader('GET', '/api/bootstrap');
     assert.deepEqual(visible.spaces.map(s => s.id), [south.spaceId]);
+
+    for (const [kind, query] of [['host', '192.0.2.50'], ['prefix', 'Shared prefix'], ['free-ip', '192.0.2.51']]) {
+      const { items } = await northReader('GET', '/api/search?kind=' + kind + '&q=' + encodeURIComponent(query));
+      assert.deepEqual(items.map(hit => [hit.routingDomainId, hit.routingDomainName]), [[northDomain, 'North recorded VRF']]);
+    }
+    await db.query('UPDATE address_spaces SET routing_domain_id=NULL WHERE id=$1', [id]);
+    const unbound = await northReader('GET', '/api/search?q=198.18.0.1');
+    assert.deepEqual(unbound.items.map(hit => [hit.spaceId, hit.routingDomainId, hit.routingDomainName]), [[id, null, null]]);
   });
 
   await t.test('portable subnet round-trip remaps radio parents only inside the selected branch', async () => {

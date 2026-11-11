@@ -640,6 +640,7 @@ try {
     const candidate = candidates.filter({ hasText: 'Branch: Synthetic ' + site.label });
     const content = await candidate.textContent();
     assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+    assert.ok(content.includes('Routing domain: Default'));
     assert.ok(content.includes('Source: ipam-inventory'));
     assert.ok(content.includes('Record updated: '));
     assert.equal(content.includes('Record updated: —'), false);
@@ -686,6 +687,7 @@ try {
       const candidate = candidates.filter({ hasText: branchLabel + ': Synthetic ' + site.label });
       const content = await candidate.textContent();
       assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes((language === 'en' ? 'Routing domain' : 'دامنهٔ مسیریابی') + ': Default'));
       assert.ok(content.includes(sourceLabel + ': ipam-inventory'));
       assert.ok(content.includes(updatedLabel + ': '));
       assert.equal(content.includes(updatedLabel + ': —'), false);
@@ -717,6 +719,7 @@ try {
       const candidate = candidates.filter({ hasText: 'شعبه: Synthetic ' + site.label });
       const content = await candidate.textContent();
       assert.ok(content.includes('Space: Shared LAN (198.51.100.0/24)'));
+      assert.ok(content.includes('دامنهٔ مسیریابی: Default'));
       assert.ok(content.includes('منبع: ipam-inventory'));
       assert.ok(content.includes('مشاهده زنده: ناموجود'));
       assert.equal(content.includes('در موجودی ثبت نشده؛ آزادبودن تأیید نشده'), !registered);
