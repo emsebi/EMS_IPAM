@@ -29,7 +29,7 @@ function sanitizePrefix(item) {
 
 function sanitizeHost(item) {
   return {
-    sourceId: clean(item.id, 80),
+    sourceId: clean(item.sourceId ?? item.id, 80),
     ip: clean(item.ip, 64),
     name: clean(item.name, 160),
     status: clean(item.status, 40) || "active",
@@ -49,7 +49,7 @@ function sanitizeHost(item) {
     frequency: clean(item.frequency, 80),
     channel: clean(item.channel, 80),
     signal: clean(item.signal, 40),
-    sourceRadioParentHostId: clean(item.radioParentHostId, 80) || null,
+    sourceRadioParentHostId: clean(item.sourceRadioParentHostId ?? item.radioParentHostId, 80) || null,
     connectionMethods: normalizeConnections(item.connectionMethods),
     notes: clean(item.notes, 3000),
     ports: item.ports && typeof item.ports === "object" ? item.ports : {},
@@ -133,7 +133,14 @@ export function validateSubnetPackage(value, { parseCidr, contains, destinationS
     const info = parseCidr(item.cidr);
     if (!info || !contains(scope, info) || !contains(root, info)) throw new Error(`زیررنج نامعتبر در بسته: ${item.cidr || "بدون مقدار"}`);
   }
+  const sourceIds = new Set();
+  const ips = new Set();
   for (const item of hosts) {
+    if (ips.has(item.ip) || (item.sourceId && sourceIds.has(item.sourceId))) {
+      throw new Error("آدرس یا شناسه میزبان در بسته تکراری است.");
+    }
+    ips.add(item.ip);
+    if (item.sourceId) sourceIds.add(item.sourceId);
     if (!contains(scope, item.ip) || !contains(root, item.ip)) throw new Error(`آدرس نامعتبر در بسته: ${item.ip || "بدون مقدار"}`);
   }
   return { scope, prefixes, hosts };
@@ -144,7 +151,8 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
   const conflictMode = mode === "replace" ? "replace" : "skip";
   const client = await pool.connect();
   const result = { prefixesCreated: 0, prefixesUpdated: 0, prefixesSkipped: 0, hostsCreated: 0, hostsUpdated: 0, hostsSkipped: 0, devicePorts: 0 };
-  const sourceToTarget = new Map();
+  const destinationAps = new Map();
+  const stationLinks = [];
   try {
     await client.query("BEGIN");
     for (const item of data.prefixes) {
@@ -168,14 +176,19 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
       }
     }
     for (const item of data.hosts) {
-      const existing = (await client.query("SELECT id FROM hosts WHERE space_id=$1 AND ip=$2", [destinationSpace.id, item.ip])).rows[0];
+      const existing = (await client.query("SELECT id,radio_mode,deleted_at FROM hosts WHERE space_id=$1 AND ip=$2 FOR UPDATE", [destinationSpace.id, item.ip])).rows[0];
       if (existing && conflictMode === "skip") {
-        sourceToTarget.set(item.sourceId, existing.id);
+        if (item.sourceId && item.radioMode === "ap" && existing.radio_mode === "ap" && !existing.deleted_at) {
+          destinationAps.set(item.sourceId, existing.id);
+        }
         result.hostsSkipped += 1;
         continue;
       }
       const id = existing?.id || crypto.randomUUID();
-      sourceToTarget.set(item.sourceId, id);
+      if (item.sourceId && item.radioMode === "ap") destinationAps.set(item.sourceId, id);
+      if (item.radioMode === "station" && item.sourceRadioParentHostId) {
+        stationLinks.push({ id, sourceApId: item.sourceRadioParentHostId });
+      }
       const values = [
         item.name,item.status,item.type,item.os,item.mac,item.vlan,item.username,item.owner,item.location,item.vendor,item.model,item.serial,item.firmware,
         item.radioMode,item.ssid,item.frequency,item.channel,item.signal,JSON.stringify(item.connectionMethods),item.notes,JSON.stringify(item.ports),user.id,id,
@@ -183,7 +196,7 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
       if (existing) {
         await client.query(
           `UPDATE hosts SET name=$1,status=$2,type=$3,os=$4,mac=$5,vlan=$6,username=$7,owner=$8,location=$9,
-             vendor=$10,model=$11,serial=$12,firmware=$13,radio_mode=$14,ssid=$15,frequency=$16,channel=$17,signal=$18,
+             vendor=$10,model=$11,serial=$12,firmware=$13,radio_mode=$14,radio_parent_host_id=NULL,ssid=$15,frequency=$16,channel=$17,signal=$18,
              connection_methods=$19::jsonb,notes=$20,ports=$21::jsonb,deleted_at=NULL,deleted_by=NULL,updated_by=$22,updated_at=now() WHERE id=$23`,
           values,
         );
@@ -207,10 +220,10 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
         result.devicePorts += 1;
       }
     }
-    for (const item of data.hosts) {
-      const id = sourceToTarget.get(item.sourceId);
-      const parentId = sourceToTarget.get(item.sourceRadioParentHostId) || null;
-      if (id && item.radioMode === "station") await client.query("UPDATE hosts SET radio_parent_host_id=$1 WHERE id=$2", [parentId, id]);
+    // Parents may appear later in the file. Only stations written by this import can change.
+    for (const { id, sourceApId } of stationLinks) {
+      const parentId = destinationAps.get(sourceApId);
+      if (parentId) await client.query("UPDATE hosts SET radio_parent_host_id=$1 WHERE id=$2", [parentId, id]);
     }
     await client.query("COMMIT");
     return { ...result, cidr: data.scope.cidr, mode: conflictMode };

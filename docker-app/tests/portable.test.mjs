@@ -80,3 +80,15 @@ test("portable package rejects addresses outside its declared scope", () => {
     hosts: [{ id: "bad", ip: "10.20.31.1" }],
   }, { parseCidr, contains, destinationSpace: { cidr: "10.20.0.0/16" } }), /آدرس نامعتبر/);
 });
+
+test("portable packages accept legacy host IDs and reject ambiguous link identities", () => {
+  const validate = hosts => validateSubnetPackage({
+    format: "EMS-IPAM-SUBNET", formatVersion: 1, source: { cidr: "192.0.2.0/24" }, hosts,
+  }, { parseCidr, contains, destinationSpace: { cidr: "192.0.2.0/24" } });
+  const ap = { id: "ap", radioMode: "ap", ip: "192.0.2.4" };
+  const station = { id: "st", radioMode: "station", radioParentHostId: "ap", ip: "192.0.2.5" };
+  const legacy = validate([ap, station]).hosts;
+  assert.deepEqual([legacy[0].sourceId, legacy[1].sourceId, legacy[1].sourceRadioParentHostId], ["ap", "st", "ap"]);
+  assert.throws(() => validate([ap, { ...station, sourceId: "ap" }]), /تکراری/);
+  assert.throws(() => validate([ap, { ...station, ip: ap.ip }]), /تکراری/);
+});
