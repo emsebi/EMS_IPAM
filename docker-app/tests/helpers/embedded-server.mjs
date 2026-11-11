@@ -23,6 +23,7 @@ process.env.PORT=process.env.EMS_TEST_PORT||'18190';
 await import('../../server/main.mjs');
 await db.exec(`UPDATE app_settings SET value='{"enabled":false}'::jsonb WHERE key='backup';
 INSERT INTO companies(id,name) VALUES('test-co','Test Company');
+INSERT INTO routing_domains(company_id,name) VALUES('test-co','Fixture voice / Default');
 INSERT INTO address_spaces(id,company_id,name,cidr) VALUES('test-space','test-co','Test LAN','192.0.2.0/24');
 INSERT INTO hosts(id,space_id,ip,name,type,radio_mode,ssid) VALUES
  ('ap1','test-space','192.0.2.10','AP One','Radio','ap','Office'),

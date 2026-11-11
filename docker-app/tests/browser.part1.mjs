@@ -661,6 +661,32 @@ try {
   await page.locator('#spaceDialog [data-close]').first().click();
   check('same-branch duplicate CIDR explains the VRF limit and preserves the form');
 
+  const domainSelect = page.locator('#spaceRoutingDomain');
+  await page.locator('#addCurrentSpace').click();
+  assert.equal(await domainSelect.locator('option:checked').textContent(), 'Default');
+  const [voiceDomain] = await domainSelect.selectOption({ label: 'Fixture voice / Default' });
+  await page.locator('#spaceName').fill('Voice fixture');
+  await page.locator('#spaceCidr').fill('198.18.50.0/24');
+  const [createdSpace] = await Promise.all([
+    page.waitForResponse(r => new URL(r.url()).pathname === '/api/spaces' && r.request().method() === 'POST'),
+    page.locator('#spaceForm [type=submit]').click(),
+  ]);
+  assert.equal(createdSpace.status(), 201);
+  const voiceSpaceId = (await createdSpace.json()).id;
+  assert.equal((await api('/api/spaces/' + voiceSpaceId + '/data')).space.routingDomainId, voiceDomain);
+  await page.locator('#editCurrentSpace').click();
+  assert.equal(await domainSelect.inputValue(), voiceDomain);
+  await page.locator('#spaceDescription').fill('Ordinary metadata edit');
+  const [editedSpace] = await Promise.all([
+    page.waitForResponse(r => new URL(r.url()).pathname === '/api/spaces/' + voiceSpaceId && r.request().method() === 'PUT'),
+    page.locator('#spaceForm [type=submit]').click(),
+  ]);
+  assert.equal(editedSpace.status(), 200);
+  assert.ok(!Object.hasOwn(editedSpace.request().postDataJSON(), 'routingDomainId'));
+  assert.equal((await api('/api/spaces/' + voiceSpaceId + '/data')).space.routingDomainId, voiceDomain);
+  await page.locator('#spaceDialog').waitFor({ state: 'hidden' });
+  check('Space editor creates in a selected branch domain and preserves it on ordinary edits');
+
   // Add these synthetic branches after Radio/report checks to keep their fixtures isolated.
   const searchSites = [];
   // The stored name contains English and Persian dictionary entries. Search must display stored identity verbatim.
@@ -702,6 +728,7 @@ try {
     await page.goto(baseURL + '/#/company/' + site.companyId);
     await page.locator('.edit-space[data-space="' + site.spaceId + '"]').click();
     assert.equal(await page.locator('#spaceOwnerName').inputValue(), 'Synthetic ' + site.label);
+    assert.deepEqual(await domainSelect.locator('option').allTextContents(), ['Default']);
     assert.ok(await page.locator('#spaceOwnerName').evaluate(input => input.readOnly));
     await page.locator('#spaceDialog [data-close]').first().click();
   }
