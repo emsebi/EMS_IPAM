@@ -1,3 +1,13 @@
+# MS-03 portable subnet source identity (2026-11-11 UTC)
+
+[PR #39](https://github.com/emsebi/EMS_IPAM/pull/39) merged at `a00e0a77d60dbf2dceb52a3c9d21dbbede756122`. [Main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43054820108) passed, including the browser, PostgreSQL and Docker gates.
+
+Version 1 subnet exports record the originating company, Space and routing domain alongside the existing export timestamp. Import still writes to the explicitly selected, authorized destination Space. The HTTP round-trip test imports a legacy file in skip mode and a newly exported file in replace mode. The native PostgreSQL fixture uses matching CIDRs and identically named non-default domains in two branches. It checks that source records, destination domain and radio parent relationships survive the transfer.
+
+Next: check the portable v1 round-trip in the PostgreSQL CI job on this branch and the other gates before merging with the expected SHA. The PR tracks the run IDs. Same-branch duplicate CIDRs remain blocked. Real Radio GPS/uplink and MikroTik login acceptance are still open.
+
+---
+
 # MS-03 integration with Radio 2.3 (2026-11-11 15:05 UTC)
 
 PR #39 now includes main `dae9f0272e3950761236943855f0dd7f16e674fe` and its tested Chromium setup on Ubuntu 24.04. The earlier [PR browser job](https://github.com/emsebi/EMS_IPAM/actions/runs/43035020689/job/130571464967) stopped during the Ubuntu package install, before the Space scenario ran. The [1.7.1 main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43040612289) passed before this integration.
