@@ -489,9 +489,18 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       const { items } = await northReader('GET', '/api/search?kind=' + kind + '&q=' + encodeURIComponent(query));
       assert.deepEqual(items.map(hit => [hit.routingDomainId, hit.routingDomainName]), [[northDomain, 'North recorded VRF']]);
     }
-    await db.query('UPDATE address_spaces SET routing_domain_id=NULL WHERE id=$1', [id]);
-    const unbound = await northReader('GET', '/api/search?q=198.18.0.1');
-    assert.deepEqual(unbound.items.map(hit => [hit.spaceId, hit.routingDomainId, hit.routingDomainName]), [[id, null, null]]);
+    const unbind = 'UPDATE address_spaces SET routing_domain_id=NULL WHERE id=$1';
+    await assert.rejects(db.query(unbind, [id]), { code: '23502', column: 'routing_domain_id' });
+    // Recreate the nullable 002 schema briefly to retain coverage of reads during downgrade.
+    await db.query('ALTER TABLE address_spaces ALTER COLUMN routing_domain_id DROP NOT NULL');
+    try {
+      await db.query(unbind, [id]);
+      const unbound = await northReader('GET', '/api/search?q=198.18.0.1');
+      assert.deepEqual(unbound.items.map(hit => [hit.spaceId, hit.routingDomainId, hit.routingDomainName]), [[id, null, null]]);
+    } finally {
+      await db.query('UPDATE address_spaces SET routing_domain_id=$1 WHERE id=$2', [northDomain, id]);
+      await db.query('ALTER TABLE address_spaces ALTER COLUMN routing_domain_id SET NOT NULL');
+    }
   });
 
   await t.test('MS-03 explicit Space writes enforce domain ownership and preserve legacy edits', {
@@ -638,7 +647,6 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     t.after(() => db.end());
     // This suite drops its own database on exit. Only this final fixture uses the proposed CIDR key.
     await db.query(`ALTER TABLE address_spaces
-      ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr),
       DROP CONSTRAINT address_spaces_company_id_cidr_key`);
     const reader = await client('south-space-reader');
     const readSpace = (call, id) => call('GET', '/api/spaces/' + id + '/data');
