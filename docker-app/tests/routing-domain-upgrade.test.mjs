@@ -221,6 +221,9 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
 
       await db.query("UPDATE address_spaces SET routing_domain_id=NULL WHERE id IN ('b1','old')");
       const unbound = await bindings();
+      assert.throws(() => runUtility('psql', target.url, ['-X', '-f', '-'], script),
+        err => err.status === 3 && err.stderr.toString().includes('LOCK TABLE'));
+      assert.deepEqual(await bindings(), unbound);
       for (const company of ['b', 'empty']) {
         await db.query('UPDATE routing_domains SET is_default=false WHERE id=$1', [defaults.get(company)]);
         assert.throws(run, err => err.status === 3 && err.stderr.toString().includes('Missing default routing domain for company ' + company));

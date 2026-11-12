@@ -1,5 +1,8 @@
 -- Rehearse on a restored database after migration 002.
 -- psql -X --single-transaction -v ON_ERROR_STOP=1 -f scripts/routing-domain-backfill.sql
+-- Refuse a standalone psql invocation without a transaction at the LOCK below.
+\set ON_ERROR_STOP on
+
 -- Keep defaults and Space bindings stable between the check and the update.
 LOCK TABLE companies, routing_domains, address_spaces IN EXCLUSIVE MODE NOWAIT;
 
