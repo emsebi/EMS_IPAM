@@ -19,7 +19,7 @@ test('fresh install, revocation and renamed/deleted types survive repeated start
   assert.equal((await pool.query("SELECT name FROM device_types WHERE id='builtin-switch'")).rows[0].name,'Core switch');
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM device_types WHERE id='builtin-camera'")).rows[0].n,0);
   assert.deepEqual((await pool.query("SELECT module_id FROM user_module_access WHERE user_id='u'")).rows,[{module_id:'radio'}]);
-  assert.deepEqual((await pool.query("SELECT version FROM schema_migrations WHERE module_id='core' ORDER BY version")).rows.map(r => r.version), ['001-baseline-1.7', '002-default-routing-domains']);
+  assert.deepEqual((await pool.query("SELECT version FROM schema_migrations WHERE module_id='core' ORDER BY version")).rows.map(r => r.version), ['001-baseline-1.7', '002-default-routing-domains', '003-required-routing-domains']);
  }finally{await db.close();}
 });
 

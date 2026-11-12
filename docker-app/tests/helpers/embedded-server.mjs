@@ -46,7 +46,6 @@ if (process.send) {
     if (message !== 'rehearse-domain-cidr') return;
     try {
       await db.exec(`ALTER TABLE address_spaces
-        ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr),
         DROP CONSTRAINT address_spaces_company_id_cidr_key`);
       process.send({ ok: true });
     } catch (error) {

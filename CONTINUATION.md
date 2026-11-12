@@ -1,3 +1,11 @@
+# Core 003: required routing domains (2026-11-12 UTC)
+
+[PR #48](https://github.com/emsebi/EMS_IPAM/pull/48) and its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43158991262) passed the staged downgrade rehearsal. Core startup now runs 003 after 002 in the existing transaction. It requires a default for every branch, backfills unbound active and recycled Spaces, enforces NOT NULL and adds the branch/domain/CIDR key alongside the existing branch/CIDR key. Explicit domains and access grants are preserved.
+
+Next: verify the named Core 003 restored-database test in the native PostgreSQL CI job and all other gates on the PR head. After merge CI, exercise backup and upgrade on the dedicated VM with the current data preserved. Record preflight, deployed SHA and evidence before considering removal of the legacy key. Radio GPS and real MikroTik login still need operator evidence.
+
+---
+
 # MS-03 staged constraints on the restored database (2026-11-12 UTC)
 
 [PR #47](https://github.com/emsebi/EMS_IPAM/pull/47) merged at `1ac5414`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43138278955) passed.

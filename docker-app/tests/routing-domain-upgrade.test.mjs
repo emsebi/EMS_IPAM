@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
@@ -131,7 +131,6 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
     const original = await legacyRows(source.client);
     const archive = runUtility('pg_dump', source.url, ['--format=custom']);
     assert.equal(archive.subarray(0, 5).toString(), 'PGDMP');
-    await source.client.query(domainMigration);
 
     runUtility('pg_restore', restored.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], archive);
     const recovered = restored.client;
@@ -139,9 +138,16 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
     assert.deepEqual(rows, [{ domains: null, has_column: false }]);
     assert.deepEqual(await legacyRows(recovered), original);
 
-    // Rehearse the upgrade against the recovered data, including the recycled Space.
-    await startCore(restored);
-    await startCore(restored);
+    // Build the historical 002 backup with its original SQL and ledger checksums.
+    const baseline = await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8');
+    await recovered.query(domainMigration);
+    await recovered.query(`CREATE TABLE schema_migrations (
+      module_id text NOT NULL, version text NOT NULL, checksum text NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (module_id, version))`);
+    for (const [version, sql] of [['001-baseline-1.7', baseline], ['002-default-routing-domains', domainMigration]]) {
+      await recovered.query('INSERT INTO schema_migrations(module_id,version,checksum) VALUES ($1,$2,$3)',
+        ['core', version, createHash('sha256').update(sql).digest('hex')]);
+    }
     const bindings = await recovered.query(`
       SELECT s.id, d.company_id, d.is_default FROM address_spaces s
       LEFT JOIN routing_domains d ON d.id = s.routing_domain_id ORDER BY s.id
@@ -168,7 +174,6 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
     const copy = await database('upgraded_copy');
     const upgradedArchive = runUtility('pg_dump', restored.url, ['--format=custom']);
     runUtility('pg_restore', copy.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], upgradedArchive);
-    await startCore(copy);
     for (const sql of [
       'SELECT * FROM routing_domains ORDER BY id',
       'SELECT id, routing_domain_id FROM address_spaces ORDER BY id',
@@ -320,6 +325,41 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       }
       assert.deepEqual(await legacyRows(db), original);
       await assert.rejects(db.query(addDefaultLan, ['b2']), { code: '23505', constraint: 'address_spaces_company_id_cidr_key' });
+    });
+
+    await t.test('Core 003 rolls back on a missing default and upgrades a restored 002 database once', async () => {
+      const db = copy.client;
+      const bindings = async () => (await db.query('SELECT id,routing_domain_id FROM address_spaces ORDER BY id')).rows;
+      const ledger = async () => (await db.query(
+        "SELECT checksum,applied_at FROM schema_migrations WHERE module_id='core' AND version='003-required-routing-domains'"
+      )).rows;
+      const { rows: domains } = await db.query('SELECT company_id,id FROM routing_domains WHERE is_default');
+      const defaults = new Map(domains.map(d => [d.company_id, d.id]));
+      await db.query("UPDATE address_spaces SET routing_domain_id=NULL WHERE id IN ('b1','old')");
+      const pending = await bindings();
+      await db.query('UPDATE routing_domains SET is_default=false WHERE id=$1', [defaults.get('empty')]);
+      await assert.rejects(startCore(copy), { code: '23514', message: 'Missing default routing domain for company empty' });
+      assert.deepEqual(await ledger(), []);
+      assert.deepEqual(await bindings(), pending);
+      await db.query('UPDATE routing_domains SET is_default=true WHERE id=$1', [defaults.get('empty')]);
+
+      await startCore(copy);
+      const sql = await readFile(new URL('../server/migrations/003-required-routing-domains.sql', import.meta.url));
+      const applied = await ledger();
+      assert.deepEqual(applied.map(row => row.checksum), [createHash('sha256').update(sql).digest('hex')]);
+      const expected = [
+        pending.find(row => row.id === 'a1'),
+        { id: 'b1', routing_domain_id: defaults.get('b') },
+        { id: 'old', routing_domain_id: defaults.get('a') },
+      ];
+      assert.deepEqual(await bindings(), expected);
+      await assert.rejects(db.query("UPDATE address_spaces SET routing_domain_id=NULL WHERE id='old'"), { code: '23502' });
+      await assert.rejects(db.query("INSERT INTO address_spaces(id,company_id,name,cidr) VALUES ('dup','a','LAN','192.0.2.0/24')"),
+        { code: '23505', constraint: 'address_spaces_company_id_cidr_key' });
+      await startCore(copy);
+      assert.deepEqual(await ledger(), applied);
+      assert.deepEqual(await bindings(), expected);
+      assert.deepEqual(await legacyRows(db), original);
     });
 
     await copy.client.query("INSERT INTO companies(id,name) VALUES ('new','New branch')");

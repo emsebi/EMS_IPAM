@@ -30,9 +30,10 @@ export async function migrateDatabase(pool) {
         WHERE u.role <> 'admin' ON CONFLICT DO NOTHING`);
       await client.query('INSERT INTO schema_migrations(module_id,version,checksum) VALUES($1,$2,$3)', ['core',version,checksum]);
     }
-    const domainVersion = '002-default-routing-domains';
-    const domains = await fs.readFile(new URL(`./migrations/${domainVersion}.sql`, import.meta.url), 'utf8');
-    await applySqlMigration(client, 'core', domainVersion, domains);
+    for (const version of ['002-default-routing-domains', '003-required-routing-domains']) {
+      const sql = await fs.readFile(new URL(`./migrations/${version}.sql`, import.meta.url), 'utf8');
+      await applySqlMigration(client, 'core', version, sql);
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
