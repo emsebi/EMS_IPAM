@@ -173,6 +173,38 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       assert.deepEqual((await copy.client.query(sql)).rows, (await recovered.query(sql)).rows);
     }
     assert.deepEqual(await legacyRows(copy.client), original);
+    await t.test('preflight reports unbound active and recycled Spaces and missing branch defaults after restore', async () => {
+      const db = copy.client;
+      const report = await readFile(new URL('../../scripts/routing-domain-preflight.sql', import.meta.url), 'utf8');
+      await db.query('BEGIN');
+      try {
+        await db.query("UPDATE address_spaces SET routing_domain_id=NULL WHERE id IN ('b1','old')");
+        await db.query("UPDATE routing_domains SET is_default=false WHERE is_default AND company_id IN ('b','empty')");
+        const { rows: [defaultA] } = await db.query("SELECT id FROM routing_domains WHERE company_id='a' AND is_default");
+        const { rows } = await db.query(report);
+        assert.deepEqual(rows.map(row => [
+          row.company_id, row.unbound_space_id, row.space_state, row.missing_default, row.default_domain_id,
+        ]), [
+          ['a', 'old', 'recycled', false, defaultA.id],
+          ['b', 'b1', 'active', true, null],
+          ['empty', null, null, true, null],
+        ]);
+        assert.ok(rows.every(row => Number.isFinite(row.checked_at.getTime()) &&
+          row.checked_at.getTime() === rows[0].checked_at.getTime()));
+        assert.deepEqual(await legacyRows(db), original);
+        await assert.rejects(db.query('ALTER TABLE address_spaces ALTER COLUMN routing_domain_id SET NOT NULL'), { code: '23502' });
+      } finally {
+        await db.query('ROLLBACK');
+      }
+      await db.query('BEGIN READ ONLY');
+      try {
+        assert.deepEqual((await db.query(report)).rows, []);
+        assert.deepEqual(await legacyRows(db), original);
+      } finally {
+        await db.query('ROLLBACK');
+      }
+    });
+
     await t.test('restored branch accepts an overlapping CIDR only in a different domain and rolls back cleanly', async () => {
       const db = copy.client;
       const addDefaultLan = `INSERT INTO address_spaces(id, company_id, name, cidr)
