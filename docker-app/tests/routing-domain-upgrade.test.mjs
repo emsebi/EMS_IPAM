@@ -205,6 +205,49 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       }
     });
 
+    await t.test('restored backfill aborts atomically, preserves explicit domains and grants, and retries without changes', async () => {
+      const target = await database('backfill');
+      runUtility('pg_restore', target.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], upgradedArchive);
+      const db = target.client;
+      const script = await readFile(new URL('../../scripts/routing-domain-backfill.sql', import.meta.url), 'utf8');
+      const run = (input = script) => runUtility('psql', target.url, [
+        '-X', '--single-transaction', '-v', 'ON_ERROR_STOP=1', '-qAt', '-F', '\t', '-f', '-',
+      ], input).toString().trim();
+      const bindings = async () => (await db.query('SELECT id, routing_domain_id FROM address_spaces ORDER BY id')).rows;
+      const originalBindings = await bindings();
+      const domains = async () => (await db.query('SELECT * FROM routing_domains ORDER BY id')).rows;
+      const originalDomains = await domains();
+      const defaults = new Map(originalDomains.filter(d => d.is_default).map(d => [d.company_id, d.id]));
+
+      await db.query("UPDATE address_spaces SET routing_domain_id=NULL WHERE id IN ('b1','old')");
+      const unbound = await bindings();
+      assert.throws(() => runUtility('psql', target.url, ['-X', '-f', '-'], script),
+        err => err.status === 3 && err.stderr.toString().includes('LOCK TABLE'));
+      assert.deepEqual(await bindings(), unbound);
+      for (const company of ['b', 'empty']) {
+        await db.query('UPDATE routing_domains SET is_default=false WHERE id=$1', [defaults.get(company)]);
+        assert.throws(run, err => err.status === 3 && err.stderr.toString().includes('Missing default routing domain for company ' + company));
+        assert.deepEqual(await bindings(), unbound);
+        await db.query('UPDATE routing_domains SET is_default=true WHERE id=$1', [defaults.get(company)]);
+      }
+
+      // An error after UPDATE but before COMMIT must leave both candidates unbound.
+      assert.throws(() => run(script + '\nSELECT 1/0;'), err => err.status === 3 && err.stderr.toString().includes('division by zero'));
+      assert.deepEqual(await bindings(), unbound);
+      const changed = run().split('\n').map(line => line.split('\t'));
+      assert.deepEqual(changed.map(row => row.slice(0, 4)), [
+        ['a', 'old', defaults.get('a'), 'recycled'],
+        ['b', 'b1', defaults.get('b'), 'active'],
+      ]);
+      assert.ok(changed.every(row => Number.isFinite(Date.parse(row[4]))));
+      const expected = originalBindings.map(row => row.id === 'b1' ? { ...row, routing_domain_id: defaults.get('b') } : row);
+      assert.deepEqual(await bindings(), expected);
+      assert.equal(run(), '');
+      assert.deepEqual(await bindings(), expected);
+      assert.deepEqual(await domains(), originalDomains);
+      assert.deepEqual(await legacyRows(db), original);
+    });
+
     await t.test('restored branch accepts an overlapping CIDR only in a different domain and rolls back cleanly', async () => {
       const db = copy.client;
       const addDefaultLan = `INSERT INTO address_spaces(id, company_id, name, cidr)

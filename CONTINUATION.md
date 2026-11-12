@@ -1,3 +1,13 @@
+# MS-03 transactional backfill rehearsal (2026-11-12 UTC)
+
+[PR #46](https://github.com/emsebi/EMS_IPAM/pull/46) merged at `ae93b21`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43125103965) passed.
+
+On a restored copy after migration 002, run the preflight, then `psql -X --single-transaction -v ON_ERROR_STOP=1 -f scripts/routing-domain-backfill.sql`. The script locks the three tables for the transaction, stops when any company lacks a default, and reports each changed Space with its branch, domain, recycle state and assignment time. It is separate from application startup.
+
+Next: verify the named restored backfill subtest in the native PostgreSQL CI job. It exercises missing defaults (including an empty branch), rollback after UPDATE, committed assignment, and a second run. After merge CI passes, rehearse the next migration phase on a restored copy: enforce the required binding and domain-scoped uniqueness together while retaining the old Company/CIDR constraint, then verify compatibility with the legacy writer and rollback. Production constraints and VM acceptance are still pending.
+
+---
+
 # MS-03 preflight for missing routing domains (2026-11-12 UTC)
 
 [PR #45](https://github.com/emsebi/EMS_IPAM/pull/45) merged at `99d7e30395d3989422b6d6c4d589c7ce6c08afd2`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43117247009) passed.
