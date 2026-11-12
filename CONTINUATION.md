@@ -1,3 +1,13 @@
+# MS-03 staged constraints on the restored database (2026-11-12 UTC)
+
+[PR #47](https://github.com/emsebi/EMS_IPAM/pull/47) merged at `1ac5414`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43138278955) passed.
+
+The native restore test commits the required domain binding and the Company/Domain/CIDR unique constraint after the backfill, alongside the legacy Company/CIDR constraint. An old writer omits the domain and commits a new Space. A separate downgrade removes the staged constraints and checks the previously committed Space, original bindings, hosts, prefixes and access grants. The existing overlap rehearsal uses the same staging DDL.
+
+Next: verify the named committed-stage test in the PostgreSQL 16 CI job. After all gates and merge CI pass, use the staged DDL in a new checksummed core migration with guarded backfill and verify the migration ledger and restart on a restored database. Keep the legacy unique key through this phase. VM and operator acceptance remain pending.
+
+---
+
 # MS-03 transactional backfill rehearsal (2026-11-12 UTC)
 
 [PR #46](https://github.com/emsebi/EMS_IPAM/pull/46) merged at `ae93b21`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43125103965) passed.

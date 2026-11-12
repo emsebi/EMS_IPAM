@@ -9,6 +9,10 @@ import { migrateDatabase } from '../server/migrations.mjs';
 
 const domainMigration = await readFile(new URL('../server/migrations/002-default-routing-domains.sql', import.meta.url), 'utf8');
 
+const stageDomainConstraints = `ALTER TABLE address_spaces
+  ALTER COLUMN routing_domain_id SET NOT NULL,
+  ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr)`;
+
 const seed = `
   INSERT INTO companies(id,name) VALUES ('a','Branch A'), ('b','Branch B'), ('empty','Empty branch');
   INSERT INTO address_spaces(id,company_id,name,cidr,deleted_at) VALUES
@@ -205,7 +209,7 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       }
     });
 
-    await t.test('restored backfill aborts atomically, preserves explicit domains and grants, and retries without changes', async () => {
+    await t.test('restored backfill aborts atomically, preserves explicit domains and grants, and retries without changes', async t => {
       const target = await database('backfill');
       runUtility('pg_restore', target.url, ['--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges'], upgradedArchive);
       const db = target.client;
@@ -246,6 +250,39 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
       assert.deepEqual(await bindings(), expected);
       assert.deepEqual(await domains(), originalDomains);
       assert.deepEqual(await legacyRows(db), original);
+
+      await t.test('committed staged constraints preserve legacy writes through downgrade on the restored copy', async () => {
+        // Each DDL statement commits separately so the downgrade must preserve intervening writes.
+        await db.query(stageDomainConstraints);
+        const newSpace = `INSERT INTO address_spaces(id, company_id, name, cidr)
+          VALUES ($1, 'a', 'Legacy LAN', $2) RETURNING id, routing_domain_id`;
+        const oldKey = { code: '23505', constraint: 'address_spaces_company_id_cidr_key' };
+        // a1 is in Voice. The legacy key still prevents the same CIDR in the default domain.
+        await assert.rejects(db.query(newSpace, ['overlap', '192.0.2.0/24']), oldKey);
+        const unbind = "UPDATE address_spaces SET routing_domain_id=NULL WHERE id='old'";
+        await assert.rejects(db.query(unbind), { code: '23502', column: 'routing_domain_id' });
+        assert.deepEqual(await bindings(), expected);
+        assert.deepEqual(await legacyRows(db), original);
+
+        const added = await db.query(newSpace, ['legacy-stage', '203.0.113.0/24']);
+        assert.deepEqual(added.rows, [{ id: 'legacy-stage', routing_domain_id: defaults.get('a') }]);
+        const committedRows = await legacyRows(db);
+        const committedBindings = await bindings();
+        await db.query(`ALTER TABLE address_spaces
+          DROP CONSTRAINT space_domain_cidr_key,
+          ALTER COLUMN routing_domain_id DROP NOT NULL`);
+
+        await assert.rejects(db.query(newSpace, ['overlap', '192.0.2.0/24']), oldKey);
+        await db.query('BEGIN');
+        try {
+          assert.equal((await db.query(unbind)).rowCount, 1);
+        } finally {
+          await db.query('ROLLBACK');
+        }
+        assert.deepEqual(await legacyRows(db), committedRows);
+        assert.deepEqual(await bindings(), committedBindings);
+        assert.deepEqual(await domains(), originalDomains);
+      });
     });
 
     await t.test('restored branch accepts an overlapping CIDR only in a different domain and rolls back cleanly', async () => {
@@ -254,9 +291,7 @@ test('MS-03 PostgreSQL backups recover selected non-default domains, legacy iden
         VALUES ($1, 'b', 'Default LAN', '192.0.2.0/24')`;
       await db.query('BEGIN');
       try {
-        await db.query(`ALTER TABLE address_spaces
-          ALTER COLUMN routing_domain_id SET NOT NULL,
-          ADD CONSTRAINT space_domain_cidr_key UNIQUE (company_id, routing_domain_id, cidr)`);
+        await db.query(stageDomainConstraints);
         await db.query('ALTER TABLE address_spaces DROP CONSTRAINT address_spaces_company_id_cidr_key');
         assert.deepEqual(await legacyRows(db), original);
 
