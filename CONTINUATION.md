@@ -1,3 +1,15 @@
+# MS-03 preflight for missing routing domains (2026-11-12 UTC)
+
+[PR #45](https://github.com/emsebi/EMS_IPAM/pull/45) merged at `99d7e30395d3989422b6d6c4d589c7ce6c08afd2`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43117247009) passed.
+
+Run `psql -X -v ON_ERROR_STOP=1 -f scripts/routing-domain-preflight.sql` against the restored database with migration 002 applied. The read-only query reports unbound active and recycled Spaces, and companies missing a default even if they have no Spaces. Each result includes the statement time, company ID and applicable Space and default-domain IDs. An empty result clears only these two preconditions.
+
+The native recovery fixture introduces both types of unbound Space and missing defaults, checks the exact report and verifies that setting NOT NULL fails. It rolls back the simulated faults and repeats the report in a read-only transaction, comparing original records and access grants.
+
+Next: inspect the named preflight test in the native PostgreSQL job and the remaining gates linked in the PR. After merge CI, rehearse transactional backfill of unbound Spaces in a restored copy, including retry and abort on a missing default, before changing production constraints. The VM Radio GPS/uplink trial and real MikroTik login still need operator evidence.
+
+---
+
 # MS-03 browser selection for overlapping Spaces (2026-11-11 UTC)
 
 [PR #44](https://github.com/emsebi/EMS_IPAM/pull/44) merged at `9000e66f64e7c7e6bc6876250a6bab0ef39d1f2b`. Its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43100247391) passed.
