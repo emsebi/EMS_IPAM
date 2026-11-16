@@ -1,183 +1,120 @@
-# EMS_IPAM — v1.7.1
+# EMS_IPAM
 
-پنل مدیریت شبکه با **Core + IPAM، فهرست تجهیزات، Radio و RADIUS Device Access**، رابط فارسی و انگلیسی و کلاینت اتصال ویندوز. این انتشار، نقطهٔ پایدار برای امکانات منتشرشده است؛ کشف کامل خودکار شبکه، MAC Trace، اعمال 802.1X و تأیید RADIUS روی همهٔ تجهیزات واقعی هنوز تکمیل نشده‌اند.
+**IP Management · Network Inventory · RADIUS Device Access · Radio Topology**
 
-[RADIUS 1.1.0-lab؛ گروه‌بندی با NAS Collections و بدون Company](docs/releases/radius-1.1.0-lab.md) · [تغییرات این نسخه و وضعیت تست](docs/releases/v1.7.1.md) · [حمایت از توسعه](#support-ems-ipam)
+پنل یکپارچهٔ مدیریت و مستندسازی شبکه برای مدیران شبکه؛ با رابط فارسی/انگلیسی و اجرای Docker. هدف پروژه این است که اطلاعات IP، تجهیزات، شعب، دسترسی‌ها و نقشه‌ها در یک محیط قابل پیگیری باشند.
 
-## تصاویر واقعی محیط EMS_IPAM
+**نسخهٔ فعلی: 1.7.1** · **Radio: 2.3** · **Windows Client: 0.8.0**  
+[نصب سریع](#install) · [تصاویر واقعی](#screenshots) · [قابلیت‌ها](#features) · [محدودیت‌ها](#status) · [مستندات](#docs) · [Support](#support)
 
-این تصاویر از **اجرای واقعی رابط وب در تست خودکار مرورگر** با داده‌های آزمایشی و API/دیتابیس برنامه گرفته شده‌اند؛ تصویر تولیدشده با هوش مصنوعی یا اسکرین‌شات VM فعلی نیستند.
+---
 
-### نقشه جغرافیایی چند AP — Radio Management 2.3
+<a id="screenshots"></a>
+## 📷 نمای واقعی محیط
 
-![نقشه OpenStreetMap و موقعیت AP و Station در EMS_IPAM، خط ارتباط و فاصله جغرافیایی](docs/screenshots/real/radio-geographic-map.png)
+### Radio Management — نقشهٔ هم‌زمان چند AP
 
-در صفحه **Radios**، AP و Stationهای ثبت‌شده در Inventory روی نقشه OpenStreetMap با رنگ متفاوت نمایش داده می‌شوند؛ خط AP تا Station و فاصله مستقیم GPS دیده می‌شود.
+![نمای واقعی Radio Management 2.3 در آزمون مرورگر: نقشه مرکزی، پنل انتخاب چند AP و خطوط مربوط به Stationها](docs/screenshots/real/radio-multi-ap-dashboard.png)
 
-**جدید در Radio 2.3:** نقشهٔ بزرگ مرکزی و پنل اطلاعات سمت راست، نمایش هم‌زمان چند AP و Stationهای مربوط با تیک انتخاب، نمایش همه/مخفی‌کردن همه، و بخش واحد **Radio Topology & Stations** زیر نقشه. هر Station فقط به AP والد ثبت‌شدهٔ خودش متصل می‌شود.
+- نقشهٔ بزرگ مرکزی با پنل اطلاعات و انتخاب AP/Station در سمت راست
+- نمایش هم‌زمان چند AP و Stationهای هرکدام، با خطوط اتصال به AP والد
+- نمایش موقعیت ذخیره‌شده و فاصلهٔ مستقیم GPS؛ انتخاب نمایش همه یا مخفی‌کردن همه
+- جدول مشترک **Radio Topology & Stations** پایین نقشه
 
-![نمای واقعی دو AP با استیشن‌های متصل، تیک انتخاب و خطوط والد در Radio 2.3](docs/screenshots/real/radio-multi-ap-dashboard.png)
-
-مختصات از طریق انتخاب روی نقشه یا ورود دستی ثبت شده و در جدول‌های اختصاصی PostgreSQL نگهداری می‌شوند. فقط مدیر سامانه می‌تواند موقعیت را تغییر دهد. نقشه **مانیتورینگ زنده یا اندازه‌گیری کیفیت لینک رادیویی نیست** و بدون ذخیره موقعیت معتبر، خط یا فاصله ساختگی ترسیم نمی‌شود. برای نمایش کاشی‌های OpenStreetMap مرورگر به اینترنت نیاز دارد.
-
-### پنج نمای یکپارچه عملیاتی — Operations Overview
-
-| IP Manager و Inventory | شعب و سایت‌ها |
+| IP Manager و Inventory | RADIUS Device Access |
 |:---:|:---:|
-| ![نمای واقعی IP Manager و Inventory](docs/screenshots/real/operations-ipam.png) | ![نمای واقعی شعب و اطلاعات مرتبط](docs/screenshots/real/operations-sites.png) |
-| **رادیو و ارتباط AP–Station** | **RADIUS، NAS Collections و گروه‌های دسترسی** |
-| ![نمای واقعی ارتباطات رادیویی](docs/screenshots/real/operations-radio.png) | ![نمای واقعی گروه‌های دسترسی RADIUS](docs/screenshots/real/operations-radius.png) |
+| <img src="docs/screenshots/real/operations-ipam.png" alt="نمای IP Manager و فهرست تجهیزات" width="440"> | <img src="docs/screenshots/real/operations-radius.png" alt="نمای RADIUS و NAS Collections" width="440"> |
+| **شعب و سایت‌ها** | **نقشهٔ شبکه؛ آخرین Snapshot ذخیره‌شده** |
+| <img src="docs/screenshots/real/operations-sites.png" alt="نمای اطلاعات سایت‌ها و شعب" width="440"> | <img src="docs/screenshots/real/operations-network-snapshot.png" alt="نمای آخرین Snapshot ذخیره‌شده شبکه" width="440"> |
 
-**نقشه هوشمند شبکه — آخرین Snapshot ذخیره‌شده**
+**دربارهٔ تصاویر:** همهٔ تصاویر بالا از رابط واقعی EMS_IPAM در تست مرورگر، با دیتابیس و داده‌های **آزمایشی** گرفته شده‌اند؛ تصویر تولیدشده با هوش مصنوعی نیستند و اسکرین‌شات VM یا تجهیزات واقعی کاربر محسوب نمی‌شوند.  
+[تمام تصاویر آزمایشی](docs/screenshots/real) · [تصویر نمایش رمز RADIUS برای مدیر](docs/test-results/radius-1.1.0-password-display.png) · [گزارش انتشار Radio 2.3](docs/releases/v1.7.1.md)
 
-![نمای واقعی نقشه تجهیزات ذخیره‌شده در EMS_IPAM](docs/screenshots/real/operations-network-snapshot.png)
+<a id="install"></a>
+## 🚀 نصب سریع
 
-در نمای عملیاتی، داده‌های ثبت‌شده از ماژول‌های اصلی خوانده می‌شوند. وضعیت شبکه در بخش Smart Network Map بازتاب **آخرین برداشت ذخیره‌شده** است، نه مانیتورینگ زنده. مدیریت و ویرایش اصلی هر بخش در ماژول خود انجام می‌شود.
+روی **Ubuntu/Debian** با دسترسی **sudo** و اینترنت، دستور زیر را اجرا کنید:
 
-**وضعیت نصب:** آزمون‌های خودکار و تست روی دادهٔ آزمایشی جایگزین تأیید عملی روی شبکه و رادیوهای واقعی نیستند. برای استقرار روی دادهٔ قدیمی، از بکاپ قبل از Update استفاده کنید. راهنمای نصب آزمایشی در ادامه همین صفحه قرار دارد.
-
-[یادداشت انتشار 1.7.1](docs/releases/v1.7.1.md) · [تصاویر واقعی موجود پنل](docs/screenshots/real) · [تغییرات Radio 2.3](modules/radio/README.md)
-
-## دانلود و نصب با یک دستور
-
-روی Ubuntu/Debian با دسترسی sudo و اینترنت، همین دستور را کپی کنید؛ نصب‌کننده پیش‌نیازها، Docker و Compose را بررسی می‌کند و منوی نصب/ارتقا را می‌آورد:
-
-```bash
+~~~bash
 sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get install -y ca-certificates curl; }; EMS_SETUP=$(mktemp); trap "rm -f \"$EMS_SETUP\"" EXIT; curl -fsSL --retry 3 https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/install.sh -o "$EMS_SETUP"; bash "$EMS_SETUP"'
-```
+~~~
 
-این دستور آخرین کد منتشرشدهٔ شاخهٔ `main` را دریافت می‌کند.
+در منوی نصب‌کننده:
 
-**نصب تازه: گزینه 1. ارتقای نصب موجود: گزینه 2.** پس از ساخت سرویس‌ها، آدرس پنل چاپ می‌شود؛ پورت پیش‌فرض 8080 است. نصب‌کننده نام مدیر و رمزها را می‌پرسد. Portainer اختیاری است و پیش‌فرض نصب نمی‌شود.
+- **گزینهٔ 1:** نصب تازه
+- **گزینهٔ 2:** ارتقای نصب موجود، همراه با تهیهٔ بکاپ دیتابیس پیش از تغییر
+- **پورت پیش‌فرض پنل:** 8080؛ پس از نصب، آدرس ورود نمایش داده می‌شود
 
-پیش‌نیازها: Ubuntu/Debian، دسترسی sudo و اینترنت. Docker Engine و Compose در صورت نیاز نصب می‌شوند؛ سرویس نصب‌شدهٔ قبلی بررسی می‌شود. برای ارتقا، نصب‌کننده پیش از تغییر برنامه بکاپ دیتابیس می‌گیرد.
+نصب‌کننده پیش‌نیازهای Docker Engine و Compose را بررسی می‌کند. **Portainer اختیاری است.** این دستور فایل نصب را از شاخهٔ **main** دریافت می‌کند؛ برای ارتقای نصب دارای دادهٔ مهم، قبل از اجرا بکاپ مستقل و قابل بازیابی داشته باشید. مهاجرت دیتابیس با بازگرداندن صرفِ فایل‌های نسخهٔ قبلی به عقب برنمی‌گردد.
 
-## نصب دستی از فایل دانلودشده
+[دانلود ZIP سورس](https://github.com/emsebi/EMS_IPAM/archive/refs/heads/main.zip) · [راهنمای نصب دستی و تست](START-HERE-FA.md) · [راهنمای ارتقای نسخهٔ 1.7.1](docs/releases/v1.7.1.md)
 
-[دانلود ZIP پروژه](https://github.com/emsebi/EMS_IPAM/archive/refs/heads/main.zip) — یا از منوی **Code → Download ZIP** همین مخزن استفاده کنید. فایل معمولاً `EMS_IPAM-main.zip` نام دارد.
+<a id="features"></a>
+## 🧩 قابلیت‌های نسخهٔ فعلی
 
-اگر ZIP را قبلاً دانلود و به سرور منتقل کرده‌اید، در همان پوشه اجرا کنید؛ استخراج در یک پوشهٔ تازه انجام می‌شود تا فایل‌های قدیمی با نسخهٔ جدید مخلوط نشوند:
-
-```bash
-sudo apt-get update && sudo apt-get install -y unzip
-EMS_SOURCE=$(mktemp -d "$PWD/EMS_IPAM-install.XXXXXX")
-unzip EMS_IPAM-main.zip -d "$EMS_SOURCE"
-cd "$EMS_SOURCE/EMS_IPAM-main"
-sudo bash install.sh
-```
-
-برای دانلود ZIP در خود سرور، پیش از دستورهای استخراج بالا اجرا کنید:
-
-```bash
-sudo apt-get update && sudo apt-get install -y ca-certificates curl
-curl -fL --retry 3 https://github.com/emsebi/EMS_IPAM/archive/refs/heads/main.zip -o EMS_IPAM-main.zip
-```
-
-در هر دو روش، **گزینه 1 برای نصب تازه و گزینه 2 برای ارتقا** است. پایان نصب، آدرس ورود مانند `http://SERVER-IP:8080` چاپ می‌شود. راهنمای تست و عیب‌یابی در [START-HERE-FA.md](START-HERE-FA.md) آمده است.
-
-## کلاینت نهایی ویندوز 0.8.0
-
-[دانلود ZIP کلاینت](https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.8.0.zip)
-
-ZIP را استخراج و `Install.cmd` را با کاربر خودتان اجرا کنید. سپس `Configure-WinBox.cmd` را برای انتخاب WinBox اجرا کنید. در پنجرهٔ انتخاب برنامهٔ **مرورگر**، `EMS-IPAM Client` را معرفی کنید:
-
-```text
-%LOCALAPPDATA%\EMS-IPAM-Client\EMS-IPAM-Client.exe
-```
-
-اگر قبلاً WinBox را در مرورگر انتخاب کرده‌اید، همان انتخاب ذخیره‌شده را طبق [راهنمای اصلاح اتصال](docs/WINDOWS-CLIENT-FA.md) عوض کنید. برای IP نمونهٔ `192.168.1.4` و پورت 8291، کادر Connect To باید فقط `192.168.1.4` باشد. `Test.cmd` تست آفلاین و `Check.cmd` بررسی ثبت کلاینت است.
-
-## نمای عملیاتی یکپارچه — آزمایشی
-
-یک صفحهٔ جدید در منوی پنل با نام **Operations Overview / نمای یکپارچه شبکه** اضافه شده است. این صفحه داده‌های واقعی و ذخیره‌شدهٔ IP Manager و Inventory، شعب و مخاطبان، ارتباط AP و Station، مجموعه‌ها و پروفایل‌های RADIUS و آخرین Snapshot نقشه شبکه را در پنج تب نشان می‌دهد.
-
-این بخش **مدیریت زنده یا اسکن خودکار نیست**: وضعیت رادیو از آخرین Ping دستی، وضعیت شبکه از Snapshot ذخیره‌شده و فاصلهٔ رادیویی فقط با مختصات GPS معتبر نشان داده می‌شود. فرم‌های ویرایش و عملیات موجود در ماژول‌های اصلی حفظ شده‌اند و از همین صفحه قابل دسترسی هستند. فقط مدیر پنل می‌تواند این نمای تجمیعی را باز کند.
-
-[اسکرین‌شات‌های واقعی از تست مرورگر و گزارش CI](https://github.com/emsebi/EMS_IPAM/actions/runs/42414198797) — تصاویر این اجرا از داده‌های آزمایشی و رابط واقعی تولید شده‌اند؛ تصویر VM کاربر یا شاهد تأیید تجهیزات واقعی نیستند. تصاویر مفهومیِ ساخته‌شده با ابزار تولید تصویر، اسکرین‌شات محصول محسوب نمی‌شوند.
-
-جزئیات قابلیت‌ها، محدودیت‌ها و چک‌لیست پذیرش: [Operations Overview](modules/operations-overview/README.md). این یک مرحلهٔ واقعی از توسعه است و به معنای تکمیل همهٔ امکانات موجود در تصاویر مفهومی نیست.
-
-## این نسخه چه دارد؟
-
-| بخش | کاربرد فعلی |
-|---|---|
-| IP Manager → IP Manage | شرکت، رنج، IP، جست‌وجو و مشخصات آدرس‌ها |
-| IP Manager → Device List | فهرست تجهیزات و انتخاب نوع در فرم IP |
-| IP Manager → Device Types | افزودن، ویرایش، حذف نوع آزاد و تعداد استفاده؛ مستقل از Settings |
-| IP Manager → Radios | انتخاب AP و نمایش Stationهای همان AP؛ نقشه جغرافیایی OpenStreetMap با خطوط و فواصل GPS، ذخیره مختصات در PostgreSQL و Ping دستی |
-| 802.1X / MAC | دو تب رکوردهای MAC موجود در IPAM و پرسنل؛ فعلاً بدون اعمال سیاست RADIUS |
-| RADIUS Device Access | ثبت NAS، مجموعهٔ تجهیزات، پروفایل دسترسی، کاربران، قالب کانفیگ و لاگ‌های عملیاتی |
-| گزارش‌ها | خلاصهٔ عملیاتی ماژول‌ها و رخدادهای مدیریتی |
-| نقشه شبکه | نقشهٔ دستی و زیرساخت ذخیرهٔ Snapshot؛ پارسر آفلاین LLDP/CDP، بدون کشف زندهٔ کامل |
-| مدیریت پنل | کاربران، دسترسی‌ها، تنظیمات، بکاپ و مهاجرت ثبت‌شدهٔ دیتابیس |
-| اتصال ویندوز | کلاینت 0.8.0 برای WinBox، RDP، SSH، Telnet و VNC |
-
-به‌روزرسانی MAC از سوئیچ‌ها در مراحل بعد فقط با درخواست دستی کاربر انجام می‌شود؛ تایمر یا خواندن خودکار هنگام بازکردن صفحه نداریم.
-
-## تغییرات نسخهٔ فعلی
-
-- یکپارچه‌سازی آخرین کد ثبت‌شدهٔ ماژول‌های RADIUS و گزارش‌ها و اصلاحات رابط فارسی/انگلیسی.
-- بخش حمایت مالی داخل «دربارهٔ برنامه» با QR محلی، آدرس قابل انتخاب و کپی روی HTTPS و HTTP داخلی.
-- معرفی دقیق شبکه‌ها: USDT روی TRON (TRC20) و BTC روی Bitcoin.
-- تصاویر اجرای فعلی برنامه با داده‌های آزمایشی.
-
-## کلاینت اتصال و نصب
-
-- لانچر مشخص `EMS-IPAM-Client.exe` داخل ZIP است و هنگام نصب در ویندوز ثبت می‌شود؛ پورت 8291 فقط IP به WinBox می‌دهد، پورت سفارشی `IP:PORT`.
-- نصب مجدد مسیر انتخاب‌شدهٔ ابزارها را حفظ می‌کند. خطای اتصال پیام دارد و `Check.cmd` وضعیت ثبت پروتکل را نشان می‌دهد.
-- پنل پس از MIK، آدرس مقصد، تلاش دوباره و راهنمای اصلاح برنامهٔ مرورگر را نمایش می‌دهد.
-- لینک دانلود اصلی پنل به کلاینت 0.8.0 اشاره می‌کند.
-- نصب یک‌دست با مخزن رسمی Docker؛ اجرای نصب‌کننده از فایل یا ورودی استاندارد پشتیبانی می‌شود.
-
-## تصاویر اجرای واقعی پنل
-
-این تصاویر از تست مرورگر با داده‌های آزمایشی گرفته شده‌اند.
-
-![IP Manager؛ نمایش آدرس‌ها و تجهیزات](docs/test-results/ipam.png)
-
-![Device Types؛ ثبت و مدیریت انواع دستگاه](docs/test-results/device-types.png)
-
-![Radios؛ انتخاب AP و Stationهای مرتبط](docs/test-results/radios.png)
-
-![راهنمای اتصال و آدرس قابل کپی](docs/test-results/client-connection.png)
-
-![دانلود و راه‌اندازی کلاینت ویندوز](docs/test-results/client-guide.png)
-
-![RADIUS؛ مدیریت تجهیزات و دسترسی](docs/test-results/radius-1.1.0-nas.png)
-
-![گزارش‌های عملیاتی](docs/test-results/reports.png)
-
-![دربارهٔ برنامه و حمایت مالی](docs/test-results/about-support.png)
-
-طرح قدیمی [Subnet](docs/screenshots/subnet-overview-concept.png) صرفاً مرجع مفهومی است.
-
-## نصب، تست و ادامه پروژه
-
-- [شروع نصب و تست](START-HERE-FA.md)
-- [راهنمای کلاینت و اصلاح WinBox](docs/WINDOWS-CLIENT-FA.md)
-- [گزارش تست و محدودیت‌های این نقطهٔ ذخیره](docs/TEST-REPORT-FA.md)
-- [نقشهٔ راه پنج‌مرحله‌ای](docs/ROADMAP-FA.md)
-- [نقطهٔ ادامه کار](CONTINUATION.md) و [قرارداد ماژول‌ها](docs/MODULE-SDK-FA.md)
-
-تست رابط پنل با HTTP واقعی و دیتابیس موقت PGlite انجام می‌شود. جزئیات بررسی‌های این نسخه و نتیجهٔ اجرای قبلی Docker/PostgreSQL/FreeRADIUS در [گزارش انتشار](docs/releases/v1.7.0-rc.3.md) آمده است. نتیجهٔ تست هر دستگاه واقعی باید جدا ثبت شود.
-
-طراح پروژه: Ebrahim Mamani / ابراهیم مامانی
-
-<a id="support-ems-ipam"></a>
-## حمایت از توسعه / Support EMS_IPAM
-
-اگر EMS_IPAM در کار شما مفید است، می‌توانید از ادامهٔ توسعهٔ آن حمایت کنید. حمایت مالی کاملاً اختیاری است.
-
-If EMS_IPAM helps your work, you can support its continued development. Donations are optional.
-
-| Asset / ارز | Network / شبکه | Receiving address / آدرس دریافت |
+| ماژول | قابلیت قابل استفاده | وضعیت |
 |---|---|---|
-| **Tether (USDT)** | **TRON — TRC20** | `TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH` |
-| **Bitcoin (BTC)** | **Bitcoin** | `bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0` |
+| **IP Manager / Inventory** | ثبت و جست‌وجوی رنج، IP، تجهیزات، Device Types، شعب و اطلاعات مرتبط | موجود |
+| **Radio Management 2.3** | نقشهٔ چند AP، ارتباط AP→Station، مختصات PostgreSQL، فاصلهٔ GPS و Ping دستی | موجود؛ مستندسازی |
+| **RADIUS Device Access** | NAS، NAS Collections، پروفایل، کاربران، گزارش و مدیریت Secret؛ بدون نیاز به Company در بخش RADIUS | موجود؛ پذیرش روی روتر واقعی باز |
+| **Operations Overview** | نماهای تجمیعی IPAM، سایت‌ها، Radio، RADIUS و آخرین Snapshot شبکه | آزمایشی |
+| **Smart Network Map** | نقشهٔ دستی، Snapshot و پردازش آفلاین LLDP/CDP | تکمیل جزئی |
+| **MAC / 802.1X / NAC** | ثبت اطلاعات MAC و پرسنل | اعمال عملی سیاست هنوز پیاده‌سازی نشده |
+| **Windows Client 0.8.0** | اجرای اتصال WinBox، RDP، SSH، Telnet و VNC از پنل | موجود |
 
-| USDT · TRON (TRC20) | BTC · Bitcoin |
+### کلاینت ویندوز
+
+[دانلود EMS-IPAM Windows Client 0.8.0](https://raw.githubusercontent.com/emsebi/EMS_IPAM/main/docker-app/public/downloads/EMS-IPAM-Windows-Client-v0.8.0.zip)
+
+فایل ZIP را استخراج و **Install.cmd** را اجرا کنید. برای اتصال WinBox می‌توانید **Configure-WinBox.cmd** را به کار ببرید. اگر مرورگر برنامه را پرسید، فایل زیر را انتخاب کنید:
+
+~~~text
+%LOCALAPPDATA%\EMS-IPAM-Client\EMS-IPAM-Client.exe
+~~~
+
+[راهنمای کلاینت و رفع مشکل انتخاب WinBox](docs/WINDOWS-CLIENT-FA.md)
+
+<a id="status"></a>
+## 🧪 وضعیت تست و محدودیت‌ها
+
+**نسخهٔ 1.7.1 یک نقطهٔ انتشار برای قابلیت‌های موجود است، نه اعلام تکمیل تمام پروژه.**
+
+- تست‌های خودکار Core، مرورگر، API، PostgreSQL و Docker در CI اجرا می‌شوند. [آخرین اجرای موفق ثبت‌شدهٔ main در ۱۲ نوامبر ۲۰۲۶](https://github.com/emsebi/EMS_IPAM/actions/runs/43165947423) مربوط به کامیت آزموده‌شدهٔ آن اجراست؛ انتشار بعدی تصاویر به‌معنای تست مجدد کد روی تجهیزات واقعی نیست.
+- کشف کاملاً خودکار توپولوژی، MAC Trace و اعمال 802.1X/NAC هنوز تکمیل نشده‌اند.
+- ورود واقعی RADIUS به RouterOS و تفاوت سطوح **Full / Read** باید روی دستگاه عملی بررسی شود.
+- خطوط Radio فاصلهٔ مستقیم موقعیت‌های ثبت‌شده را نشان می‌دهند، نه کیفیت یا مانیتورینگ زندهٔ لینک. کاشی‌های OpenStreetMap برای نمایش آنلاین به اینترنت نیاز دارند.
+- Snapshot شبکه و آخرین Ping ثبت‌شده نباید با وضعیت زندهٔ شبکه اشتباه گرفته شوند. هیچ ارتباط یا Push خودکاری به تجهیزات نباید بدون درخواست و مجوز اجرا شود.
+- نصب موفق در CI، جایگزین بکاپ، استقرار روی VM و آزمون عملی اپراتور نیست.
+
+<a id="docs"></a>
+## 📚 مستندات
+
+معماری فعلی از **Core + IPAM** و ماژول‌های Inventory، Radio و RADIUS تشکیل شده است. [طرح مفهومی قدیمی Subnet](docs/screenshots/subnet-overview-concept.png) فقط مرجع طراحی است و **اسکرین‌شات محصول فعلی نیست**.
+
+| راهنما | موضوع |
+|---|---|
+| [START-HERE-FA](START-HERE-FA.md) | نصب، راه‌اندازی و عیب‌یابی |
+| [انتشار 1.7.1](docs/releases/v1.7.1.md) | تغییرات، محدودیت‌ها و مسیر ارتقا |
+| [آزمون‌ها](docs/TEST-REPORT-FA.md) | گزارش تست‌های ثبت‌شده |
+| [نقشهٔ راه](docs/ROADMAP-FA.md) | مسیر ادامهٔ توسعه |
+| [معیار حفظ امکانات](docs/FEATURE-ACCEPTANCE-FA.md) | جلوگیری از حذف قابلیت‌های پذیرفته‌شده |
+| [نقطهٔ ادامهٔ توسعه](CONTINUATION.md) | وضعیت فنی و گام‌های بعد |
+| [Radio Management](modules/radio/README.md) | جزئیات و محدودیت‌های نقشهٔ رادیویی |
+
+<a id="support"></a>
+## ❤️ حمایت از توسعه
+
+EMS_IPAM یک پروژهٔ عمومی در حال توسعه است. اگر برای شما مفید بود، حمایت مالی کاملاً اختیاری است.
+
+*EMS_IPAM is a Docker-based network administration and documentation project with IPAM, inventory, RADIUS access management, and radio topology views. Screenshots show the real web UI running against test fixtures, not a production deployment. Hardware acceptance and some planned modules remain in progress.*
+
+| دارایی | شبکه | آدرس دریافت |
+|---|---|---|
+| **USDT** | **TRON (TRC20)** | TTtgCYCdWR8PxdacyWgaRPX6cj4raD2BxH |
+| **BTC** | **Bitcoin** | bc1qy5ktdduz7p23nds67u4tmpa3se4cetxsnurzr0 |
+
+| USDT / TRC20 | Bitcoin |
 |:---:|:---:|
-| <img src="docker-app/public/donations/usdt-trc20.png" width="212" alt="USDT on TRON (TRC20) donation QR"> | <img src="docker-app/public/donations/bitcoin.png" width="212" alt="Bitcoin donation QR"> |
+| <img src="docker-app/public/donations/usdt-trc20.png" alt="QR حمایت USDT روی شبکه TRON" width="180"> | <img src="docker-app/public/donations/bitcoin.png" alt="QR حمایت Bitcoin" width="180"> |
 
-
-Use the exact network shown above. The USDT QR includes its token identifier; if your wallet cannot open it, select USDT on TRON and paste the receiving address.
+**طراح پروژه:** Ebrahim Mamani / ابراهیم مامانی
