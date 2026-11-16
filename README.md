@@ -89,6 +89,8 @@ sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get in
 <a id="docs"></a>
 ## 📚 مستندات
 
+معماری فعلی از **Core + IPAM** و ماژول‌های Inventory، Radio و RADIUS تشکیل شده است. [طرح مفهومی قدیمی Subnet](docs/screenshots/subnet-overview-concept.png) فقط مرجع طراحی است و **اسکرین‌شات محصول فعلی نیست**.
+
 | راهنما | موضوع |
 |---|---|
 | [START-HERE-FA](START-HERE-FA.md) | نصب، راه‌اندازی و عیب‌یابی |
