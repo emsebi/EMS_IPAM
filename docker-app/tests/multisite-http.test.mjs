@@ -686,4 +686,48 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     }
     await reader('GET', '/api/spaces/' + siblingId + '/data', undefined, 404);
   });
+
+  await t.test('MS-02 CSV preview and commit preserve branch isolation and duplicate identities', async () => {
+    const editor = await client('north-editor');
+    const viewer = await client('north-reader');
+    const read = site => admin('GET', '/api/spaces/' + site.spaceId + '/data');
+    await admin('PUT', '/api/hosts', { spaceId: south.spaceId, ip: '192.0.2.93', name: 'South import sentinel' });
+    const northBefore = await read(north);
+    const southBefore = await read(south);
+    const existing = northBefore.hosts.find(host => host.ip === '192.0.2.50');
+    const csv = 'IP,Name,Description\n192.0.2.50,Imported existing,Updated notes\n192.0.2.93,Imported new,New notes\n203.0.113.1,Outside,Invalid row\n';
+    const body = { destinationSpaceId: north.spaceId, filename: 'synthetic-branches.csv',
+      base64: Buffer.from(csv).toString('base64'), mode: 'skip' };
+    const root = '/api/imports/ipam/';
+    for (const action of ['preview', 'commit']) {
+      await editor('POST', root + action, { ...body, destinationSpaceId: south.spaceId }, 404);
+      await viewer('POST', root + action, body, 403);
+    }
+    const preview = await editor('POST', root + 'preview', body);
+    assert.deepEqual(preview.summary, { total: 3, valid: 2, invalid: 1, existing: 1, newRecords: 1 });
+    assert.equal(preview.errors.length, 1);
+    assert.deepEqual(await read(north), northBefore, 'preview must leave the destination untouched');
+    assert.deepEqual(await read(south), southBefore, 'denied requests must not modify the other branch');
+
+    const skip = await editor('POST', root + 'commit', body);
+    assert.deepEqual(skip.result, { total: 3, invalid: 1, created: 1, updated: 0, skipped: 1 });
+    const afterSkip = await read(north);
+    assert.deepEqual(afterSkip.hosts.find(host => host.id === existing.id), existing);
+    const created = afterSkip.hosts.find(host => host.ip === '192.0.2.93');
+    assert.ok(created?.id);
+    const again = await editor('POST', root + 'commit', body);
+    assert.deepEqual(again.result, { total: 3, invalid: 1, created: 0, updated: 0, skipped: 2 });
+    assert.deepEqual(await read(north), afterSkip);
+
+    const update = await editor('POST', root + 'commit', { ...body, mode: 'update' });
+    assert.deepEqual(update.result, { total: 3, invalid: 1, created: 0, updated: 2, skipped: 0 });
+    const afterUpdate = await read(north);
+    const updated = afterUpdate.hosts.find(host => host.ip === '192.0.2.50');
+    assert.deepEqual([updated.id, updated.name, updated.notes, updated.mac],
+      [existing.id, 'Imported existing', 'Updated notes', existing.mac]);
+    assert.equal(afterUpdate.hosts.find(host => host.ip === '192.0.2.93').id, created.id);
+    assert.ok(!afterUpdate.hosts.some(host => host.ip === '203.0.113.1'));
+    assert.deepEqual(afterUpdate.space, northBefore.space);
+    assert.deepEqual(await read(south), southBefore, 'same IP values in South retain their original records');
+  });
 });
