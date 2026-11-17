@@ -87,3 +87,47 @@ test("IPAM preview and layout controls exist without replacing portable import",
   assert.match(css,/\.root-table-container\{height:auto!important/);
   assert.match(css,/\.app\.sidebar-collapsed/);
 });
+
+import { parseIpamImport } from "../server/ipam-bulk.mjs";
+
+function tinyXlsx() {
+  const parts = [
+    ["xl/workbook.xml", '<workbook><sheets><sheet name="IP List" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ["xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'],
+    ["xl/sharedStrings.xml", '<sst><si><t>IP</t></si><si><t>Name</t></si><si><t>Description</t></si><si><t>سوئیچ</t></si></sst>'],
+    ["xl/worksheets/sheet1.xml", '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>10.1.1.25</t></is></c><c r="B2" t="s"><v>3</v></c><c r="C2" t="inlineStr"><is><t>طبقه اول</t></is></c></row></sheetData></worksheet>'],
+  ];
+  const locals=[], centrals=[];
+  let offset=0;
+  for(const [name, value] of parts) {
+    const nameBuffer=Buffer.from(name), data=Buffer.from(value);
+    const local=Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);
+    local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(nameBuffer.length,26);
+    const central=Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);central.writeUInt16LE(20,6);
+    central.writeUInt32LE(data.length,20);central.writeUInt32LE(data.length,24);
+    central.writeUInt16LE(nameBuffer.length,28);central.writeUInt32LE(offset,42);
+    locals.push(local,nameBuffer,data);centrals.push(central,nameBuffer);
+    offset+=local.length+nameBuffer.length+data.length;
+  }
+  const central=Buffer.concat(centrals), end=Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(parts.length,8);end.writeUInt16LE(parts.length,10);
+  end.writeUInt32LE(central.length,12);end.writeUInt32LE(offset,16);
+  return Buffer.concat([...locals,central,end]);
+}
+
+test("Excel xlsx reads A/B/C, header, Persian shared strings and first worksheet", () => {
+  const input=tinyXlsx();
+  const result=parseIpamImport({filename:"assets.xlsx",base64:input.toString("base64"),cidr:"10.1.0.0/16"});
+  assert.equal(result.total,1);
+  assert.equal(result.invalid,0);
+  assert.deepEqual(result.items,[{ip:"10.1.1.25",name:"سوئیچ",notes:"طبقه اول"}]);
+});
+test("CSV rejects malformed, outside-space and repeated IP without losing valid rows", () => {
+  const rows="IP,Name,Description\r\n10.1.1.25,Router,up\r\n10.1.1.25,Duplicate,no\r\n10.2.1.5,Out,scope\r\nabc,Bad,invalid\r\n10.1.1.30,Station,ok";
+  const result=parseIpamImport({filename:"hosts.csv",base64:Buffer.from(rows).toString("base64"),cidr:"10.1.0.0/16"});
+  assert.equal(result.total,5);
+  assert.equal(result.invalid,3);
+  assert.deepEqual(result.items.map((item)=>item.ip),["10.1.1.25","10.1.1.30"]);
+});

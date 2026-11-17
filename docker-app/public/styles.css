@@ -244,3 +244,16 @@ html[data-content-direction="rtl"] .sidebar .navbtn,html[data-content-direction=
 .app.sidebar-collapsed .navbtn>span:not(.nav-icon){display:none}
 .app.sidebar-collapsed .module-navigation .navbtn{font-size:0}
 @media(max-width:740px){.app.sidebar-collapsed{grid-template-columns:52px minmax(0,1fr)}.app.sidebar-collapsed .sidebar{padding:8px 3px}.sidebar-toggle{margin-left:2px}}
+
+/* Mobile keeps its bottom navigation; the collapsible desktop control is hidden. */
+@media(max-width:760px){
+  .sidebar-toggle{display:none!important}
+  .app.sidebar-collapsed{display:block!important}
+  .app.sidebar-collapsed .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:58px;padding:5px;display:block}
+  .app.sidebar-collapsed .primary-nav{flex-direction:row;height:100%}
+  .app.sidebar-collapsed .nav-group{margin:0;padding:0;flex:2;align-self:stretch}
+  .app.sidebar-collapsed .nav-group>summary{display:flex;align-items:center;justify-content:center;height:100%;padding:4px;font-size:12px}
+  .app.sidebar-collapsed .navbtn{min-height:48px}
+  .app.sidebar-collapsed .nav-submenu .navbtn{font-size:13px;min-width:0;justify-content:start;padding:6px}
+  .app.sidebar-collapsed .nav-submenu .navbtn>span:last-child{display:inline}
+}
