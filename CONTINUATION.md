@@ -1,3 +1,13 @@
+# MS-02 CSV import isolation (2026-11-17 UTC)
+
+Fresh main includes #49 and #52. [Lab deploy 44050910476](https://github.com/emsebi/EMS_IPAM/actions/runs/44050910476) succeeded for `a91a0ef0`; its job records persistence and migration-ledger checks after restart. [Main CI 44090032411](https://github.com/emsebi/EMS_IPAM/actions/runs/44090032411) passed after #52. That import/UI change is newer than the deployed lab SHA.
+
+The HTTP suite now checks CSV preview, Skip, repeated Skip, Update, invalid rows, stable host IDs/MACs and exact preservation of the other branch with overlapping IPs. A branch writer and viewer exercise authorization for both endpoints.
+
+Next: inspect the named CSV isolation test in the PostgreSQL CI job and all gates for this PR head. After merge CI, stage the tested import/UI build through EMS-IPAM Lab Deploy while preserving the installed Radio trial, data and credentials. XLSX end-to-end coverage, VM hands-on import acceptance and real MikroTik login remain pending.
+
+---
+
 # Core 003: required routing domains (2026-11-12 UTC)
 
 [PR #48](https://github.com/emsebi/EMS_IPAM/pull/48) and its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/43158991262) passed the staged downgrade rehearsal. Core startup now runs 003 after 002 in the existing transaction. It requires a default for every branch, backfills unbound active and recycled Spaces, enforces NOT NULL and adds the branch/domain/CIDR key alongside the existing branch/CIDR key. Explicit domains and access grants are preserved.
