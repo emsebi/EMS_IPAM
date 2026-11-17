@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.1">
+  <link rel="stylesheet" href="/styles.css?v=1.7.2">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -24,6 +24,7 @@
 
   <div id="appView" class="app hidden">
     <aside class="sidebar">
+      <button id="sidebarToggle" class="sidebar-toggle" type="button" title="جمع یا باز کردن منوی کناری" aria-expanded="true" aria-label="جمع کردن منوی کناری">☰</button>
       <button id="homeButton" class="sidebar-brand" type="button" aria-label="صفحه اصلی">
         <span class="brandmark">IP</span>
         <span><b>EMS_IPAM</b><small>Enterprise IP Management</small></span>
@@ -320,6 +321,23 @@
     </div>
   </dialog>
 
+
+  <dialog id="bulkIpamDialog" class="wide-dialog">
+    <form id="bulkIpamForm">
+      <div class="modal-head"><div><h3>ورود گروهی IP از Excel / CSV</h3><p>A: IP · B: Name · C: Description — فایل اصلی شما بدون تغییر می‌ماند</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-body import-layout">
+        <label class="drop-file">انتخاب فایل Excel / CSV<input id="bulkIpamFile" type="file" accept=".xlsx,.csv" required><span>حداکثر ۷ مگابایت / ۱۰ هزار ردیف؛ شیت اول Excel خوانده می‌شود</span></label>
+        <div class="form-grid">
+          <label class="field">شرکت مقصد<select id="bulkIpamCompany" required></select></label>
+          <label class="field">رنج مقصد<select id="bulkIpamSpace" required></select></label>
+          <label class="field full">IPهای تکراری<select id="bulkIpamMode"><option value="skip">رد تکراری‌ها، حفظ اطلاعات قبلی</option><option value="update">فقط نام و توضیحات را به‌روزرسانی کن (بقیه مشخصات حفظ شوند)</option></select></label>
+        </div>
+        <div id="bulkIpamPreview" class="bulk-ipam-preview" aria-live="polite">فایل و رنج را انتخاب کنید، سپس «بررسی فایل» را بزنید. هیچ داده‌ای قبل از تأیید ثبت نمی‌شود.</div>
+      </div>
+      <div class="modal-foot"><button class="btn" type="button" data-close>انصراف</button><button class="btn" type="submit">بررسی فایل</button><button id="bulkIpamCommit" class="btn primary" type="button" disabled>تأیید و ثبت اطلاعات</button></div>
+    </form>
+  </dialog>
+
   <dialog id="importDialog" class="wide-dialog">
     <form id="importForm">
       <div class="modal-head"><div><h3>ورود بسته زیرشبکه</h3><p>انتقال یک رنج به همین سامانه یا نصب دیگری از EMS IPAM</p></div><button class="close" type="button" data-close>×</button></div>
@@ -447,6 +465,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.1"></script>
+  <script type="module" src="/app.js?v=1.7.2"></script>
 </body>
 </html>

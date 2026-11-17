@@ -205,3 +205,55 @@ html[data-content-direction="rtl"] .sidebar .navbtn,html[data-content-direction=
 .donation-network-note{font-size:12px;margin-bottom:0}
 .donation-copy-status{min-height:1.5em;color:var(--blue);font-size:12px}
 @media(max-width:600px){.donation-grid{grid-template-columns:1fr}.about-content{padding:20px 16px}.donation-card{padding:16px 12px}}
+
+/* IPAM 1.7.2: compact vertical tables; bottom panels follow every row, not an inner scroll area. */
+.root-table-container{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+.root-vertical-wrap{height:auto!important;max-height:none!important;overflow-x:auto!important;overflow-y:visible!important}
+.vertical-table-wrap{height:auto!important;max-height:none!important;overflow-x:auto!important;overflow-y:visible!important}
+.root-range-table td{height:36px!important}
+.root-range-table th{height:34px!important}
+.root-network-cell,.root-range-table th:first-child{width:188px!important;min-width:188px!important}
+.root-row-open{grid-template-columns:25px minmax(0,1fr);gap:5px;padding:2px 5px!important}
+.root-row-open b,.root-row-open small{line-height:1.1!important;margin:0!important}
+.root-octet{font-size:13px!important}
+.root-prefix-span{padding:1px!important;min-width:105px!important}
+.root-prefix-open{min-height:32px!important;gap:1px!important;padding-top:1px!important;padding-bottom:1px!important}
+.root-range-table{min-width:920px!important}
+.range-label-action{top:3px;left:3px;width:18px;height:18px}
+.ipam-distribution-header{display:flex;justify-content:space-between;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 15px 0;font-size:11px}
+.ipam-distribution-header span{color:var(--muted);font-size:10px}
+.ipam-distribution{display:flex;direction:ltr;width:100%;min-height:14px;border-radius:5px;overflow:hidden;background:var(--soft);border:1px solid var(--line);gap:1px}
+.panel>.ipam-distribution{margin:8px 15px 12px;width:calc(100% - 30px)}
+.ipam-distribution i{flex:1 1 0;min-width:0;background:transparent}
+.ipam-distribution i.allocated{background:color-mix(in srgb,var(--segment-color) 25%,var(--card))}
+.ipam-distribution i.recorded{background:var(--segment-color)}
+.space-company-distribution{margin-top:9px}
+.space-company-distribution>.ipam-distribution{height:14px}
+.bulk-ipam-preview{display:grid;gap:8px;font-size:12px;max-height:280px;overflow:auto;color:var(--ink)}
+.bulk-preview-scroll{overflow:auto}.bulk-preview-scroll table{width:100%;border-collapse:collapse;text-align:left;direction:ltr}.bulk-preview-scroll td,.bulk-preview-scroll th{border:1px solid var(--line);padding:5px 8px}.bulk-ipam-preview ul{margin:0;padding:0 20px}
+/* Sidebar collapse: keep recognizable navigation icons and a quick expand control. */
+.app.sidebar-collapsed{grid-template-columns:64px minmax(0,1fr)}
+.sidebar-toggle{align-self:flex-start;width:35px;height:35px;background:#253c57;color:#fff;border:1px solid #37506c;border-radius:8px;cursor:pointer;margin:0 0 8px 6px}
+.app.sidebar-collapsed .sidebar{padding:14px 6px}
+.app.sidebar-collapsed .sidebar-brand{padding:3px 0 10px;justify-content:center}
+.app.sidebar-collapsed .sidebar-brand>span:last-child,.app.sidebar-collapsed .sidebar-footer,.app.sidebar-collapsed .nav-divider,.app.sidebar-collapsed .nav-group>summary{display:none}
+.app.sidebar-collapsed .nav-group{padding:0;margin:0;border:0}
+.app.sidebar-collapsed .nav-group:not([open]) .nav-submenu{display:block}
+.app.sidebar-collapsed .navbtn{justify-content:center;width:100%;min-height:42px;padding:0;font-size:0}
+.app.sidebar-collapsed .navbtn .nav-icon{font-size:18px}
+.app.sidebar-collapsed .navbtn>span:not(.nav-icon){display:none}
+.app.sidebar-collapsed .module-navigation .navbtn{font-size:0}
+@media(max-width:740px){.app.sidebar-collapsed{grid-template-columns:52px minmax(0,1fr)}.app.sidebar-collapsed .sidebar{padding:8px 3px}.sidebar-toggle{margin-left:2px}}
+
+/* Mobile keeps its bottom navigation; the collapsible desktop control is hidden. */
+@media(max-width:760px){
+  .sidebar-toggle{display:none!important}
+  .app.sidebar-collapsed{display:block!important}
+  .app.sidebar-collapsed .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:58px;padding:5px;display:block}
+  .app.sidebar-collapsed .primary-nav{flex-direction:row;height:100%}
+  .app.sidebar-collapsed .nav-group{margin:0;padding:0;flex:2;align-self:stretch}
+  .app.sidebar-collapsed .nav-group>summary{display:flex;align-items:center;justify-content:center;height:100%;padding:4px;font-size:12px}
+  .app.sidebar-collapsed .navbtn{min-height:48px}
+  .app.sidebar-collapsed .nav-submenu .navbtn{font-size:13px;min-width:0;justify-content:start;padding:6px}
+  .app.sidebar-collapsed .nav-submenu .navbtn>span:last-child{display:inline}
+}

@@ -1,5 +1,5 @@
-import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight } from "./subnet-model.mjs?v=1.7.1";
-import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.1";
+import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight, usageSegments } from "./subnet-model.mjs?v=1.7.2";
+import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.2";
 
 const COLORS = ["#3157d5", "#2fa36f", "#d94b5b", "#e48a2d", "#805ad5", "#2b9ca8", "#c2418c", "#64748b"];
 const STATUS_LABELS = { active: "فعال", reserved: "رزروشده", planned: "برنامه‌ریزی‌شده", quarantine: "قرنطینه", retired: "غیرفعال", offline: "خاموش", fault: "نیازمند بررسی", free: "آزاد" };
@@ -38,6 +38,8 @@ const state = {
   tableVisibleBlocks: 8,
   companyData: null,
   importPackage: null,
+  bulkIpamFile: null,
+  bulkIpamPreview: null,
   inventoryQuery: "",
   inventoryType: "",
   deviceTypes: [],
@@ -53,6 +55,16 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const page = $("page");
+function setSidebarCollapsed(collapsed) {
+  $("appView").classList.toggle("sidebar-collapsed", Boolean(collapsed));
+  $("sidebarToggle").setAttribute("aria-expanded", String(!collapsed));
+  $("sidebarToggle").setAttribute("aria-label", collapsed ? "باز کردن منوی کناری" : "جمع کردن منوی کناری");
+  $("sidebarToggle").textContent = collapsed ? "☰" : "‹";
+  localStorage.setItem("ems-sidebar-collapsed", collapsed ? "1" : "0");
+}
+setSidebarCollapsed(localStorage.getItem("ems-sidebar-collapsed") === "1");
+$("sidebarToggle").addEventListener("click", () => setSidebarCollapsed(!$("appView").classList.contains("sidebar-collapsed")));
+
 const compactNavigation = matchMedia("(max-width:720px)");
 const ipamMenu = document.querySelector(".nav-group");
 const syncNavigation = () => { ipamMenu.open = !compactNavigation.matches; };
@@ -71,7 +83,7 @@ const sourceTextNodes = new WeakMap();
 const sourceAttributes = new WeakMap();
 async function loadLanguageCatalog() {
   try {
-    const response = await fetch("/i18n/languages.json?v=1.7.1", { cache: "no-store" });
+    const response = await fetch("/i18n/languages.json?v=1.7.2", { cache: "no-store" });
     const items = response.ok ? await response.json() : [];
     state.languages = Array.isArray(items)
       ? items.filter((item) => /^[a-z0-9_-]+$/i.test(String(item?.id || "")) && item?.label)
@@ -93,9 +105,9 @@ async function readLanguageFile(path) {
 }
 async function loadLanguagePack(lang) {
   const [english, localized, legacy] = await Promise.all([
-    readLanguageFile("/i18n/en.json?v=1.7.1"),
-    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.1`),
-    readLanguageFile("/i18n/legacy-fa.json?v=1.7.1"),
+    readLanguageFile("/i18n/en.json?v=1.7.2"),
+    readLanguageFile(`/i18n/${encodeURIComponent(lang)}.json?v=1.7.2`),
+    readLanguageFile("/i18n/legacy-fa.json?v=1.7.2"),
   ]);
   translateValue = createTranslator({ english, translations: localized, legacy, language: lang });
   translateKey = createKeyTranslator({ english, translations: localized, language: lang });
@@ -651,7 +663,7 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
     const free = Math.max(0, total - used);
     const prefixCount = Number(space.prefixCount || 0);
     const percent = total ? Math.round((used / total) * 1000) / 10 : 0;
-    return `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small><span class="space-usage"><span><strong>${formatNumber(used)}</strong> IP ثبت‌شده از ${formatNumber(total)} · <strong>${formatNumber(free)}</strong> آزاد</span><span>${formatNumber(prefixCount)} رنج تعریف‌شده · مصرف ${formatNumber(percent)}٪</span><i><em style="width:${Math.min(100, percent)}%"></em></i></span></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`;
+    return `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small><span class="space-usage"><span><strong>${formatNumber(used)}</strong> IP ثبت‌شده از ${formatNumber(total)} · <strong>${formatNumber(free)}</strong> آزاد</span><span>${formatNumber(prefixCount)} رنج تعریف‌شده · مصرف ${formatNumber(percent)}٪</span><i><em style="width:${Math.min(100, percent)}%"></em></i></span><div class="space-company-distribution" data-space="${escapeHtml(space.id)}" aria-label="موقعیت آدرس‌های ثبت‌شده"></div></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm company-import-ipam" data-space="${escapeHtml(space.id)}">ورود Excel</button><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`;
   }).join("") || `<div class="empty-state compact-empty">رنج اصلی تعریف نشده است.</div>`;
   page.innerHTML = `<section class="company-hero"><div class="company-identity"><span class="company-avatar">${escapeHtml(company.name.slice(0, 1))}</span><div><span class="company-tree-badge">${escapeHtml(kind)}${parent ? ` زیرمجموعه ${escapeHtml(parent.name)}` : ""}</span><h2>${escapeHtml(company.name)}</h2><p>${escapeHtml(company.description || company.address || "اطلاعات تکمیلی ثبت نشده است.")}</p></div></div><div class="company-hero-actions"><button id="backCompanies" class="btn">بازگشت به شرکت‌ها</button>${canManageCompany(companyId) ? `<button id="editCurrentCompany" class="btn">ویرایش اطلاعات</button><button id="addCurrentSpace" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></section>
     <section class="company-quick-info"><article class="info-card"><span>مدیر شرکت</span><b>${escapeHtml(company.managerName || "ثبت نشده")}</b></article><article class="info-card"><span>شماره تماس</span><b class="ltr">${escapeHtml(company.phone || "—")}</b></article><article class="info-card"><span>کد پستی</span><b class="ltr">${escapeHtml(company.postalCode || "—")}</b></article><article class="info-card"><span>موقعیت</span>${mapUrl ? `<a href="${mapUrl}" target="_blank" rel="noopener noreferrer">نمایش در Google Maps</a>` : `<b>ثبت نشده</b>`}</article></section>
@@ -660,6 +672,14 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
   $("editCurrentCompany")?.addEventListener("click", () => openCompanyDialog(companyId));
   $("addCurrentSpace")?.addEventListener("click", () => openSpaceDialog(companyId));
   $("manageCompanyPersonnel")?.addEventListener("click", () => openPersonnelDialog(companyId));
+  page.querySelectorAll(".space-company-distribution").forEach(async (node) => {
+    const spaceId = node.dataset.space;
+    try {
+      const result = await request('/api/spaces/' + encodeURIComponent(spaceId) + '/usage');
+      if (node.isConnected) node.innerHTML = ipamDistributionHtml(result.segments);
+    } catch { /* Aggregate counts remain visible when detail is unavailable. */ }
+  });
+  page.querySelectorAll(".company-import-ipam").forEach((node) => node.addEventListener("click", () => openBulkIpamDialog(node.dataset.space)));
   page.querySelectorAll(".open-space").forEach((node) => node.addEventListener("click", () => loadSpace(node.dataset.space)));
   page.querySelectorAll(".edit-space").forEach((node) => node.addEventListener("click", () => openSpaceDialog(null, node.dataset.space)));
   page.querySelectorAll(".delete-space").forEach((node) => node.addEventListener("click", () => deleteSpace(node.dataset.space)));
@@ -667,6 +687,48 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
     const connection = result.connections.find((item) => item.ip === node.dataset.ip);
     openToolMenu(event, node.dataset.ip, connection?.connectionMethods || [], connection || {});
   }));
+}
+
+
+function ipamDistributionHtml(segments) {
+  if (!Array.isArray(segments) || !segments.length) return "";
+  const total = segments.reduce((sum, item) => sum + item.count, 0);
+  return '<div class="ipam-distribution" role="img" aria-label="' + escapeHtml('موقعیت IPهای ثبت‌شده در رنج؛ مجموع ' + total) + '">' +
+    segments.map((item) => '<i class="' + (item.count ? 'recorded' : item.allocated ? 'allocated' : 'empty') +
+      '" style="--segment-color:' + escapeHtml(item.color) + '" title="' + escapeHtml('بلوک /24 شماره ' + item.index + ': ' + item.count + ' IP ثبت‌شده') + '"></i>').join('') + '</div>';
+}
+
+function syncBulkIpamSpaces() {
+  const spaces = (state.bootstrap?.spaces || []).filter((item) => item.companyId === $("bulkIpamCompany").value);
+  $("bulkIpamSpace").innerHTML = spaces.map((item) => '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.cidr + ' — ' + item.name) + '</option>').join('');
+  if (spaces.some((item) => item.id === state.currentSpaceId)) $("bulkIpamSpace").value = state.currentSpaceId;
+  resetBulkIpamPreview();
+}
+function resetBulkIpamPreview() {
+  state.bulkIpamPreview = null;
+  $("bulkIpamCommit").disabled = true;
+  $("bulkIpamPreview").textContent = "برای مشاهده خطاها، تکراری‌ها و پیش‌نمایش ابتدا «بررسی فایل» را بزنید.";
+}
+function openBulkIpamDialog(spaceId = state.currentSpaceId) {
+  if (!isAdmin()) return toast("ورود گروهی فقط برای مدیر مجاز است.");
+  $("bulkIpamForm").reset();
+  state.bulkIpamFile = null;
+  const companies = state.bootstrap.companies.filter((item) => canManageCompany(item.id));
+  $("bulkIpamCompany").innerHTML = companies.map((item) => '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.name) + '</option>').join('');
+  const selected = state.bootstrap.spaces.find((item) => item.id === spaceId);
+  $("bulkIpamCompany").value = selected?.companyId || state.currentCompanyId || companies[0]?.id || '';
+  syncBulkIpamSpaces();
+  if (selected) $("bulkIpamSpace").value = selected.id;
+  $("bulkIpamDialog").showModal();
+}
+function readBulkIpamFile(file) {
+  if (!file || !/\.(xlsx|csv)$/i.test(file.name) || file.size > 7 * 1024 * 1024) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("خواندن فایل ممکن نیست."));
+    reader.onload = () => resolve(String(reader.result).split(",").slice(1).join(","));
+    reader.readAsDataURL(file);
+  });
 }
 
 function rangeBand(item, row, column, span) {
@@ -795,6 +857,7 @@ function renderOverview() {
   const hosts = hostMap();
   const used = usedIntervals().reduce((sum, interval) => sum + interval[1] - interval[0] + 1, 0);
   const percent = Math.round((used / root.size) * 1000) / 10;
+  const distribution = ipamDistributionHtml(usageSegments(space.cidr, state.data.prefixes, state.data.hosts, space.color));
   let grid = `<div class="visual-map"><div class="visual-row axis-row"><div></div>${Array.from({ length: 16 }, (_, index) => `<div class="axis">${index}</div>`).join("")}</div>`;
   for (let row = 0; row < rows; row += 1) {
     const rowStartIndex = row * tilesPerRow;
@@ -824,11 +887,13 @@ function renderOverview() {
   if (state.paintPrefix < selectionMinimum || state.paintPrefix > 24) state.paintPrefix = 24;
   if (state.drillPrefix < selectionMinimum || state.drillPrefix > 24) state.drillPrefix = 24;
   const overviewContent = state.overviewMode === "table" ? renderRootVerticalTable(root, hosts) : grid;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر ردیف یک شبکهٔ /24 است و ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button>${canWrite() ? `<button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
+  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر ردیف یک شبکهٔ /24 است و ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button><button class="btn" id="ipamCsvExport">خروجی CSV</button>${canWrite() ? `<button class="btn primary" id="ipamExcelImport">ورود Excel / CSV</button><button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
-    <section class="panel"><div class="toolbar"><div class="toolgroup">${state.overviewMode === "table" ? `<b>نقشه رنج‌ها</b><span class="mode-note">روی متن CIDR برای ورود به همان رنج کلیک کنید؛ مربع کوچک کنار هر کادر فقط نام‌گذاری و رنگ همان رنج را باز می‌کند.</span>` : `<b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت رنج جدید"}</button>` : ""}`}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کاشی</button></div></div><div class="legend"><span><i class="dot used"></i>گروه ثبت‌شده</span><span><i class="dot record"></i>IP دارای اطلاعات</span><span><i class="dot free"></i>خالی/بدون گروه</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
+    <section class="panel"><div class="ipam-distribution-header"><b>نقشه موقعیت IPهای ثبت‌شده و زیرشبکه‌ها</b><span>رنگ پر: دارای IP ثبت‌شده · رنگ کم‌رنگ: زیرشبکه تعریف‌شده</span></div>${distribution}<div class="toolbar"><div class="toolgroup">${state.overviewMode === "table" ? `<b>نقشه رنج‌ها</b><span class="mode-note">روی متن CIDR برای ورود به همان رنج کلیک کنید؛ مربع کوچک کنار هر کادر فقط نام‌گذاری و رنگ همان رنج را باز می‌کند.</span>` : `<b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت رنج جدید"}</button>` : ""}`}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کاشی</button></div></div><div class="legend"><span><i class="dot used"></i>گروه ثبت‌شده</span><span><i class="dot record"></i>IP دارای اطلاعات</span><span><i class="dot free"></i>خالی/بدون گروه</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
   $("companyBack").addEventListener("click", () => openCompanyPage(space.companyId));
+  $("ipamExcelImport")?.addEventListener("click", () => openBulkIpamDialog(space.id));
+  $("ipamCsvExport")?.addEventListener("click", () => window.location.assign(`/api/spaces/${encodeURIComponent(space.id)}/hosts.csv`));
   $("editCurrentSpace")?.addEventListener("click", () => openSpaceDialog(null, space.id));
   $("paintToggle")?.addEventListener("click", () => { state.paint = !state.paint; renderOverview(); });
   page.querySelectorAll(".overview-mode").forEach((node) => node.addEventListener("click", () => {
@@ -2029,6 +2094,48 @@ $("topologyButton").addEventListener("click", () => { window.location.href = "/n
 $("backupsButton").addEventListener("click", openBackupsDialog);
 $("trashButton").addEventListener("click", openTrashDialog);
 $("importButton").addEventListener("click", openImportDialog);
+
+$("bulkIpamCompany").addEventListener("change", syncBulkIpamSpaces);
+$("bulkIpamSpace").addEventListener("change", resetBulkIpamPreview);
+$("bulkIpamFile").addEventListener("change", () => { state.bulkIpamFile = null; resetBulkIpamPreview(); });
+$("bulkIpamForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('[type="submit"]');
+  button.disabled = true;
+  try {
+    const file = $("bulkIpamFile").files?.[0];
+    const base64 = await readBulkIpamFile(file);
+    const body = { destinationSpaceId: $("bulkIpamSpace").value, filename: file.name, base64 };
+    const response = await request("/api/imports/ipam/preview", { method: "POST", body });
+    state.bulkIpamFile = body;
+    state.bulkIpamPreview = response;
+    const s = response.summary;
+    const samples = response.sample.map((item) => '<tr><td>' + escapeHtml(item.ip) + '</td><td>' + escapeHtml(item.name) + '</td><td>' + escapeHtml(item.notes) + '</td></tr>').join('');
+    const errors = (response.errors || []).map((item) => '<li>سطر ' + item.row + ' — ' + escapeHtml(item.ip + ': ' + item.reason) + '</li>').join('');
+    $("bulkIpamPreview").innerHTML = '<b>کل ردیف‌ها: ' + formatNumber(s.total) + ' · معتبر: ' + formatNumber(s.valid) +
+      ' · جدید: ' + formatNumber(s.newRecords) + ' · موجود: ' + formatNumber(s.existing) + ' · خطا: ' + formatNumber(s.invalid) + '</b>' +
+      '<div class="bulk-preview-scroll"><table><thead><tr><th>IP</th><th>Name</th><th>Description</th></tr></thead><tbody>' + samples + '</tbody></table></div>' +
+      (errors ? '<p>خطاها (حداکثر ۳۰ مورد):</p><ul>' + errors + '</ul>' : '');
+    $("bulkIpamCommit").disabled = s.valid === 0;
+  } catch (error) { resetBulkIpamPreview(); $("bulkIpamPreview").textContent = error.message; toast(error.message); }
+  finally { button.disabled = false; }
+});
+$("bulkIpamCommit").addEventListener("click", async () => {
+  if (!state.bulkIpamFile || !state.bulkIpamPreview) return;
+  if (!confirm("آیا ثبت IPهای معتبر با رفتار انتخاب‌شده را تأیید می‌کنید؟")) return;
+  const button = $("bulkIpamCommit"); button.disabled = true;
+  try {
+    const saved = await request("/api/imports/ipam/commit", { method: "POST", body: { ...state.bulkIpamFile, mode: $("bulkIpamMode").value } });
+    $("bulkIpamDialog").close();
+    state.bootstrap = await request("/api/bootstrap");
+    await loadSpace(state.bulkIpamFile.destinationSpaceId);
+    const result = saved.result;
+    toast(formatNumber(result.created) + " جدید، " + formatNumber(result.updated) + " به‌روزرسانی، " + formatNumber(result.skipped) + " تکراری، " + formatNumber(result.invalid) + " خطادار");
+    state.bulkIpamFile = null; state.bulkIpamPreview = null;
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; }
+});
+
 $("aboutButton").addEventListener("click", openAboutDialog);
 $("themeButton").addEventListener("click", toggleTheme);
 $("languageSelect").addEventListener("change", (event) => { localStorage.setItem("ems-language", event.target.value); location.reload(); });

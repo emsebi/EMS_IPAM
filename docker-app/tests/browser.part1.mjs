@@ -1123,6 +1123,53 @@ try {
   }
   await restricted.close();
   check('same-branch overlapping host results open the correct Space and host for admin and scoped reader');
+
+  // IPAM bulk upload is isolated to this disposable browser database and Space.
+  const exampleCsv = Buffer.from('IP,Name,Description\n192.0.2.80,Bulk Router,Imported example\n192.0.2.81,Test Switch,Test note');
+  const upload = { destinationSpaceId:'test-space', filename:'example.csv', base64:exampleCsv.toString('base64') };
+  const initialPreview = await api('/api/imports/ipam/preview','POST',upload);
+  assert.deepEqual(initialPreview.summary, { total:2, valid:2, invalid:0, existing:0, newRecords:2 });
+  const initialCommit = await api('/api/imports/ipam/commit','POST',{ ...upload,mode:'skip' });
+  assert.equal(initialCommit.result.created,2);
+  assert.equal((await api('/api/imports/ipam/commit','POST',{ ...upload,mode:'skip' })).result.skipped,2);
+  const updateCsv = Buffer.from('IP,Name,Description\n192.0.2.50,Updated by Excel,Preserves MAC VLAN and type');
+  const updated = await api('/api/imports/ipam/commit','POST',{
+    destinationSpaceId:'test-space',filename:'changed.csv',base64:updateCsv.toString('base64'),mode:'update',
+  });
+  assert.equal(updated.result.updated,1);
+  const afterBulk = (await api('/api/spaces/test-space/data')).hosts;
+  const updatedHost = afterBulk.find((host) => host.ip === '192.0.2.50');
+  assert.equal(updatedHost.name,'Updated by Excel');
+  assert.equal(updatedHost.notes,'Preserves MAC VLAN and type');
+  assert.equal(updatedHost.mac,'02:00:00:00:00:50');
+  assert.equal(updatedHost.vlan,'20');
+  assert.equal(updatedHost.type,'Office Computer');
+  const csvExport = await context.request.get('/api/spaces/test-space/hosts.csv');
+  assert.equal(csvExport.status(),200);
+  assert.match(await csvExport.text(),/192\.0\.2\.80,Bulk Router,Imported example/);
+  check('CSV import preview, duplicate skip, update preserving inventory fields and CSV export');
+
+  await page.goto('/#/ipam/test-space');
+  await page.locator('#ipamExcelImport').waitFor();
+  await page.locator('#ipamCsvExport').waitFor();
+  const ribbon = page.locator('section.panel > .ipam-distribution');
+  assert.equal(await ribbon.locator('i').count(),1);
+  const sidebarToggle=page.locator('#sidebarToggle');
+  await sidebarToggle.click();
+  assert.equal(await page.locator('#appView').evaluate((node)=>node.classList.contains('sidebar-collapsed')),true);
+  await sidebarToggle.click();
+  assert.equal(await page.locator('#appView').evaluate((node)=>node.classList.contains('sidebar-collapsed')),false);
+  await page.locator('#ipamExcelImport').click();
+  await page.locator('#bulkIpamDialog').waitFor();
+  await page.locator('#bulkIpamFile').setInputFiles({ name:'import.csv', mimeType:'text/csv',
+    buffer:Buffer.from('IP,Name,Description\n192.0.2.82,From Panel,Created through preview') });
+  await page.locator('#bulkIpamForm button[type=submit]').click();
+  await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
+  await page.locator('#bulkIpamCommit').click();
+  await page.locator('#bulkIpamDialog').waitFor({state:'hidden'});
+  assert.equal((await api('/api/spaces/test-space/data')).hosts.find((host)=>host.ip==='192.0.2.82')?.name,'From Panel');
+  check('visible Excel/CSV dialog confirms only after preview; sidebar collapses without losing IPAM route');
+
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');
   await fs.writeFile(path.join(outputDir, 'browser-result.json'), JSON.stringify({ status: 'passed', timestamp: new Date().toISOString(), database: 'PGlite test adapter; production pg driver not exercised', browser: browser.version(), checks }, null, 2) + '\n');

@@ -31,6 +31,8 @@ import {
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
 import { buildSubnetPackage, importSubnetPackage } from "./portable.mjs";
+import { parseIpamImport } from "./ipam-bulk.mjs";
+import { usageSegments } from "../public/subnet-model.mjs";
 import { buildMikrotikScript } from "./mikrotik.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
@@ -40,7 +42,7 @@ const ADMIN_PASSWORD = process.env.EMS_ADMIN_PASSWORD || "";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || "/backups");
 const BACKUP_DISPLAY_PATH = cleanTextEnvironment(process.env.BACKUP_DISPLAY_PATH || "/opt/ems-ipam/backups");
-const APP_VERSION = "1.7.1";
+const APP_VERSION = "1.7.2";
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const MODULES_DIR = path.resolve(process.env.EMS_MODULES_DIR || "/modules");
 const MODULE_CATALOG = Object.freeze([
@@ -1378,6 +1380,67 @@ async function api(req, res, url, user) {
 
   const dataMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/data$/);
   if (req.method === "GET" && dataMatch) return json(res, 200, await spaceData(user, dataMatch[1]));
+
+
+  const usageMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/usage$/);
+  if (req.method === "GET" && usageMatch) {
+    const data = await spaceData(user, usageMatch[1]);
+    return json(res, 200, { ok: true, segments: usageSegments(data.space.cidr, data.prefixes, data.hosts, data.space.color) });
+  }
+
+  const csvSpaceMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/hosts\.csv$/);
+  if (req.method === "GET" && csvSpaceMatch) {
+    const space = await getSpaceForUser(user, csvSpaceMatch[1]);
+    const rows = await pool.query("SELECT ip,name,notes FROM hosts WHERE space_id=$1 AND deleted_at IS NULL ORDER BY ip::inet", [space.id]);
+    return csvResponse(res, "ems-ipam-" + space.cidr.replaceAll("/", "-") + "-hosts.csv",
+      [["IP", "Name", "Description"], ...rows.rows.map((item) => [item.ip, item.name, item.notes])]);
+  }
+
+  if (req.method === "POST" && ["/api/imports/ipam/preview", "/api/imports/ipam/commit"].includes(pathname)) {
+    requireWriter(user);
+    const body = await readBody(req);
+    const space = await getSpaceForUser(user, cleanText(body.destinationSpaceId, 80));
+    if (!(await canManageCompany(user, space.companyId))) throw Object.assign(new Error("دسترسی ورود اطلاعات در شرکت مقصد وجود ندارد."), { status: 403 });
+    const parsed = parseIpamImport({ filename: body.filename, base64: body.base64, cidr: space.cidr });
+    if (pathname.endsWith("/preview")) {
+      const existing = await pool.query("SELECT ip FROM hosts WHERE space_id=$1", [space.id]);
+      const ips = new Set(existing.rows.map((row) => row.ip));
+      const matches = parsed.items.filter((item) => ips.has(item.ip)).length;
+      return json(res, 200, { ok: true, summary: { total: parsed.total, valid: parsed.items.length, invalid: parsed.invalid, existing: matches, newRecords: parsed.items.length - matches },
+        errors: parsed.errors, sample: parsed.items.slice(0, 10) });
+    }
+    if (!["skip", "update"].includes(body.mode)) throw Object.assign(new Error("نوع برخورد با IPهای تکراری معتبر نیست."), { status: 400 });
+    if (!parsed.items.length) throw Object.assign(new Error("هیچ ردیف IP قابل ورود نیست."), { status: 400 });
+    const result = { total: parsed.total, invalid: parsed.invalid, created: 0, updated: 0, skipped: 0 };
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const item of parsed.items) {
+        if (body.mode === "skip") {
+          const saved = await client.query(
+            "INSERT INTO hosts(id,space_id,ip,name,notes,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$6) ON CONFLICT(space_id,ip) DO NOTHING RETURNING id",
+            [crypto.randomUUID(), space.id, item.ip, item.name, item.notes, user.id]);
+          if (saved.rowCount) result.created += 1; else result.skipped += 1;
+        } else {
+          const previous = await client.query("SELECT id FROM hosts WHERE space_id=$1 AND ip=$2 FOR UPDATE", [space.id, item.ip]);
+          if (previous.rowCount) {
+            await client.query("UPDATE hosts SET name=$3,notes=$4,updated_by=$5,updated_at=now(),deleted_at=NULL,deleted_by=NULL WHERE space_id=$1 AND ip=$2",
+              [space.id, item.ip, item.name, item.notes, user.id]);
+            result.updated += 1;
+          } else {
+            await client.query("INSERT INTO hosts(id,space_id,ip,name,notes,created_by,updated_by) VALUES($1,$2,$3,$4,$5,$6,$6)",
+              [crypto.randomUUID(), space.id, item.ip, item.name, item.notes, user.id]);
+            result.created += 1;
+          }
+        }
+      }
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+    await audit(user, "import", "ipam_excel_csv", space.id, { companyId: space.companyId, spaceId: space.id, detail: result });
+    broadcast({ type: "host", companyId: space.companyId, spaceId: space.id });
+    return json(res, 200, { ok: true, result });
+  }
 
   const exportMatch = pathname.match(/^\/api\/spaces\/([^/]+)\/export$/);
   if (req.method === "GET" && exportMatch) {
