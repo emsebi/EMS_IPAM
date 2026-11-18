@@ -700,7 +700,11 @@ function ipamDistributionHtml(segments) {
 
 function syncBulkIpamSpaces() {
   const spaces = (state.bootstrap?.spaces || []).filter((item) => item.companyId === $("bulkIpamCompany").value);
-  $("bulkIpamSpace").innerHTML = spaces.map((item) => '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(item.cidr + ' — ' + item.name) + '</option>').join('');
+  $("bulkIpamSpace").innerHTML = spaces.map((item) => {
+    const label = item.cidr + ' — ' + item.name + ' — ' + t("space.domain.label") + ': ' +
+      (item.routingDomainName ?? t("space.domain.unbound"));
+    return '<option translate="no" value="' + escapeHtml(item.id) + '">' + escapeHtml(label) + '</option>';
+  }).join('');
   if (spaces.some((item) => item.id === state.currentSpaceId)) $("bulkIpamSpace").value = state.currentSpaceId;
   resetBulkIpamPreview();
 }

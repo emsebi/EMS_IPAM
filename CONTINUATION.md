@@ -1,3 +1,29 @@
+# Preserve stored names in localized import destinations (2026-11-18 UTC)
+
+[PR #59](https://github.com/emsebi/EMS_IPAM/pull/59) head `94801f553b7898854418118d2b3f3ccc6df7b45e` failed the browser gate in [PR CI 44331537599](https://github.com/emsebi/EMS_IPAM/actions/runs/44331537599) and [push CI 44331452498](https://github.com/emsebi/EMS_IPAM/actions/runs/44331452498). The other three gates succeeded. Both browser logs failed on the same assertion: the Persian option displayed stored domain name `Default` as `پیش‌فرض` (PR job 134896951180 at 2026-11-18 15:06:28 UTC). The earlier real XLSX file-picker scenario passed before this failure.
+
+The localized compound label was being passed through the legacy Persian substring translator. Import options now use `translate="no"`, as existing search result labels already do. Explicit semantic keys still translate the field label and missing-data fallback, while the stored Space/domain names remain verbatim and HTML-escaped. Stable option/API Space IDs and the original strict English/Persian browser expectations are retained; no assertion was relaxed.
+
+Next: inspect the new CI runs linked in #59, specifically the named same-branch import scenario, all 39 browser/API scenarios, and all remaining gates. Only after success, recheck main/head and merge with expected SHA, then follow merge CI. No deployment until the tested build is ready. Fresh main remains `905d1164bd7b2cac447e3e9401c945286af117b3`; PR #12 remains inactive and requires operator acceptance. Local Chromium's socket restriction still prevents a local browser run; syntax and the existing local UI/import tests are not a substitute for CI browser evidence.
+
+No schema or legacy uniqueness constraint changes, live discovery or router push. Installed build remains `2ca7e975929ea96f7df4e437294ad12f40b19957`; installed-panel import acceptance, Radio acceptance and real MikroTik login remain open.
+
+---
+
+# Routing-domain labels in the Excel/CSV import destination (2026-11-18 UTC)
+
+Fresh main `905d1164bd7b2cac447e3e9401c945286af117b3` is the screenshot-only successor of the #58 evidence checkpoint. [Checkpoint CI 44320301464](https://github.com/emsebi/EMS_IPAM/actions/runs/44320301464) and [merge CI 44320065789](https://github.com/emsebi/EMS_IPAM/actions/runs/44320065789) both finished successfully.
+
+Import destination options now include the existing routing-domain name beside CIDR and Space name, using the existing Persian/English translation keys and escaping the complete label. Missing domain metadata is shown as Not recorded, not guessed as Default. The option value and API destination remain the stable Space ID.
+
+The browser suite reuses the same-branch overlapping-domain fixture (identical CIDR, Space name and host IP). It selects each domain by its visible label in English/Persian, checks preview and commit destination IDs, previews without writes, stable host identity and unchanged sibling records. This new scenario uses CSV through the common Excel/CSV modal; #58 retains the real two-sheet XLSX file-picker test. The overlap constraint change remains test-only. Production schema, authorization, RADIUS and Radio behavior are unchanged.
+
+Next: inspect the named same-branch import scenario and every CI gate for this PR head (run IDs in the PR), then merge with fresh main and expected SHA. Follow merge CI before staging a ready application build with the existing EMS-IPAM Lab Deploy workflow. Preserve backup, installed Radio trial, credentials, volumes and port 8888. Do not remove the legacy uniqueness constraint as part of this UI change. Local browser execution is limited by Chromium socket permissions; syntax/checksum checks alone do not prove browser behavior.
+
+No deployment or real-device discovery was performed. Installed build remains `2ca7e975929ea96f7df4e437294ad12f40b19957`. Installed-panel import acceptance, Radio #12 operator acceptance and real MikroTik login remain open.
+
+---
+
 # Verified XLSX file-picker regression merged (2026-11-18 UTC)
 
 [PR #58](https://github.com/emsebi/EMS_IPAM/pull/58) merged at `44966db01088882798877a85fd3d85fb631e48a4` with expected head `f819a36a39d3456df280c4ce228ea5d2efe25120`, after rechecking unchanged main `9a4bbaa0a73a524692b15dd90b60a26f206ef380`. [PR CI 44310837259](https://github.com/emsebi/EMS_IPAM/actions/runs/44310837259) and [push CI 44310799186](https://github.com/emsebi/EMS_IPAM/actions/runs/44310799186) completed successfully across all four gates: tests/checksums/RADIUS, PostgreSQL, Docker/SSH and browser.
