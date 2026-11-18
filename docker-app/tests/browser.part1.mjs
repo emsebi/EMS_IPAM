@@ -1236,6 +1236,53 @@ try {
   await api('/api/spaces/' + xlsxOther.id, 'DELETE');
   check('XLSX file picker invalidates changed destinations and preserves Unicode, host identity and the other branch');
 
+  // The same Excel/CSV modal must distinguish identical CIDRs/names within a branch.
+  for (const [language, target] of [['en', overlapSpaces[1]], ['fa', overlapSpaces[0]]]) {
+    if (await page.locator('#languageSelect').inputValue() !== language) {
+      await Promise.all([page.waitForEvent('load'), page.locator('#languageSelect').selectOption(language)]);
+    }
+    const sibling = overlapSpaces.find(space => space.spaceId !== target.spaceId);
+    const before = await api('/api/spaces/' + target.spaceId + '/data');
+    const siblingBefore = await api('/api/spaces/' + sibling.spaceId + '/data');
+    await page.goto('/#/ipam/' + overlapSpaces[0].spaceId);
+    await page.locator('#ipamExcelImport').click();
+    assert.equal(await page.locator('#bulkIpamCompany').inputValue(), 'test-co');
+    const domainLabel = language === 'en' ? 'Routing domain' : 'دامنهٔ مسیریابی';
+    const label = space => '198.19.72.0/24 — Overlap LAN — ' + domainLabel + ': ' + space.domainName;
+    for (const space of overlapSpaces) {
+      assert.equal(await page.locator('#bulkIpamSpace option[value="' + space.spaceId + '"]').textContent(), label(space));
+    }
+    await page.locator('#bulkIpamSpace').selectOption({ label: label(target) });
+    assert.equal(await page.locator('#bulkIpamSpace').inputValue(), target.spaceId);
+    const notes = 'Import destination: ' + target.domainName;
+    await page.locator('#bulkIpamFile').setInputFiles({ name: 'domain-selection.csv', mimeType: 'text/csv',
+      buffer: Buffer.from('IP,Name,Description\n' + overlapIp + ',Overlap host,' + notes) });
+    const [preview] = await Promise.all([
+      page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+      page.locator('#bulkIpamForm button[type=submit]').click(),
+    ]);
+    await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
+    assert.equal(preview.request().postDataJSON().destinationSpaceId, target.spaceId);
+    assert.deepEqual((await preview.json()).summary, { total:1, valid:1, invalid:0, existing:1, newRecords:0 });
+    assert.deepEqual(await api('/api/spaces/' + target.spaceId + '/data'), before);
+    assert.deepEqual(await api('/api/spaces/' + sibling.spaceId + '/data'), siblingBefore);
+    await page.locator('#bulkIpamMode').selectOption('update');
+    const [committed] = await Promise.all([
+      page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/imports/ipam/commit'),
+      page.locator('#bulkIpamCommit').click(),
+    ]);
+    assert.equal(committed.request().postDataJSON().destinationSpaceId, target.spaceId);
+    assert.deepEqual((await committed.json()).result, { total:1, invalid:0, created:0, updated:1, skipped:0 });
+    await page.locator('#bulkIpamDialog').waitFor({ state:'hidden' });
+    const after = await api('/api/spaces/' + target.spaceId + '/data');
+    assert.equal(after.hosts.length, before.hosts.length);
+    assert.equal(after.hosts.find(host => host.ip === overlapIp).id, target.hostId);
+    assert.equal(after.hosts.find(host => host.ip === overlapIp).notes, notes);
+    assert.deepEqual(after.space, before.space);
+    assert.deepEqual(await api('/api/spaces/' + sibling.spaceId + '/data'), siblingBefore);
+  }
+  check('same-branch import selects routing-domain labels in English and Persian without changing sibling records');
+
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');
   await fs.writeFile(path.join(outputDir, 'browser-result.json'), JSON.stringify({ status: 'passed', timestamp: new Date().toISOString(), database: 'PGlite test adapter; production pg driver not exercised', browser: browser.version(), checks }, null, 2) + '\n');
