@@ -1,3 +1,15 @@
+# Isolated import fixture on the dedicated VM (2026-11-18 UTC)
+
+[PR #56](https://github.com/emsebi/EMS_IPAM/pull/56) and [merge CI 44264119756](https://github.com/emsebi/EMS_IPAM/actions/runs/44264119756) passed. Fresh main `d039437168a9c34e9e8ec2b2b34e00467b1fe564` only adds a tested screenshot. The installed panel remains the successfully deployed `2ca7e975929ea96f7df4e437294ad12f40b19957` from [Lab Deploy 44241670216](https://github.com/emsebi/EMS_IPAM/actions/runs/44241670216).
+
+EMS-IPAM Lab Import Fixture reuses `docker-app/tests/multisite-http.test.mjs` on the dedicated runner, in a Node 24 job container with a separate PostgreSQL 16 service. The service uses synthetic credentials and tmpfs data, without published ports or persistent/host volumes. The suite creates its own uniquely named database and cleans it up; GitHub removes job/service containers afterward. No installed-panel database, credentials, port 8888, real devices or router configuration are used.
+
+The workflow verifies checksums, installs production dependencies and runs the existing native HTTP suite, including overlapping branches, scope enforcement, CSV and a real two-sheet XLSX fixture. It preserves the test exit status through tee and saves a TAP artifact with source SHA/time in the job log. Trigger only through workflow_dispatch or an explicit push to `work/lab-import-fixture`; pull requests from other branches cannot run on the lab runner.
+
+Next: inspect the Lab Import Fixture run and all CI gates linked in this PR. Require the named XLSX subtest and 20 HTTP tests with no native-only skips, plus service/container cleanup. Record failures rather than treating fixture startup as acceptance. Recheck main/expected head before merge and follow merge CI. This provides synthetic runtime evidence on the VM, not installed-panel or operator acceptance. XLSX hands-on acceptance, Radio #12 acceptance and real MikroTik login remain open.
+
+---
+
 # Verified lab deployment and permanent checksum guard (2026-11-18 UTC)
 
 [PR #56](https://github.com/emsebi/EMS_IPAM/pull/56) deployed `2ca7e975929ea96f7df4e437294ad12f40b19957` through [Lab Deploy 44241670216](https://github.com/emsebi/EMS_IPAM/actions/runs/44241670216). The run finished successfully; job 134590807218 on runner `ems-ipam-lab` records final smoke success at 05:10:04 UTC. [Candidate CI 44241489651](https://github.com/emsebi/EMS_IPAM/actions/runs/44241489651) and [release CI 44241670132](https://github.com/emsebi/EMS_IPAM/actions/runs/44241670132) also passed.

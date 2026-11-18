@@ -1,0 +1,62 @@
+name: EMS-IPAM Lab Import Fixture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "work/lab-import-fixture"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-import-fixture
+  cancel-in-progress: false
+
+jobs:
+  import-fixture:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 15
+    # Match the application's Node major, without using the installed panel.
+    container:
+      image: node:24-bookworm-slim
+      options: --cpus=1 --memory=1g
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ems_import_fixture
+          POSTGRES_PASSWORD: Synthetic-Import-Fixture-Only
+          POSTGRES_DB: ems_import_fixture
+        # No host ports, live credentials, host paths or persistent volumes.
+        options: >-
+          --cpus=1 --memory=768m
+          --tmpfs /var/lib/postgresql/data:rw,size=512m
+          --health-cmd "pg_isready -U ems_import_fixture -d ems_import_fixture"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source checksums
+        run: sha256sum --check --strict SHA256SUMS
+      - name: Install production dependencies only
+        working-directory: docker-app
+        run: npm ci --omit=dev --ignore-scripts
+      - name: Exercise existing multisite and CSV/XLSX HTTP fixtures
+        working-directory: docker-app
+        shell: bash
+        env:
+          EMS_TEST_POSTGRES_URL: postgresql://ems_import_fixture:Synthetic-Import-Fixture-Only@postgres:5432/ems_import_fixture
+        run: |
+          set -euo pipefail
+          echo "Fixture source: $GITHUB_SHA; observed at $(date -u +%FT%TZ)"
+          echo "Isolated VM containers; not installed-panel or operator acceptance."
+          node --test --test-reporter=tap tests/multisite-http.test.mjs | tee ../lab-import-fixture.tap
+      - name: Save synthetic fixture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-import-fixture
+          path: lab-import-fixture.tap
+          retention-days: 14
