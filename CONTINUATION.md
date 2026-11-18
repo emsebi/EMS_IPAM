@@ -1,3 +1,15 @@
+# Verified lab deployment and permanent checksum guard (2026-11-18 UTC)
+
+[PR #56](https://github.com/emsebi/EMS_IPAM/pull/56) deployed `2ca7e975929ea96f7df4e437294ad12f40b19957` through [Lab Deploy 44241670216](https://github.com/emsebi/EMS_IPAM/actions/runs/44241670216). The run finished successfully; job 134590807218 on runner `ems-ipam-lab` records final smoke success at 05:10:04 UTC. [Candidate CI 44241489651](https://github.com/emsebi/EMS_IPAM/actions/runs/44241489651) and [release CI 44241670132](https://github.com/emsebi/EMS_IPAM/actions/runs/44241670132) also passed.
+
+Verified evidence: source checksums, private pre-upgrade database backup and existing configuration preservation; health on port 8888; installed IPAM, network-access, network-map, Radio, RADIUS, radius-ops and reports; unchanged RADIUS records, credentials and assignments; signed temporary-loopback replies and cleanup; final Docker/PostgreSQL/FreeRADIUS smoke. This does not establish an independent row-by-row comparison of every other module or a real MikroTik login.
+
+This follow-up removes the dated push trigger from #56 and retains `sha256sum --check --strict SHA256SUMS` before any lab operation. All 306 listed files verify locally; the exact GNU guard rejects both changed bytes and a missing file in an isolated synthetic fixture. Application and module files remain identical to the verified deployment. The release branch remains pinned to the deployed SHA; updating the PR branch does not redeploy it.
+
+Next: check the refreshed #56 CI and merge with expected head after rechecking main, then inspect merge CI. After that, exercise XLSX preview/commit against the installed VM using explicitly synthetic isolated branch/Space fixtures, verify existing branch records are unchanged and clean up only the created fixture IDs. Record this separately from operator acceptance. Do not repeat deployment merely to reconcile this workflow/checkpoint. XLSX hands-on acceptance, Radio #12 operator acceptance and real MikroTik login remain open; signed loopback replies do not close the real-device incident.
+
+---
+
 # Checksum verification before release (2026-11-18 UTC)
 
 Fresh main `f85301babd9e3771db76695e837fbf11eda509a8` is the screenshot-only successor of #54. [Main CI 44227666128](https://github.com/emsebi/EMS_IPAM/actions/runs/44227666128) succeeded, including PostgreSQL, Docker and browser gates.

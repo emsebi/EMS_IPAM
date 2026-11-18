@@ -28,6 +28,9 @@ jobs:
         with:
           clean: true
 
+      - name: Verify source checksums before touching the lab
+        run: sha256sum --check --strict SHA256SUMS
+
       - name: Verify dedicated Docker lab
         shell: bash
         run: |
