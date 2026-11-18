@@ -703,7 +703,7 @@ function syncBulkIpamSpaces() {
   $("bulkIpamSpace").innerHTML = spaces.map((item) => {
     const label = item.cidr + ' — ' + item.name + ' — ' + t("space.domain.label") + ': ' +
       (item.routingDomainName ?? t("space.domain.unbound"));
-    return '<option value="' + escapeHtml(item.id) + '">' + escapeHtml(label) + '</option>';
+    return '<option translate="no" value="' + escapeHtml(item.id) + '">' + escapeHtml(label) + '</option>';
   }).join('');
   if (spaces.some((item) => item.id === state.currentSpaceId)) $("bulkIpamSpace").value = state.currentSpaceId;
   resetBulkIpamPreview();
