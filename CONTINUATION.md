@@ -1,3 +1,15 @@
+# Lab deployment blocked at shared checkout; isolated source path (2026-11-18 UTC)
+
+[PR #59](https://github.com/emsebi/EMS_IPAM/pull/59) merged at `faf2e226ff0901891f8bec8d42c5670ae288ec25`. [PR CI 44341748410](https://github.com/emsebi/EMS_IPAM/actions/runs/44341748410), [push CI 44341734238](https://github.com/emsebi/EMS_IPAM/actions/runs/44341734238), and [merge CI 44342101667](https://github.com/emsebi/EMS_IPAM/actions/runs/44342101667) all succeeded. Merge browser job 134934573812 records both import scenarios and 39 browser/API passes at 2026-11-18 16:01:18 UTC. Main `e7ebaae2d943cfe792783f64ac57fd53434e89f3` adds only tested screenshots.
+
+The existing Lab Deploy push branch `work/i18n-personnel-foundation` was fast-forwarded with expected SHA from `588ba9f86a1731ee12c5308ddef2e755131352dc` to the exact tested merge `faf2e226ff0901891f8bec8d42c5670ae288ec25`. [Deployment 44375919531](https://github.com/emsebi/EMS_IPAM/actions/runs/44375919531) failed at checkout (job 135054940400, 2026-11-18 19:01:09 UTC): EACCES removing `/home/emsrunner/_work/EMS_IPAM/EMS_IPAM/.github/workflows`. Backup/build/container replacement/start and all post-upgrade checks were skipped. No new deployment succeeded; the last verified installed build remains `2ca7e975929ea96f7df4e437294ad12f40b19957`.
+
+This patch isolates the host-runner checkout under `lab-deploy-source`, sets all shell steps to that source directory and stages only that checkout. It avoids deleting or changing ownership of the shared workspace root. Existing backup, credentials/volumes, port 8888, module and signed RADIUS smoke gates remain unchanged. Application/module bytes are unchanged from the tested merge; no router configuration or discovery is involved.
+
+Next: inspect candidate CI linked in this PR. If successful, re-read both refs and fast-forward the existing Lab Deploy branch with expected SHA to this tested candidate. Record its run/job IDs in the PR and check checkout, checksum, backup, build, health, data preservation and final smoke. Do not merge or declare deployment success until the complete lab run succeeds. Then merge with fresh main/expected PR head and follow merge CI. Installed-panel import and Radio operator acceptance and real MikroTik login remain open; temporary loopback acceptance is not a device login.
+
+---
+
 # Preserve stored names in localized import destinations (2026-11-18 UTC)
 
 [PR #59](https://github.com/emsebi/EMS_IPAM/pull/59) head `94801f553b7898854418118d2b3f3ccc6df7b45e` failed the browser gate in [PR CI 44331537599](https://github.com/emsebi/EMS_IPAM/actions/runs/44331537599) and [push CI 44331452498](https://github.com/emsebi/EMS_IPAM/actions/runs/44331452498). The other three gates succeeded. Both browser logs failed on the same assertion: the Persian option displayed stored domain name `Default` as `پیش‌فرض` (PR job 134896951180 at 2026-11-18 15:06:28 UTC). The earlier real XLSX file-picker scenario passed before this failure.

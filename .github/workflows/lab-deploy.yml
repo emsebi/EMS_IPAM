@@ -22,10 +22,16 @@ jobs:
       - X64
       - ems-ipam-lab
     timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: lab-deploy-source
     steps:
       - name: Checkout working branch
         uses: actions/checkout@v4
         with:
+          # Container-based fixture jobs can leave root-owned files in the shared workspace.
+          # Keep this host-runner checkout out of that workspace root.
+          path: lab-deploy-source
           clean: true
 
       - name: Verify source checksums before touching the lab
@@ -86,7 +92,7 @@ jobs:
           NEXT="$HOME/ems-ipam-lab/next"
           rm -rf "$NEXT"
           mkdir -p "$NEXT"
-          cp -a "$GITHUB_WORKSPACE/." "$NEXT/"
+          cp -a "$GITHUB_WORKSPACE/lab-deploy-source/." "$NEXT/"
           rm -rf "$NEXT/.git"
           rm -rf "$DEPLOY"
           mv "$NEXT" "$DEPLOY"
