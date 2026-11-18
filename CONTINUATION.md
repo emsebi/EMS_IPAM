@@ -1,3 +1,15 @@
+# Checksum verification before release (2026-11-18 UTC)
+
+Fresh main `f85301babd9e3771db76695e837fbf11eda509a8` is the screenshot-only successor of #54. [Main CI 44227666128](https://github.com/emsebi/EMS_IPAM/actions/runs/44227666128) succeeded, including PostgreSQL, Docker and browser gates.
+
+The 26 stale entries reported in #54 are refreshed in SHA256SUMS. `python3 scripts/checksums.py --check` now runs in CI immediately after checkout, before tests can rewrite generated logs. After reviewing intentional changes, use `python3 scripts/checksums.py --write`; add new paths explicitly. This verifies the existing manifest's listed files, not completeness of an archive or the separate legacy SHA256SUMS.txt. Unlisted local files and credentials are never collected automatically.
+
+Four CLI tests pass: modified binary bytes are detected without rewriting, refresh is repeatable, missing files abort without partial writes, malformed/duplicate/escaping/self paths fail, and unlisted local files stay excluded.
+
+Next: inspect the checksum step and all CI gates for this PR (run IDs in its description). Recheck main and expected head before merge, then follow merge CI. Only after those checks, stage the tested import/UI release through EMS-IPAM Lab Deploy, preserving the installed Radio trial, backup, credentials, volumes and port 8888; record deployed SHA and hands-on XLSX evidence. Last verified VM deployment 44050910476 predates #52. Radio #12 practical acceptance and real MikroTik login remain open.
+
+---
+
 # MS-02 XLSX HTTP import (2026-11-18 UTC)
 
 [PR #53](https://github.com/emsebi/EMS_IPAM/pull/53) and its [main CI](https://github.com/emsebi/EMS_IPAM/actions/runs/44176884714) passed the CSV regression.
