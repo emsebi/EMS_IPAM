@@ -1,3 +1,15 @@
+# XLSX import through the browser file picker (2026-11-18 UTC)
+
+[Checkpoint CI 44281093782](https://github.com/emsebi/EMS_IPAM/actions/runs/44281093782) succeeded. The isolated VM run [44271905157](https://github.com/emsebi/EMS_IPAM/actions/runs/44271905157) already passed all 20 HTTP cases with no skips. Fresh main `9a4bbaa0a73a524692b15dd90b60a26f206ef380` adds only a tested screenshot to that checkpoint.
+
+The existing Chromium suite now selects the real two-sheet XLSX fixture through the import modal. It previews a synthetic sibling branch, switches explicitly to the original Branch/Space and checks that the stale preview cannot be committed. It checks visible Unicode/entities/newlines, read-only previews, Update/create results, stable host ID/MAC/VLAN/type, ignored second-sheet and invalid rows, and unchanged sibling records. Newly created host/Space records are removed through their scoped API paths; the disposable browser database owns the remaining fixture lifetime.
+
+Local JavaScript syntax and the 307-entry checksum manifest passed. System Chromium stopped before scenarios with `process_singleton_posix.cc: socket() failed: Operation not permitted`; browser behavior and full CI remain unverified until the GitHub jobs finish. No production behavior or Radio-specific test section was changed. PR #12 remains inactive and awaits operator acceptance.
+
+Next: inspect the named XLSX file-picker scenario in the browser job and all CI gates linked in this PR. Recheck main/expected head before merge, then follow merge CI. Do not claim a browser pass from the existing HTTP/VM evidence. Installed-panel XLSX acceptance, Radio operator acceptance and real MikroTik login remain open; the installed build is still `2ca7e975929ea96f7df4e437294ad12f40b19957`.
+
+---
+
 # Verified multisite/import fixture on the dedicated VM (2026-11-18 UTC)
 
 [PR #57](https://github.com/emsebi/EMS_IPAM/pull/57) merged at `8f9c65a3375b52a733f3ed4ab40ccbb93fc7278a` after successful [PR CI 44271912633](https://github.com/emsebi/EMS_IPAM/actions/runs/44271912633), [push CI 44271904972](https://github.com/emsebi/EMS_IPAM/actions/runs/44271904972) and [Lab Import Fixture 44271905157](https://github.com/emsebi/EMS_IPAM/actions/runs/44271905157), all on `38339707048191ad98e2817d33aa9e351ae066d1`.

@@ -1170,6 +1170,72 @@ try {
   assert.equal((await api('/api/spaces/test-space/data')).hosts.find((host)=>host.ip==='192.0.2.82')?.name,'From Panel');
   check('visible Excel/CSV dialog confirms only after preview; sidebar collapses without losing IPAM route');
 
+  // Reuse the real two-sheet workbook; requests still reach production HTTP routes.
+  const xlsxOther = await api('/api/spaces', 'POST', {
+    companyId: searchSites[1].companyId, name: 'Synthetic XLSX sibling', cidr: '192.0.2.0/24',
+  }, 201);
+  for (const ip of ['192.0.2.50', '192.0.2.94']) {
+    await api('/api/hosts', 'PUT', { spaceId: xlsxOther.id, ip, name: 'Other branch unchanged' });
+  }
+  const xlsxBefore = await api('/api/spaces/test-space/data');
+  const xlsxOtherBefore = await api('/api/spaces/' + xlsxOther.id + '/data');
+  const xlsxOriginal = xlsxBefore.hosts.find(host => host.ip === '192.0.2.50');
+  await page.reload();
+  await page.goto('/#/ipam/test-space');
+  await page.locator('#ipamExcelImport').click();
+  assert.equal(await page.locator('#bulkIpamCompany').inputValue(), 'test-co');
+  assert.equal(await page.locator('#bulkIpamSpace').inputValue(), 'test-space');
+  await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
+  await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
+  await page.locator('#bulkIpamFile').setInputFiles(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+  assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true);
+  const previewXlsx = async () => {
+    const [response] = await Promise.all([
+      page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+      page.locator('#bulkIpamForm button[type=submit]').click(),
+    ]);
+    await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
+    return { body: response.request().postDataJSON(), result: await response.json() };
+  };
+  const otherPreview = await previewXlsx();
+  assert.equal(otherPreview.body.destinationSpaceId, xlsxOther.id);
+  assert.deepEqual(otherPreview.result.summary, { total:3, valid:2, invalid:1, existing:2, newRecords:0 });
+  assert.deepEqual(await api('/api/spaces/' + xlsxOther.id + '/data'), xlsxOtherBefore);
+  await page.locator('#bulkIpamCompany').selectOption('test-co');
+  await page.locator('#bulkIpamSpace').selectOption('test-space');
+  assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true, 'changing destination invalidates the old preview');
+  const selectedPreview = await previewXlsx();
+  assert.equal(selectedPreview.body.destinationSpaceId, 'test-space');
+  assert.equal(selectedPreview.body.filename, 'ipam-two-sheets.xlsx');
+  assert.deepEqual(selectedPreview.result.summary, { total:3, valid:2, invalid:1, existing:1, newRecords:1 });
+  assert.deepEqual(await page.locator('#bulkIpamPreview tbody td').allTextContents(), [
+    '192.0.2.50', 'سوئیچ آزمایشی', 'طبقه اول & اتاق <۱>',
+    '192.0.2.94', 'رادیوی آزمایشی', 'خط اول\nخط دوم',
+  ]);
+  assert.deepEqual(await api('/api/spaces/test-space/data'), xlsxBefore, 'preview performs no writes');
+  await page.locator('#bulkIpamMode').selectOption('update');
+  const [xlsxCommit] = await Promise.all([
+    page.waitForResponse(r => r.ok() && new URL(r.url()).pathname === '/api/imports/ipam/commit'),
+    page.locator('#bulkIpamCommit').click(),
+  ]);
+  assert.equal(xlsxCommit.request().postDataJSON().destinationSpaceId, 'test-space');
+  assert.deepEqual((await xlsxCommit.json()).result, { total:3, invalid:1, created:1, updated:1, skipped:0 });
+  await page.locator('#bulkIpamDialog').waitFor({ state:'hidden' });
+  const xlsxAfter = await api('/api/spaces/test-space/data');
+  const xlsxUpdated = xlsxAfter.hosts.find(host => host.ip === '192.0.2.50');
+  for (const field of ['id', 'mac', 'vlan', 'type']) assert.equal(xlsxUpdated[field], xlsxOriginal[field]);
+  assert.equal(xlsxUpdated.name, 'سوئیچ آزمایشی');
+  assert.equal(xlsxUpdated.notes, 'طبقه اول & اتاق <۱>');
+  const xlsxCreated = xlsxAfter.hosts.find(host => host.ip === '192.0.2.94');
+  assert.equal(xlsxCreated.name, 'رادیوی آزمایشی');
+  assert.equal(xlsxCreated.notes, 'خط اول\nخط دوم');
+  assert.ok(!xlsxAfter.hosts.some(host => ['192.0.2.95', '203.0.113.1'].includes(host.ip)));
+  assert.deepEqual(xlsxAfter.space, xlsxBefore.space);
+  assert.deepEqual(await api('/api/spaces/' + xlsxOther.id + '/data'), xlsxOtherBefore);
+  await api('/api/hosts/test-space/' + xlsxCreated.ip, 'DELETE');
+  await api('/api/spaces/' + xlsxOther.id, 'DELETE');
+  check('XLSX file picker invalidates changed destinations and preserves Unicode, host identity and the other branch');
+
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');
   await fs.writeFile(path.join(outputDir, 'browser-result.json'), JSON.stringify({ status: 'passed', timestamp: new Date().toISOString(), database: 'PGlite test adapter; production pg driver not exercised', browser: browser.version(), checks }, null, 2) + '\n');
