@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - "work/i18n-personnel-foundation"
-      - "work/lab-release-20261118-import"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +15,7 @@ concurrency:
 
 jobs:
   deploy-lab:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/work/i18n-personnel-foundation' || github.ref == 'refs/heads/work/lab-release-20261118-import'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/work/i18n-personnel-foundation'
     runs-on:
       - self-hosted
       - Linux
