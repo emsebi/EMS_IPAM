@@ -1,3 +1,15 @@
+# Stage tested import release on the dedicated lab (2026-11-18 UTC)
+
+[PR #55](https://github.com/emsebi/EMS_IPAM/pull/55) merge [CI 44234927552](https://github.com/emsebi/EMS_IPAM/actions/runs/44234927552) passed on `112063e57ec995b9d2d09b20c467dd61abb48114`. Fresh main `9c12130b6d305fb9774d6662eba3f853e0949cdc` only adds a tested screenshot. All 306 listed checksums verify. Compared with deployed `a91a0ef0`, Radio and RADIUS source files are unchanged.
+
+This candidate adds a checksum check before any lab operation and a one-off push trigger to the existing EMS-IPAM Lab Deploy workflow. First run CI on `work/lab-import-preflight-20261118`. Only after its exact SHA passes all gates, create `work/lab-release-20261118-import` at the fresh base and advance it to that tested commit with expected SHA. No dispatch tool is exposed; the existing workflow's push trigger is used. Do not merge the dated trigger into main.
+
+The workflow keeps the private database backup, credentials, volumes and port 8888; verifies installed modules, unchanged RADIUS data and signed loopback replies; and runs the Docker/FreeRADIUS smoke. That is not evidence of a successful real MikroTik login. No real device scan or config push is requested.
+
+Next: use run IDs in the associated draft PR to inspect preflight CI and Lab Deploy. If deployment is still running, resume its existing run rather than starting another. Record the final deployed SHA and all check outcomes; then test XLSX preview/commit on the dedicated VM separately. Reconcile this checkpoint and the reusable checksum guard with main after removing the one-off trigger. Radio #12 operator acceptance, XLSX hands-on acceptance and real MikroTik login remain open. Before this run, the last verified deploy was [44050910476](https://github.com/emsebi/EMS_IPAM/actions/runs/44050910476).
+
+---
+
 # Checksum verification before release (2026-11-18 UTC)
 
 Fresh main `f85301babd9e3771db76695e837fbf11eda509a8` is the screenshot-only successor of #54. [Main CI 44227666128](https://github.com/emsebi/EMS_IPAM/actions/runs/44227666128) succeeded, including PostgreSQL, Docker and browser gates.

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "work/i18n-personnel-foundation"
+      - "work/lab-release-20261118-import"
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   deploy-lab:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/work/i18n-personnel-foundation'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/work/i18n-personnel-foundation' || github.ref == 'refs/heads/work/lab-release-20261118-import'
     runs-on:
       - self-hosted
       - Linux
@@ -27,6 +28,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           clean: true
+
+      - name: Verify source checksums before touching the lab
+        run: sha256sum --check --strict SHA256SUMS
 
       - name: Verify dedicated Docker lab
         shell: bash
