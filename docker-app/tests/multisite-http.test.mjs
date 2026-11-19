@@ -11,7 +11,8 @@ import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
 import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
-import { withXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
+import { openFixtureJournal } from './helpers/fixture-journal.mjs';
+import { withXlsxHttpFixture, recoverXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
 
 test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Space scopes', {timeout:60000}, async t=>{
   const appDir=path.resolve(import.meta.dirname,'..');
@@ -783,6 +784,70 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       if (changed) {
         await admin('DELETE', '/api/companies/' + changed.companyId);
         await admin('DELETE', '/api/trash/company/' + changed.companyId);
+      }
+    }
+  });
+
+  await t.test('XLSX journal survives process exit after commit and supports exact-ID recovery', async () => {
+    const journalPath = path.join(backups, 'interrupted-xlsx.jsonl');
+    const boot = await admin('GET', '/api/bootstrap');
+    const helper = new URL('./helpers/xlsx-http-fixture.mjs', import.meta.url).href;
+    const scenario = new URL('./helpers/xlsx-import-scenario.mjs', import.meta.url).href;
+    const source = `
+      import { withXlsxHttpFixture } from ${JSON.stringify(helper)};
+      import { exerciseXlsxImport } from ${JSON.stringify(scenario)};
+      const base = process.env.FIXTURE_BASE;
+      const login = await fetch(base+'/api/auth/login', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:'test-admin',password:'Test-Password-01'})});
+      if (login.status !== 200) throw Error('fixture login failed');
+      const cookie = login.headers.get('set-cookie').split(';')[0];
+      const call = async (method,url,body,expected=200) => {
+        const response = await fetch(base+url, {method, headers:{Cookie:cookie,'X-EMS-CSRF':'1','Content-Type':'application/json'},
+          ...(body === undefined ? {} : {body:JSON.stringify(body)}), signal:AbortSignal.timeout(5000)});
+        if (response.status !== expected) throw Error('fixture HTTP failed');
+        return response.json();
+      };
+      await withXlsxHttpFixture(call, async (a,b) => {
+        await exerciseXlsxImport(call,a,b);
+        process.exit(77); // Deliberately bypass finally after committed HTTP writes.
+      }, {journalPath:process.env.FIXTURE_JOURNAL});
+    `;
+    const probe = spawn(process.execPath, ['--input-type=module', '-e', source], {
+      env:{...process.env,FIXTURE_BASE:base,FIXTURE_JOURNAL:journalPath}, stdio:'ignore',
+    });
+    const [code] = await once(probe, 'exit');
+    assert.equal(code, 77);
+    assert.equal((await fs.stat(journalPath)).mode & 0o777, 0o600);
+    const journal = openFixtureJournal(journalPath);
+    try { assert.equal(journal.owned.length, 2); assert.equal(journal.unresolved.length, 0); }
+    finally { journal.close(); }
+    await recoverXlsxHttpFixture(admin, journalPath);
+    await recoverXlsxHttpFixture(admin, journalPath); // Completed recovery is repeatable.
+    const after = await admin('GET', '/api/bootstrap');
+    assert.deepEqual([after.companies,after.spaces], [boot.companies,boot.spaces]);
+  });
+
+  await t.test('XLSX journal refuses ambiguous create replies without deleting guessed records', async () => {
+    const journalPath = path.join(backups, 'ambiguous-xlsx.jsonl');
+    let created;
+    const call = async (method,url,...args) => {
+      const response = await admin(method,url,...args);
+      if (method === 'POST' && url === '/api/companies') {
+        created = response.id;
+        throw Error('lost create response');
+      }
+      return response;
+    };
+    try {
+      await assert.rejects(withXlsxHttpFixture(call, () => {}, {journalPath}), AggregateError);
+      let requests = 0;
+      await assert.rejects(recoverXlsxHttpFixture(async () => { requests++; }, journalPath), /unresolved create/);
+      assert.equal(requests, 0);
+      assert.equal((await admin('GET','/api/companies/'+created)).company.id, created);
+    } finally {
+      if (created) {
+        await admin('DELETE','/api/companies/'+created);
+        await admin('DELETE','/api/trash/company/'+created);
       }
     }
   });
