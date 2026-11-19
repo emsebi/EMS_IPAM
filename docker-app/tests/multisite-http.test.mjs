@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
 import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
+import { withXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
 
 test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Space scopes', {timeout:60000}, async t=>{
   const appDir=path.resolve(import.meta.dirname,'..');
@@ -731,6 +732,59 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.ok(!afterUpdate.hosts.some(host => host.ip === '203.0.113.1'));
     assert.deepEqual(afterUpdate.space, northBefore.space);
     assert.deepEqual(await read(south), southBefore, 'same IP values in South retain their original records');
+  });
+
+  await t.test('owned XLSX fixtures clean up after success, partial provisioning and committed import failure', async () => {
+    const snapshot = async () => {
+      const boot = await admin('GET', '/api/bootstrap');
+      return { companies: boot.companies, spaces: boot.spaces,
+        north: await admin('GET', '/api/spaces/' + north.spaceId + '/data'),
+        south: await admin('GET', '/api/spaces/' + south.spaceId + '/data'),
+        trash: await admin('GET', '/api/trash') };
+    };
+    const before = await snapshot();
+    for (const phase of ['success', 'provision', 'import']) {
+      const call = async (method, url, ...args) => {
+        if (phase === 'provision' && method === 'POST' && url === '/api/spaces') {
+          throw new Error('injected provisioning failure');
+        }
+        return admin(method, url, ...args);
+      };
+      const run = withXlsxHttpFixture(call, async (destination, sibling) => {
+        const evidence = await exerciseXlsxImport(call, destination, sibling);
+        if (phase === 'import') throw new Error('injected after committed import');
+        return evidence;
+      });
+      if (phase === 'success') {
+        assert.ok((await run).createdHostId);
+      } else {
+        await assert.rejects(run, error => error instanceof AggregateError &&
+          error.errors.length === 1 && /injected/.test(error.errors[0].message));
+      }
+      assert.deepEqual(await snapshot(), before, phase + ': existing branches/Spaces/hosts and trash unchanged');
+    }
+  });
+
+  await t.test('XLSX fixture cleanup refuses changed ownership and reports failure', async () => {
+    let changed;
+    try {
+      await assert.rejects(withXlsxHttpFixture(admin, async destination => {
+        changed = destination;
+        await admin('PUT', '/api/companies/' + destination.companyId,
+          { name: 'Changed fixture ownership ' + destination.companyId, kind: 'branch' });
+      }), error => error instanceof AggregateError && error.errors.length === 1 &&
+        /ownership changed/.test(error.errors[0].message));
+      const record = await admin('GET', '/api/companies/' + changed.companyId);
+      assert.match(record.company.name, /^Changed fixture ownership /);
+      const data = await admin('GET', '/api/spaces/' + changed.spaceId + '/data');
+      assert.equal(data.space.companyId, changed.companyId);
+    } finally {
+      // Explicit repair of this test's deliberately changed record in the disposable DB.
+      if (changed) {
+        await admin('DELETE', '/api/companies/' + changed.companyId);
+        await admin('DELETE', '/api/trash/company/' + changed.companyId);
+      }
+    }
   });
 
   await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {

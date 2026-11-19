@@ -1,3 +1,19 @@
+# XLSX fixture lifecycle and failure-path rehearsal (2026-11-19 UTC)
+
+[PR #61](https://github.com/emsebi/EMS_IPAM/pull/61) merged at `96924c5f7f8c1c2604a5c25e5ba6d61dcfb2bea8` with expected head after both [PR CI 44433752534](https://github.com/emsebi/EMS_IPAM/actions/runs/44433752534) and [push CI 44433747394](https://github.com/emsebi/EMS_IPAM/actions/runs/44433747394) passed. Native PostgreSQL job 135257335142 passed the two XLSX cases and all 21 HTTP tests with no failures/skips. [Merge CI 44441459672](https://github.com/emsebi/EMS_IPAM/actions/runs/44441459672) succeeded; fresh main `7d5ba88d5e8e1d5afc0094820360aa773231baa8` adds only the generated Radio geographic screenshot.
+
+The new `docker-app/tests/helpers/xlsx-http-fixture.mjs` provisions uniquely named synthetic branches/Spaces through the existing API, records each returned company ID before continuing, seeds same-IP hosts and sentinels, and calls the shared XLSX scenario. Its finally path checks the recorded ID/name marker, archives and purges only those company IDs in reverse order, attempts every recorded cleanup, and reports scenario/cleanup failures together. Existing audit records are retained.
+
+Production-route tests now exercise normal completion, failure after the first company creation, failure after a committed XLSX import, and refusal to delete a fixture whose name marker changed. The ordinary paths compare pre-existing Company/Space listings, both established branch payloads and trash before/after. The ownership-failure test verifies that the changed record and its Space still exist, then explicitly repairs only that synthetic record in the disposable database.
+
+Local HTTP suite: 20 passes, 0 failures, 3 existing PostgreSQL-only skips (23 including the parent) with PGlite. Native PostgreSQL and all other CI gates for this candidate remain pending; run IDs are in the PR. This is a disposable-database lifecycle rehearsal, not an installed-panel test or a row-by-row preservation audit for every module.
+
+Next: inspect both lifecycle cases and all 23 HTTP tests without skips in PostgreSQL CI, plus all remaining gates, before merging with fresh refs/expected head. Before wiring an installed-loopback runner, add durable recovery for lost create responses/process interruption, a private before/after preservation check, and refusal of unexpected relationships before cascading purge. Test these failure paths in the disposable database first. The current helper intentionally has no live CLI/workflow or installed credentials; do not run it against user Spaces or infer crash-safe cleanup from finally.
+
+No VM deployment, real-device discovery, router push or schema/application change. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` from successful Lab Deploy 44376757411. Do not redeploy for this test-only change. Installed-panel XLSX acceptance, Radio #12 operator acceptance and actual MikroTik login remain open.
+
+---
+
 # Shared XLSX HTTP scenario with explicit fixture identity (2026-11-19 UTC)
 
 Fresh main `9733e795ba904b6e5bf8f2e931d772fbc16aa14b` adds only tested screenshots after [checkpoint e766172](https://github.com/emsebi/EMS_IPAM/commit/e766172c9e21803dac9f937279ba00c4759fbbec). [Checkpoint CI 44387039897](https://github.com/emsebi/EMS_IPAM/actions/runs/44387039897) completed successfully. PR #12 remains the only pre-existing open PR, inactive and draft; no concurrent module files were edited.
