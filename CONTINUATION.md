@@ -1,3 +1,19 @@
+# Private XLSX fixture journal and confirmed-ID recovery (2026-11-19 UTC)
+
+[PR #62](https://github.com/emsebi/EMS_IPAM/pull/62) merged at `e05b67a21ad860dce3eff09f5f2f48fa7c6efa05` after successful PR CI 44441949873 and push CI 44441942358. PostgreSQL job 135284672551 passed all 23 HTTP tests, including both lifecycle cases, without failures/skips. [Merge CI 44448470690](https://github.com/emsebi/EMS_IPAM/actions/runs/44448470690) succeeded; fresh main `debc4d032004acd0f82cd24b1e6b81f778598903` adds only generated Radio screenshots. PR #12 remains inactive/draft.
+
+The disposable fixture now optionally journals a create intent before each API call, confirmed returned IDs, and successful removals. The append-only file is created exclusively with mode 0600; each event has a UTC observation time and is fsynced, and the parent directory entry is synced after file creation. It stores no credentials or host payloads. Recovery validates the journal and only retries confirmed IDs with matching current name markers. Completed recovery is repeatable. Unresolved creates, incomplete/invalid records and non-private files fail closed; a previous journal is never overwritten.
+
+A child process runs the real XLSX HTTP scenario, commits its writes and exits with code 77, bypassing finally. The parent reopens the journal, verifies two recorded IDs, performs recovery twice and compares the pre-existing Company/Space listings. A separate real-HTTP test simulates a lost create response: recovery makes zero API calls and does not guess an ID. Filesystem tests cover private permissions, overwrite refusal, truncation and unknown removal IDs.
+
+Local combined journal/HTTP run: 23 passed, 0 failed, 3 existing native-PostgreSQL-only skips (26 including the HTTP parent). Native PostgreSQL must pass all 25 HTTP tests with no skips; the ordinary test job also runs the journal filesystem case. Candidate CI run IDs are in the PR. This is an isolated test database, not installed-panel acceptance.
+
+Next: check those new cases and all CI gates, then merge with fresh refs/expected head. Extend recovery for interruption between archive, purge and the removal checkpoint, with injected lost responses; current recovery deliberately reports a failure if the active record is absent rather than assuming deletion succeeded. Unresolved create replies still require reconciliation from retained evidence, not name-based guessing. Before an installed runner, retain the private preservation comparison, unexpected-relationship checks before cascading deletion, and fixed-loopback/authentication boundaries. Do not run concurrent recovery processes for one journal. No live CLI/workflow is attached.
+
+No VM deployment, device discovery, router push or application/schema change. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` (successful Lab Deploy 44376757411). Installed-panel XLSX, Radio operator acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
 # XLSX fixture lifecycle and failure-path rehearsal (2026-11-19 UTC)
 
 [PR #61](https://github.com/emsebi/EMS_IPAM/pull/61) merged at `96924c5f7f8c1c2604a5c25e5ba6d61dcfb2bea8` with expected head after both [PR CI 44433752534](https://github.com/emsebi/EMS_IPAM/actions/runs/44433752534) and [push CI 44433747394](https://github.com/emsebi/EMS_IPAM/actions/runs/44433747394) passed. Native PostgreSQL job 135257335142 passed the two XLSX cases and all 21 HTTP tests with no failures/skips. [Merge CI 44441459672](https://github.com/emsebi/EMS_IPAM/actions/runs/44441459672) succeeded; fresh main `7d5ba88d5e8e1d5afc0094820360aa773231baa8` adds only the generated Radio geographic screenshot.
