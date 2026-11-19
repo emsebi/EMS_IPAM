@@ -23,8 +23,12 @@ test('fixture journal preserves private evidence and refuses overwrite, truncati
   assert.deepEqual(fs.readFileSync(filename), original);
   const journal = openFixtureJournal(filename);
   assert.deepEqual(journal.owned, [{id,name}]);
-  journal.record({kind:'removed',id});
+  journal.record({kind:'purging',id});
   journal.close();
+  const pending = openFixtureJournal(filename);
+  assert.deepEqual(pending.owned, [{id,name,purging:true}]);
+  pending.record({kind:'removed',id});
+  pending.close();
   const finished = openFixtureJournal(filename);
   assert.deepEqual(finished.owned, []);
   finished.close();

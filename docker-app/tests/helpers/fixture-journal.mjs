@@ -49,13 +49,16 @@ export function openFixtureJournal(filename) {
         assert.ok(!ids.has(event.id));
         ids.add(event.id); entry.id = event.id;
       } else {
-        assert.equal(event.kind, 'removed');
+        assert.ok(['purging', 'removed'].includes(event.kind));
         const entry = [...planned.values()].find(item => item.id === event.id);
-        assert.ok(entry && !entry.removed); entry.removed = true;
+        assert.ok(entry && !entry.removed);
+        if (event.kind === 'purging') {
+          assert.ok(!entry.purging, 'duplicate purge intent'); entry.purging = true;
+        } else entry.removed = true;
       }
     }
     return { ...writer(fd), runId: first.runId,
-      owned: [...planned.values()].filter(item => item.id && !item.removed).map(({ id, name }) => ({ id, name })),
+      owned: [...planned.values()].filter(item => item.id && !item.removed).map(({ id, name, purging }) => ({ id, name, ...(purging ? {purging:true} : {}) })),
       unresolved: [...planned.values()].filter(item => !item.id).map(item => item.name) };
   } catch (error) { fs.closeSync(fd); throw error; }
 }

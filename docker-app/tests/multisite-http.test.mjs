@@ -852,6 +852,73 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     }
   });
 
+  await t.test('XLSX recovery handles lost archive/purge replies and interruption before purge', async () => {
+    const snapshot = async () => {
+      const boot = await admin('GET', '/api/bootstrap');
+      return {companies:boot.companies,spaces:boot.spaces,trash:await admin('GET','/api/trash')};
+    };
+    const before = await snapshot();
+    for (const phase of ['archive', 'purge', 'before-purge']) {
+      const journalPath = path.join(backups, 'cleanup-' + phase + '.jsonl');
+      let injected = false;
+      const call = async (method,url,...args) => {
+        const purge = method === 'DELETE' && url.startsWith('/api/trash/company/');
+        const archive = method === 'DELETE' && url.startsWith('/api/companies/');
+        if (!injected && purge && phase === 'before-purge') {
+          injected = true; throw Error('injected before purge');
+        }
+        const response = await admin(method,url,...args);
+        if (!injected && ((purge && phase === 'purge') || (archive && phase === 'archive'))) {
+          injected = true; throw Error('injected lost cleanup reply');
+        }
+        return response;
+      };
+      await assert.rejects(withXlsxHttpFixture(call,
+        (a,b) => exerciseXlsxImport(call,a,b), {journalPath}), error =>
+        error instanceof AggregateError && error.errors.length === 1 && /injected/.test(error.errors[0].message));
+      assert.equal(injected, true);
+      const journal = openFixtureJournal(journalPath);
+      try {
+        assert.equal(journal.owned.length, 1);
+        assert.equal(Boolean(journal.owned[0].purging), phase !== 'archive');
+      } finally { journal.close(); }
+      if (phase === 'archive') {
+        const reader = await client('north-reader');
+        const evidence = await fs.readFile(journalPath,'utf8');
+        let deletes = 0;
+        await assert.rejects(recoverXlsxHttpFixture(async (method,...args) => {
+          if (method === 'DELETE') deletes++;
+          return reader(method,...args);
+        }, journalPath), error => error instanceof AggregateError &&
+          error.errors.some(item => /global admin view required/.test(item.message)));
+        assert.equal(deletes, 0);
+        assert.equal(await fs.readFile(journalPath,'utf8'), evidence);
+      }
+      await recoverXlsxHttpFixture(admin,journalPath);
+      await recoverXlsxHttpFixture(admin,journalPath);
+      assert.deepEqual(await snapshot(), before, phase + ': no existing branches/Spaces or trash changed');
+    }
+  });
+
+  await t.test('XLSX recovery does not treat a missing record without purge intent as success', async () => {
+    const journalPath = path.join(backups, 'unexplained-missing.jsonl');
+    await assert.rejects(withXlsxHttpFixture(admin, async destination => {
+      // Deliberate out-of-band removal inside this disposable test database.
+      await admin('DELETE','/api/companies/'+destination.companyId);
+      await admin('DELETE','/api/trash/company/'+destination.companyId);
+    }, {journalPath}), error => error instanceof AggregateError &&
+      error.errors.some(item => /without confirmed purge intent/.test(item.message)));
+    let deletes = 0;
+    await assert.rejects(recoverXlsxHttpFixture(async (method,...args) => {
+      if (method === 'DELETE') deletes++;
+      return admin(method,...args);
+    }, journalPath), AggregateError);
+    assert.equal(deletes, 0);
+    const journal = openFixtureJournal(journalPath);
+    try { assert.equal(journal.owned.length, 1); assert.equal(journal.owned[0].purging, undefined); }
+    finally { journal.close(); }
+  });
+
   await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {
     const read = site => admin('GET', '/api/spaces/' + site.spaceId + '/data');
     const before = await Promise.all([read(north), read(south)]);
