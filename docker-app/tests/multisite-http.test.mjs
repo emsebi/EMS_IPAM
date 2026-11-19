@@ -10,6 +10,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
+import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
 
 test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Space scopes', {timeout:60000}, async t=>{
   const appDir=path.resolve(import.meta.dirname,'..');
@@ -732,37 +733,30 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(await read(south), southBefore, 'same IP values in South retain their original records');
   });
 
-  await t.test('MS-02 XLSX imports only the first worksheet and preserves Unicode and branch identities', async () => {
-    // Workbook fixture generated with openpyxl 3.1.5, using synthetic RFC 5737 addresses.
-    const workbook = await fs.readFile(new URL('./fixtures/ipam-two-sheets.xlsx', import.meta.url));
+  await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {
     const read = site => admin('GET', '/api/spaces/' + site.spaceId + '/data');
-    const before = await read(north);
-    const other = await read(south);
-    const original = before.hosts.find(host => host.ip === '192.0.2.50');
-    const body = { destinationSpaceId: north.spaceId, filename: 'ipam-two-sheets.xlsx',
-      base64: workbook.toString('base64'), mode: 'update' };
-    const root = '/api/imports/ipam/';
-    const preview = await admin('POST', root + 'preview', body);
-    assert.deepEqual(preview.summary, { total: 3, valid: 2, invalid: 1, existing: 1, newRecords: 1 });
-    assert.deepEqual(preview.sample, [
-      { ip: '192.0.2.50', name: 'سوئیچ آزمایشی', notes: 'طبقه اول & اتاق <۱>' },
-      { ip: '192.0.2.94', name: 'رادیوی آزمایشی', notes: 'خط اول\nخط دوم' },
-    ]);
-    assert.deepEqual(await read(north), before);
-    const result = await admin('POST', root + 'commit', body);
-    assert.deepEqual(result.result, { total: 3, invalid: 1, created: 1, updated: 1, skipped: 0 });
-    const after = await read(north);
-    for (const row of preview.sample) {
-      const host = after.hosts.find(item => item.ip === row.ip);
-      assert.deepEqual([host.name, host.notes], [row.name, row.notes]);
-    }
-    const updated = after.hosts.find(host => host.ip === original.ip);
-    assert.deepEqual([updated.id, updated.mac], [original.id, original.mac]);
-    assert.ok(!after.hosts.some(host => ['192.0.2.95', '203.0.113.1'].includes(host.ip)));
-    const retry = await admin('POST', root + 'commit', { ...body, mode: 'skip' });
-    assert.deepEqual(retry.result, { total: 3, invalid: 1, created: 0, updated: 0, skipped: 2 });
-    assert.deepEqual(await read(north), after);
-    assert.deepEqual(after.space, before.space);
-    assert.deepEqual(await read(south), other);
+    const before = await Promise.all([read(north), read(south)]);
+    let posts = 0;
+    const tracked = async (method, ...args) => {
+      if (method === 'POST') posts++;
+      return admin(method, ...args);
+    };
+    await assert.rejects(exerciseXlsxImport(tracked, north, north), /distinct fixture branches/);
+    await assert.rejects(exerciseXlsxImport(tracked, { ...north, companyId: south.companyId },
+      { ...south, companyId: north.companyId }), /identity mismatch/);
+    await assert.rejects(exerciseXlsxImport(tracked, { spaceId: north.spaceId }, south), /companyId required/);
+    assert.equal(posts, 0, 'invalid fixture identity must be rejected before preview or commit');
+    assert.deepEqual(await Promise.all([read(north), read(south)]), before);
+  });
+
+  await t.test('MS-02 XLSX imports only the first worksheet and preserves Unicode and branch identities', async () => {
+    await admin('PUT', '/api/hosts', { spaceId: south.spaceId, ip: '192.0.2.94', name: 'Sibling XLSX sentinel' });
+    const evidence = await exerciseXlsxImport(admin, north, south);
+    assert.equal(evidence.existingHostId, north.id);
+    assert.notEqual(evidence.createdHostId, north.id);
+    const before = await admin('GET', '/api/spaces/' + north.spaceId + '/data');
+    // Reusing an already-populated destination is a provisioning error, not a fresh fixture pass.
+    await assert.rejects(exerciseXlsxImport(admin, north, south), /addresses must be unused/);
+    assert.deepEqual(await admin('GET', '/api/spaces/' + north.spaceId + '/data'), before);
   });
 });

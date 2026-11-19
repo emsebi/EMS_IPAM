@@ -1,3 +1,17 @@
+# Shared XLSX HTTP scenario with explicit fixture identity (2026-11-19 UTC)
+
+Fresh main `9733e795ba904b6e5bf8f2e931d772fbc16aa14b` adds only tested screenshots after [checkpoint e766172](https://github.com/emsebi/EMS_IPAM/commit/e766172c9e21803dac9f937279ba00c4759fbbec). [Checkpoint CI 44387039897](https://github.com/emsebi/EMS_IPAM/actions/runs/44387039897) completed successfully. PR #12 remains the only pre-existing open PR, inactive and draft; no concurrent module files were edited.
+
+The existing two-sheet XLSX HTTP scenario is now a shared helper at `docker-app/tests/helpers/xlsx-import-scenario.mjs`, retaining its original strict Unicode, read-only preview, stable host ID/MAC, first-sheet-only and Skip retry assertions. It additionally checks explicit Company/Space identities and the synthetic CIDR before any import request, rejects a reused destination, preserves every unrelated destination host, and compares the sibling branch before/after with a same-IP sentinel for the newly imported row. The production-route test proves missing/incorrect fixture identity is rejected without sending preview or commit requests or changing either branch. This is test-harness validation, not a replacement for backend authorization.
+
+Local `node --test docker-app/tests/multisite-http.test.mjs`: 18 passed, 0 failed, 3 existing native-PostgreSQL-only cases skipped (21 including the parent). This uses real production HTTP routes with the disposable PGlite adapter. Native PostgreSQL, browser and the remaining CI gates still require the new head's results; run IDs will be recorded in the PR. No installed-panel execution or acceptance is claimed.
+
+Next: inspect both named XLSX subtests in the native PostgreSQL CI job (all 21 tests, no skips) and every other gate before merging with fresh main/expected head. Then implement the installed-loopback wrapper with owned synthetic fixture provisioning, exact-ID cleanup in failure paths and a private before/after preservation check; test that lifecycle in a disposable database before running on the installed VM. The helper deliberately does not provision records, handle installed credentials or provide cleanup, so it must not be invoked against existing user Spaces as a standalone live probe.
+
+The installed build remains `71d9b35b73270b1e595e36cea20d77753d30f55c` from successful [Lab Deploy 44376757411](https://github.com/emsebi/EMS_IPAM/actions/runs/44376757411). Do not redeploy for this test-only change. Installed-panel XLSX acceptance, Radio operator acceptance and real MikroTik Full/Read login remain open. No live discovery, router push, application/schema changes or removal of the legacy CIDR constraint.
+
+---
+
 # Verified isolated checkout deployment and merge (2026-11-18 UTC)
 
 [Lab Deploy 44376757411](https://github.com/emsebi/EMS_IPAM/actions/runs/44376757411) completed successfully for installed source `71d9b35b73270b1e595e36cea20d77753d30f55c`. Dedicated-VM job `135057833118` completed at 19:11:10 UTC; its final Docker/PostgreSQL/FreeRADIUS smoke passed at 19:11:02 UTC. The earlier checkout EACCES in run 44375919531 is resolved by the separate source directory, verified on the actual runner.
