@@ -1,3 +1,19 @@
+# Resume cleanup after lost archive/purge responses (2026-11-19 UTC)
+
+[PR #63](https://github.com/emsebi/EMS_IPAM/pull/63) merged at `2607e6dd4d49a2b4be410ba1923d76cd1e88a842` after PR CI 44448977718 and push CI 44448972824 succeeded. PostgreSQL job 135307949508 passed the process-exit and ambiguous-create cases and all 25 HTTP tests without failures/skips. [Merge CI 44455678717](https://github.com/emsebi/EMS_IPAM/actions/runs/44455678717) succeeded. Fresh main `5478d05c42d376da90660a9b1d96c200123f1c3d` adds only generated Radio screenshots; PR #12 remains inactive/draft.
+
+The fixture journals and fsyncs purge intent before deleting an archived company. Cleanup requires an admin bootstrap view, verifies the known ID/name in active records or trash, and can resume an archived record after a lost archive response. If a purge response/removal checkpoint is lost, the same recorded ID may be marked removed only when purge intent exists and both admin active/trash views show it absent. Missing records without that evidence still fail. An active record restored after purge intent is refused. Existing version-1 journals without purge intent remain readable but do not authorize treating unexplained absence as success.
+
+Production-route tests inject failure immediately before purge and after successful archive/purge HTTP operations, reopen the journal and recover twice. Pre-existing Company/Space listings and trash remain identical. A scoped reader cannot issue cleanup deletes or change journal bytes. A separate out-of-band removal test verifies that absence without purge intent remains unresolved and recovery sends no delete. The filesystem test also reopens and verifies the persisted purge-intent state.
+
+Local combined journal/HTTP suite: 25 passed, 0 failed, 3 existing native-PostgreSQL-only skips (28 including the HTTP parent). Native PostgreSQL must pass all 27 HTTP tests without skips; the ordinary test gate includes the filesystem case. Candidate CI run IDs and next checks are in the PR; no full-CI or VM pass is claimed for this new head.
+
+Next: verify the new cleanup-recovery and unexplained-absence cases plus all CI gates before merging with fresh refs/expected SHA. Then add a read-only dependency/preservation preflight before cascading cleanup: in the disposable database, link an outside-branch host to a fixture Radio parent and prove cleanup refuses without changing either record. Cover other incoming references and keep private before/after evidence before wiring the installed-loopback runner. Unresolved creation replies remain fail-closed and require evidence reconciliation; no name-based guessing. One recovery owner per journal is still required.
+
+This remains an isolated database rehearsal with no live CLI/workflow, VM deployment, schema/application change, discovery or router push. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` from Lab Deploy 44376757411. Installed-panel XLSX, Radio operator acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
 # Private XLSX fixture journal and confirmed-ID recovery (2026-11-19 UTC)
 
 [PR #62](https://github.com/emsebi/EMS_IPAM/pull/62) merged at `e05b67a21ad860dce3eff09f5f2f48fa7c6efa05` after successful PR CI 44441949873 and push CI 44441942358. PostgreSQL job 135284672551 passed all 23 HTTP tests, including both lifecycle cases, without failures/skips. [Merge CI 44448470690](https://github.com/emsebi/EMS_IPAM/actions/runs/44448470690) succeeded; fresh main `debc4d032004acd0f82cd24b1e6b81f778598903` adds only generated Radio screenshots. PR #12 remains inactive/draft.

@@ -1,5 +1,5 @@
-// Disposable-database rehearsal only. A live runner still needs a durable
-// recovery for ambiguous replies, private preservation checks and fixed loopback transport.
+// Disposable-database rehearsal only. A live runner still needs ambiguous-create
+// reconciliation, preservation/relationship checks and fixed loopback transport.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFixtureJournal, openFixtureJournal } from './fixture-journal.mjs';
@@ -46,11 +46,28 @@ async function cleanupRecorded(call, owned, journal) {
   const errors = [];
   for (const company of [...owned].reverse()) {
     try {
-      const current = await call('GET', '/api/companies/' + encodeURIComponent(company.id));
-      assert.deepEqual([current.company.id, current.company.name], [company.id, company.name],
-        'fixture ownership changed; refusing cleanup');
-      await call('DELETE', '/api/companies/' + encodeURIComponent(company.id));
-      await call('DELETE', '/api/trash/company/' + encodeURIComponent(company.id));
+      const boot = await call('GET', '/api/bootstrap');
+      assert.equal(boot.user?.role, 'admin', 'global admin view required for fixture cleanup');
+      assert.ok(Array.isArray(boot.companies));
+      const active = boot.companies.find(item => item.id === company.id);
+      if (active) {
+        assert.equal(active.name, company.name, 'fixture ownership changed; refusing cleanup');
+        assert.ok(!company.purging, 'fixture restored after purge intent; refusing cleanup');
+        await call('DELETE', '/api/companies/' + encodeURIComponent(company.id));
+      }
+      const trash = await call('GET', '/api/trash');
+      assert.ok(Array.isArray(trash.items));
+      const archived = trash.items.find(item => item.kind === 'company' && item.id === company.id);
+      if (archived) {
+        assert.equal(archived.label, company.name, 'archived fixture ownership changed; refusing cleanup');
+        if (!company.purging) {
+          journal?.record({ kind: 'purging', id: company.id });
+          company.purging = true;
+        }
+        await call('DELETE', '/api/trash/company/' + encodeURIComponent(company.id));
+      } else {
+        assert.ok(!active && company.purging, 'missing fixture without confirmed purge intent');
+      }
       journal?.record({ kind: 'removed', id: company.id });
     } catch (error) { errors.push(error); }
   }
