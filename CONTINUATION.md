@@ -1,3 +1,15 @@
+# Radio relationship preflight for disposable XLSX cleanup (2026-11-19 UTC)
+
+PR #64 merged with expected head at `c3977cd96289539dd888fa0904804641b6caade3`. Candidate CI 44456081052 and 44456075220 passed; PostgreSQL job 135331300575 passed all 27 HTTP tests without failures/skips at 04:07:41 UTC. Merge CI [44469937411](https://github.com/emsebi/EMS_IPAM/actions/runs/44469937411) succeeded. Fresh main `ecc0cdfbf5b67566866a891d60e1cdb382bbfe1b` adds only the generated Radio screenshot. PR #12 remains inactive/draft.
+
+Small next step: a SELECT-only fixture preflight counts outside-company hosts referencing a fixture Radio parent, including archived records. An optional beforeCleanup hook runs after ownership validation and before archive/purge in normal cleanup and journal recovery. A detected reference refuses deletion; the native PostgreSQL HTTP test verifies both linked rows, the active fixture company and pending journal survive, no DELETE is sent for that company, and recovery can finish after removing only the synthetic relationship. The PGlite test checks unchanged full host rows and executes the preflight in a read-only transaction for active and archived children.
+
+Local validation and candidate CI IDs are in the PR body. Next: verify the new native HTTP case and all 28 HTTP tests with zero skips, plus ordinary/browser/Docker gates, before merging with fresh refs and expected head. Then cover other incoming references (company hierarchy, grants and module foreign keys) and private before/after preservation evidence before an installed-loopback runner. This narrow guard covers hosts.radio_parent_host_id only; it is optional for isolated tests, not a complete installed cleanup policy or an atomic concurrency lock. Keep a single fixture owner; do not infer safety against concurrent application writes.
+
+No application/schema change, VM redeployment, device scan or router push. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` (Lab Deploy 44376757411). Installed XLSX, Radio operator acceptance and real MikroTik login remain open. Unresolved create replies still need evidence reconciliation, never guessed IDs.
+
+---
+
 # Resume cleanup after lost archive/purge responses (2026-11-19 UTC)
 
 [PR #63](https://github.com/emsebi/EMS_IPAM/pull/63) merged at `2607e6dd4d49a2b4be410ba1923d76cd1e88a842` after PR CI 44448977718 and push CI 44448972824 succeeded. PostgreSQL job 135307949508 passed the process-exit and ambiguous-create cases and all 25 HTTP tests without failures/skips. [Merge CI 44455678717](https://github.com/emsebi/EMS_IPAM/actions/runs/44455678717) succeeded. Fresh main `5478d05c42d376da90660a9b1d96c200123f1c3d` adds only generated Radio screenshots; PR #12 remains inactive/draft.

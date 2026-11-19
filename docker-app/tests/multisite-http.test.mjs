@@ -10,6 +10,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
+import { assertFixtureRadioIsolation } from './helpers/fixture-radio-isolation.mjs';
 import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
 import { openFixtureJournal } from './helpers/fixture-journal.mjs';
 import { withXlsxHttpFixture, recoverXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
@@ -917,6 +918,49 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     const journal = openFixtureJournal(journalPath);
     try { assert.equal(journal.owned.length, 1); assert.equal(journal.owned[0].purging, undefined); }
     finally { journal.close(); }
+  });
+
+  await t.test('XLSX cleanup and recovery preserve an external Radio child and its fixture parent', {
+    skip: !postgres && 'requires a separate SQL connection to the running fixture database',
+  }, async () => {
+    const db = new pg.Client({ connectionString: env.DATABASE_URL });
+    await db.connect();
+    const journalPath = path.join(backups, 'radio-reference-xlsx.jsonl');
+    const beforeCleanup = id => assertFixtureRadioIsolation(db, id);
+    let destination, parentId, linkedRows;
+    const originalParent = (await db.query('SELECT radio_parent_host_id FROM hosts WHERE id=$1', [south.id])).rows[0].radio_parent_host_id;
+    const deletes = [];
+    const call = async (method, url, ...args) => {
+      if (method === 'DELETE') deletes.push(url);
+      return admin(method, url, ...args);
+    };
+    const snapshot = async () => (await db.query('SELECT * FROM hosts WHERE id=ANY($1::text[]) ORDER BY id', [[south.id, parentId]])).rows;
+    const blocked = error => error instanceof AggregateError && error.errors.some(e => /external Radio children/.test(e.message));
+    try {
+      await assert.rejects(withXlsxHttpFixture(call, async site => {
+        destination = site;
+        parentId = (await admin('GET', '/api/spaces/' + site.spaceId + '/data')).hosts.find(h => h.ip === '192.0.2.50').id;
+        await db.query('UPDATE hosts SET radio_parent_host_id=$1 WHERE id=$2', [parentId, south.id]);
+        linkedRows = await snapshot();
+      }, { journalPath, beforeCleanup }), blocked);
+      assert.deepEqual(await snapshot(), linkedRows);
+      assert.ok(!deletes.some(url => url.endsWith('/' + destination.companyId)));
+      deletes.length = 0;
+      const journalBefore = await fs.readFile(journalPath);
+      await assert.rejects(recoverXlsxHttpFixture(call, journalPath, { beforeCleanup }), blocked);
+      assert.deepEqual(await fs.readFile(journalPath), journalBefore);
+      assert.deepEqual(await snapshot(), linkedRows);
+      assert.deepEqual(deletes, []);
+      const record = await admin('GET', '/api/companies/' + destination.companyId);
+      assert.equal(record.company.id, destination.companyId);
+    } finally {
+      // Remove only this test's injected relationship in its disposable database.
+      try {
+        await db.query('UPDATE hosts SET radio_parent_host_id=$1 WHERE id=$2', [originalParent, south.id]);
+        await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+      } finally { await db.end(); }
+    }
+    assert.equal((await admin('GET', '/api/spaces/' + south.spaceId + '/data')).hosts.find(h => h.id === south.id).id, south.id);
   });
 
   await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {
