@@ -1,0 +1,43 @@
+name: EMS-IPAM VM Reachability Audit
+on:
+  push:
+    branches:
+      - ops/check-ems-vm-20261120
+    paths:
+      - .github/workflows/vm-reachability-check.yml
+permissions:
+  contents: read
+jobs:
+  vm-audit:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 6
+    steps:
+      - name: Check actual VM panel and installed module health (read-only)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "CHECK VM IPv4 connection 10.1.1.5:8888"
+          code="$(curl --noproxy '*' -sS -o /tmp/ems-vm-health.json -w '%{http_code}' --connect-timeout 3 --max-time 8 http://10.1.1.5:8888/health || true)"
+          echo "HTTP from VM LAN address: $code"
+          test "$code" = 200
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const h=JSON.parse(fs.readFileSync("/tmp/ems-vm-health.json","utf8"));
+            const raw=h.modules||h.data?.modules||h.registeredModules||[];
+            const items=Array.isArray(raw)?raw.map(x=>typeof x==="string"?x:x.id||x.name):[];
+            const all=JSON.stringify(h);
+            console.log("Health OK; module list: "+items.join(", "));
+            for(const id of ["radio","link-planner"])if(!all.includes(id))throw new Error("Missing module in health "+id);
+            console.log("PASS radio and link-planner registered in live /health");
+          '
+          echo "CHECK container states (no modifications)"
+          for container in ems-ipam-app-1 ems-ipam-db-1 ems-ipam-radius_ops-1; do
+            test "$(docker inspect --format '{{.State.Running}}' "$container")" = true
+            echo "$container: running"
+          done
+          for route in /api/link-planner/map /api/radio/map; do
+            http="$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' --max-time 7 "http://10.1.1.5:8888$route")"
+            echo "$route anonymous HTTP $http"
+            test "$http" = 401
+          done
+          echo "PASS VM reachability, health, registered modules, protected map endpoints, DB/RADIUS running"
