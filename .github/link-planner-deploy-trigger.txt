@@ -2,3 +2,5 @@ Manual user request: Link Planner MVP preview on isolated EMS lab VM.
 CI main suite 44697498602 PASS; separate real browser acceptance 44697498645 PASS on 34cfe39454cf724b022eb42fca66026ca335a7a1.
 Create private PostgreSQL backup, preserve existing Radio/RADIUS/Core, install only modules/link-planner, verify health and auth.
 Retry: use isolated action checkout directory to bypass root-owned stale runner files. No VM changes occurred on first attempt.
+
+2026-11-20: Fix OSM tiles HTTP 403 by setting strict-origin-when-cross-origin instead of no-referrer. CI 44701869047 and Chromium request-header test 44701868993 PASS. Deploy Link Planner only; preserve core, radio, RADIUS and DB.
