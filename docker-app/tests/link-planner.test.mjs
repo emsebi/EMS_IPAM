@@ -97,6 +97,8 @@ test('module-only DB migration, validation, user scoping, scenario CRUD and terr
    assert.equal(frame.code,200);assert.match(frame.body,/map-frame.mjs/);
    assert.match(frame.headers['Content-Security-Policy'],/frame-ancestors 'self'/);
    assert.match(frame.headers['Content-Security-Policy'],/tile.openstreetmap.org/);
+   assert.equal(frame.headers['Referrer-Policy'],'strict-origin-when-cross-origin');
+   assert.notEqual(frame.headers['Referrer-Policy'],'no-referrer');
    await assert.rejects(invoke('GET','/api/link-planner/map',undefined,viewer),{status:403});
    await invoke('DELETE','/api/link-planner/scenarios/'+id);
    assert.equal((await invoke('GET','/api/link-planner/scenarios')).items.length,0);
