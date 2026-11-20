@@ -21,7 +21,7 @@ try{
  browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']});
  const context=await browser.newContext({baseURL:base,viewport:{width:1400,height:1000}});
  const page=await context.newPage();
- const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const errors=[];page.on('pageerror',e=>errors.push(e.stack||e.message));
  const tileReferers=[];
  // Exercise real browser headers, without contacting or exhausting the community tile host.
  await page.route('https://tile.openstreetmap.org/**',route=>{
