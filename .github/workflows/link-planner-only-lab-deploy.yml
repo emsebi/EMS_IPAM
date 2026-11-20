@@ -89,10 +89,7 @@ jobs:
           done
           test "$healthy" -eq 1 || { echo "::error::Link Planner not listed in app health."; exit 1; }
           python3 "$DEPLOY/scripts/installed-modules-check.py"
-          docker exec "$DB" sh -eu -c '
-            psql -X -v ON_ERROR_STOP=1 -A -t -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-              -c "SELECT to_regclass('\''public.link_planner_scenarios'\'') IS NOT NULL" | grep -qx t
-          '
+          docker exec "$DB" sh -eu -c 'psql -X -v ON_ERROR_STOP=1 -A -t -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM link_planner_scenarios" | grep -Eq "^[0-9]+$"'
           code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/api/link-planner/map)"
           test "$code" = 401 || { echo "::error::Planner iframe must reject anonymous requests, got $code."; exit 1; }
           python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BEFORE/radius-before.json"
