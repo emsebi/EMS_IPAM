@@ -1,0 +1,37 @@
+name: EMS-IPAM Link Planner Browser Acceptance
+
+on:
+  push:
+    branches:
+      - work/link-planner-mvp-20261120
+  pull_request:
+    paths:
+      - "modules/link-planner/**"
+      - "docker-app/tests/link-planner-browser.mjs"
+      - ".github/workflows/link-planner-browser.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  link-planner-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: docker-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install chromium
+      - name: Run isolated Link Planner browser test
+        run: node tests/link-planner-browser.mjs
