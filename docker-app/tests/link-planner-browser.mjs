@@ -73,7 +73,7 @@ try{
  const bPin=mapFrame.locator('.planner-pin.b');
  await bPin.waitFor({state:'visible'});
  const pinPosition=await bPin.evaluate(pin=>{
-   const box=pin.getBoundingClientRect(),map=pin.closest('#map').getBoundingClientRect();
+   const box=pin.getBoundingClientRect(),map=document.getElementById('map').getBoundingClientRect();
    return {x:box.left+box.width/2-map.left,y:box.top+box.height/2-map.top,width:map.width,height:map.height};
  });
  assert.ok(pinPosition.x>=-20&&pinPosition.x<=pinPosition.width+20,'Focus B should bring B into visible map.');
