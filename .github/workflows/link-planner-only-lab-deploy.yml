@@ -22,7 +22,8 @@ jobs:
       - name: Checkout isolated module branch
         uses: actions/checkout@v4
         with:
-          clean: true
+          path: link-planner-src
+          clean: false
       - name: Backup database and deploy only Link Planner (rollback module on failure)
         shell: bash
         run: |
@@ -37,9 +38,9 @@ jobs:
           test -s "$ENV_FILE"
           test -f "$DEPLOY/compose.yml"
           test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
-          test -f "$GITHUB_WORKSPACE/modules/link-planner/module.json"
-          test -f "$GITHUB_WORKSPACE/modules/link-planner/backend/index.mjs"
-          test -f "$GITHUB_WORKSPACE/modules/link-planner/migrations/001-scenarios.sql"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/module.json"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/backend/index.mjs"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/migrations/001-scenarios.sql"
           test -f "$DEPLOY/scripts/radius-upgrade-check.py"
           grep -qx 'EMS_HTTP_PORT=8888' "$ENV_FILE"
           for container in "$APP" "$DB" "$RADIUS"; do
@@ -74,7 +75,7 @@ jobs:
 
           STAGED="$DEPLOY/modules/.link-planner-staged-$GITHUB_SHA"
           mkdir -p "$STAGED"
-          cp -a "$GITHUB_WORKSPACE/modules/link-planner/." "$STAGED/"
+          cp -a "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/." "$STAGED/"
           chmod -R u+rwX "$STAGED"
           rm -rf "$DEPLOY/modules/link-planner"
           mv "$STAGED" "$DEPLOY/modules/link-planner"
