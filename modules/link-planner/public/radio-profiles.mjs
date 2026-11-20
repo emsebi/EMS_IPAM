@@ -74,10 +74,10 @@ export function estimateRadioCapacity(params,budget){
    const bits=modulation==='QPSK'?2:Math.log2(parseInt(modulation,10));
    return {...base,status:'reference',modulation,
      idealRawUpperMbps:Number((width*bits).toFixed(1)),
-     advertisedCeilingMbps:Math.min(...[a.brochureCeilingMbps,b.brochureCeilingMbps].filter(Number.isFinite)),
+     advertisedCeilingMbps:(Number.isFinite(a.brochureCeilingMbps)&&Number.isFinite(b.brochureCeilingMbps)?Math.min(a.brochureCeilingMbps,b.brochureCeilingMbps):null),
      note:'Bandwidth × bits per symbol is an ideal uncoded upper bound ONLY; it ignores roll-off, framing, FEC, XPIC and licence/channel limits. Never treat it as throughput.'};
  }
  return {...base,status:'reference',
-   advertisedCeilingMbps:Math.min(...[a.brochureCeilingMbps,b.brochureCeilingMbps].filter(Number.isFinite)),
+   advertisedCeilingMbps:(Number.isFinite(a.brochureCeilingMbps)&&Number.isFinite(b.brochureCeilingMbps)?Math.min(a.brochureCeilingMbps,b.brochureCeilingMbps):null),
    note:'Proprietary PHY: vendor marketing ceiling is informational only. Current path throughput/MCS cannot be predicted without model+firmware+channel-specific tables.'};
 }
