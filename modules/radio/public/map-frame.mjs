@@ -5,7 +5,7 @@ import {distanceMeters,formatDistance,fitGeoPoints,geoProject,geoUnproject,valid
 const el=id=>document.getElementById(id);
 const map=el('radioMap'),tiles=el('radioTiles'),links=el('radioLinks'),pins=el('radioPins');
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
-let center={latitude:0,longitude:0},zoom=2,markers=[],selectedId='',initialized=false,lastPositions='';
+let center={latitude:0,longitude:0},zoom=2,markers=[],selectedId='',initialized=false;
 let pan=null,activeTiles=new Map();
 const size=256,ns='http://www.w3.org/2000/svg';
 
@@ -117,10 +117,10 @@ window.addEventListener('message',event=>{
   markers=(Array.isArray(data.markers)?data.markers:[]).slice(0,120).filter(m=>m&&['ap','station'].includes(m.role)&&validGeoPoint(m))
     .map(m=>({id:String(m.id),name:String(m.name||m.id),role:m.role,parentId:String(m.parentId||''),latitude:Number(m.latitude),longitude:Number(m.longitude)}));
   selectedId=String(data.selectedId||'');
-  // Refresh automatic fit only when the location set changes or user selects another AP.
-  const signature=JSON.stringify(markers.map(m=>[m.id,m.parentId,m.latitude,m.longitude,m.role]));
-  if(!initialized||signature!==lastPositions||data.recenter){
-    lastPositions=signature;initialized=true;fitAll();
+  // A coordinate edit (from a map click or numeric field) must never move the viewport.
+  // Initial available markers and explicit Fit/selection commands may recenter.
+  if(data.recenter || (!initialized && markers.length)){
+    initialized=true;fitAll();
   }else draw();
   const ap=markers.some(m=>m.role==='ap');
   el('radioHint').textContent=!ap?
@@ -153,6 +153,6 @@ map.addEventListener('pointercancel',()=>{pan=null;});
 el('zoomIn').addEventListener('click',()=>updateView(center,zoom+1));
 el('zoomOut').addEventListener('click',()=>updateView(center,zoom-1));
 el('fitRadio').addEventListener('click',fitAll);
-window.addEventListener('resize',fitAll);
+window.addEventListener('resize',draw);
 window.parent.postMessage({type:'ems:radio:geo:ready'},location.origin);
 draw();
