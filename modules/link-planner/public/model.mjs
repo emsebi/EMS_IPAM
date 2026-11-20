@@ -65,7 +65,13 @@ export function normalizeInput(raw){
     kFactor:bounded(raw.kFactor,'Effective Earth k-factor',0.5,3,4/3),
     fresnelClearance:bounded(raw.fresnelClearance,'First-zone clearance fraction',0,1,0.6),
     deviceA:String(raw.deviceA||'').slice(0,90).trim(),
-    deviceB:String(raw.deviceB||'').slice(0,90).trim()
+    deviceB:String(raw.deviceB||'').slice(0,90).trim(),
+    radioA:String(raw.radioA||'custom').slice(0,70),
+    radioB:String(raw.radioB||'custom').slice(0,70),
+    protocol:String(raw.protocol||'802.11ac').slice(0,60),
+    channelWidthMHz:bounded(raw.channelWidthMHz,'Channel width MHz',3.5,112,40),
+    spatialStreams:bounded(raw.spatialStreams,'Spatial streams',1,8,2),
+    modulation:String(raw.modulation||'').slice(0,25)
   };
 }
 export function radioBudget(input) {
