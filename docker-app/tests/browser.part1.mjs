@@ -195,6 +195,18 @@ try {
   assert.equal(await multiFrame.locator('line.radio-link').count(),2);
   assert.equal(await multiFrame.locator('.radio-pin.ap').count(),2);
   assert.equal(await multiFrame.locator('.radio-pin.station').count(),2);
+  // Regression: selecting a coordinate MUST NOT change the map zoom or center.
+  const radioTiles=()=>multiFrame.locator('#radioTiles img').evaluateAll(images=>images.map(img=>[img.src,img.style.left,img.style.top]));
+  const tilesBeforeRadioPick=await radioTiles();
+  const longitudeBeforePick=await page.locator('#radioGeoLongitude').inputValue();
+  await multiFrame.locator('#radioMap').click({position:{x:200,y:185}});
+  await page.waitForFunction(old=>document.getElementById('radioGeoLongitude')?.value!==old,longitudeBeforePick);
+  await page.waitForTimeout(80);
+  assert.deepEqual(await radioTiles(),tilesBeforeRadioPick,'Selecting a radio position must not jump to another area.');
+  await page.locator('#radioGeoFocus').click();
+  await multiFrame.locator('#fitRadio').click();
+  await multiFrame.locator('line.radio-link[data-station-id="st2"][data-ap-id="ap2"]').waitFor({state:'attached'});
+
   assert.equal(await page.locator('.radio-doc-grid').count(),0);
   assert.equal(await page.locator('.radio-doc-compact').count(),1);
   assert.ok((await page.locator('#radioGeoFrame').evaluate(el=>el.getBoundingClientRect().height))>=540);
