@@ -1,11 +1,11 @@
 // Radio documentation map: OSM background + AP/Station positions and straight-line GPS distances.
 // No radio login, live discovery, recurring network checks or additional dependencies.
-import {distanceMeters,formatDistance,fitGeoPoints,geoProject,geoUnproject,validGeoPoint} from './geo-math.mjs?v=2.3.0';
+import {distanceMeters,formatDistance,fitGeoPoints,geoProject,geoUnproject,validGeoPoint} from './geo-math.mjs?v=2.3.1-lab.1';
 
 const el=id=>document.getElementById(id);
 const map=el('radioMap'),tiles=el('radioTiles'),links=el('radioLinks'),pins=el('radioPins');
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
-let center={latitude:0,longitude:0},zoom=2,markers=[],selectedId='',initialized=false,lastPositions='';
+let center={latitude:0,longitude:0},zoom=2,markers=[],selectedId='',initialized=false;
 let pan=null,activeTiles=new Map();
 const size=256,ns='http://www.w3.org/2000/svg';
 
@@ -112,16 +112,22 @@ function fitAll(){
   else updateView({latitude:0,longitude:0},2);
 }
 window.addEventListener('message',event=>{
-  if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='ems:radio:geo:data')return;
+  if(event.origin!==location.origin||event.source!==window.parent)return;
+  if(event.data?.type==='ems:radio:geo:focus'){
+    const point=markers.find(item=>item.id===String(event.data.id));
+    if(point)updateView(point,Math.max(zoom,14));
+    return;
+  }
+  if(event.data?.type!=='ems:radio:geo:data')return;
   const data=event.data;
   markers=(Array.isArray(data.markers)?data.markers:[]).slice(0,120).filter(m=>m&&['ap','station'].includes(m.role)&&validGeoPoint(m))
     .map(m=>({id:String(m.id),name:String(m.name||m.id),role:m.role,parentId:String(m.parentId||''),latitude:Number(m.latitude),longitude:Number(m.longitude)}));
   selectedId=String(data.selectedId||'');
-  // Refresh automatic fit only when the location set changes or user selects another AP.
-  const signature=JSON.stringify(markers.map(m=>[m.id,m.parentId,m.latitude,m.longitude,m.role]));
-  if(!initialized||signature!==lastPositions||data.recenter){
-    lastPositions=signature;initialized=true;fitAll();
-  }else draw();
+  // A coordinate edit (from a map click or numeric field) must never move the viewport.
+  // Initial available markers and explicit Fit/selection commands may recenter.
+  if(data.recenter){initialized=true;fitAll();}
+  else if(!initialized){initialized=true;if(markers.length)fitAll();else draw();}
+  else draw();
   const ap=markers.some(m=>m.role==='ap');
   el('radioHint').textContent=!ap?
     'Save AP coordinates to display links and distances':
@@ -150,9 +156,30 @@ map.addEventListener('pointerup',event=>{
  }
 });
 map.addEventListener('pointercancel',()=>{pan=null;});
+
+function zoomAt(clientX,clientY,direction){
+  const rect=map.getBoundingClientRect();
+  const next=clamp(zoom+direction,2,18);
+  if(next===zoom)return;
+  // Keep the point underneath the mouse exactly fixed while zooming.
+  const offsetX=clientX-rect.left-rect.width/2,offsetY=clientY-rect.top-rect.height/2;
+  const oldCenter=geoProject(center.latitude,center.longitude,zoom);
+  const anchorPoint=geoUnproject(oldCenter.x+offsetX,oldCenter.y+offsetY,zoom);
+  const anchorPixel=geoProject(anchorPoint.latitude,anchorPoint.longitude,next);
+  updateView(geoUnproject(anchorPixel.x-offsetX,anchorPixel.y-offsetY,next),next);
+}
+map.addEventListener('wheel',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,event.deltaY<0?1:-1);
+},{passive:false});
+map.addEventListener('dblclick',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,1);
+});
+
 el('zoomIn').addEventListener('click',()=>updateView(center,zoom+1));
 el('zoomOut').addEventListener('click',()=>updateView(center,zoom-1));
 el('fitRadio').addEventListener('click',fitAll);
-window.addEventListener('resize',fitAll);
+window.addEventListener('resize',draw);
 window.parent.postMessage({type:'ems:radio:geo:ready'},location.origin);
 draw();
