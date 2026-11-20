@@ -54,7 +54,9 @@ export function createModule(ctx) {
      const file=await fs.readFile(new URL('../public/map-frame.html',import.meta.url));
      res.writeHead(200,{
        'Content-Type':'text/html; charset=utf-8','Content-Length':file.length,'Cache-Control':'no-store',
-       'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
+       'X-Content-Type-Options':'nosniff',
+       // OSM browser tile policy requires a real Referer; share only our origin, not URL paths.
+       'Referrer-Policy':'strict-origin-when-cross-origin',
        'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
      });
      res.end(file);return;
