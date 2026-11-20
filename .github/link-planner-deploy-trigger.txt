@@ -1,0 +1,3 @@
+Manual user request: Link Planner MVP preview on isolated EMS lab VM.
+CI main suite 44697498602 PASS; separate real browser acceptance 44697498645 PASS on 34cfe39454cf724b022eb42fca66026ca335a7a1.
+Create private PostgreSQL backup, preserve existing Radio/RADIUS/Core, install only modules/link-planner, verify health and auth.
