@@ -27,8 +27,8 @@ try{
  // Exercise real browser headers, without contacting or exhausting the community tile host.
  await page.route('https://tile.openstreetmap.org/**',route=>{
    tileReferers.push(route.request().headers()['referer']||'');
-   return route.fulfill({status:200,contentType:'image/png',
-     body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64')});
+   return route.fulfill({status:200,contentType:'image/svg+xml',
+     body:'<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#eef3f7"/><path d="M0 64H256 M0 128H256 M0 192H256 M64 0V256 M128 0V256 M192 0V256" stroke="#d3dee6" stroke-width="1"/><text x="16" y="32" font-family="sans-serif" font-size="12" fill="#7b8b99">TEST MAP BACKGROUND</text></svg>'});
  });
  await page.goto(base+'/');
  await page.locator('#loginUsername').fill('test-admin');
@@ -110,6 +110,11 @@ try{
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('866.6'));
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('Actual throughput'));
  await fs.mkdir('artifacts',{recursive:true});
+ await page.evaluate(()=>window.scrollTo(0,0));
+ await page.waitForTimeout(150);
+ await page.locator('.lp-main').screenshot({path:'artifacts/link-planner-map-controls.png',animations:'disabled'});
+ await page.locator('.lp-summary').screenshot({path:'artifacts/link-planner-profile-results.png',animations:'disabled'});
+ await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'artifacts/link-planner-desktop.png',fullPage:true,animations:'disabled'});
 
  await page.locator('#lpScenarioName').fill('Fixture hill path');
@@ -129,6 +134,7 @@ try{
  await page.waitForTimeout(400);
  const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth,view:innerWidth}));
  assert.ok(overflow.document<=overflow.view+2,'Planner mobile overflow: '+JSON.stringify(overflow));
+ await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'artifacts/link-planner-mobile.png',fullPage:true,animations:'disabled'});
  assert.deepEqual(errors,[]);
  console.log('PASS Link Planner visible; A/B map picker, FSPL, terrain chart, scenario PostgreSQL save/reload, mobile width');
