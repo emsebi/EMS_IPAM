@@ -4,3 +4,5 @@ Create private PostgreSQL backup, preserve existing Radio/RADIUS/Core, install o
 Retry: use isolated action checkout directory to bypass root-owned stale runner files. No VM changes occurred on first attempt.
 
 2026-11-20: Fix OSM tiles HTTP 403 by setting strict-origin-when-cross-origin instead of no-referrer. CI 44701869047 and Chromium request-header test 44701868993 PASS. Deploy Link Planner only; preserve core, radio, RADIUS and DB.
+
+2026-11-20 Link Planner 0.2.0-lab.1: map viewport bug fixed, 2-way tower inversion, curated radio model/protocol/QAM PHY references. Four project CI gates #44706765281 and real Chromium regression #44706765128 PASS. Deploy only modules/link-planner commit 13707ef88da8cd80fc7415e6b6a8007e3dd98740; retain pre-upgrade PG backup, rollback and compare RADIUS. No Core/Radio replacement.
