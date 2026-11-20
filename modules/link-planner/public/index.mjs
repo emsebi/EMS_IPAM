@@ -16,7 +16,8 @@ export function createUi(ctx){
  const doc=()=>document;
  const txt=value=>String(value??'');
  const E=(tag,attrs={},...children)=>{
-  const n=doc().createElement(tag);
+  const n=['svg','path','line','text','rect','g','circle','polyline'].includes(tag)
+    ?doc().createElementNS('http://www.w3.org/2000/svg',tag):doc().createElement(tag);
   for(const [key,value] of Object.entries(attrs)){
    if(value===undefined||value===null)continue;
    if(key==='text')n.textContent=txt(value);
@@ -261,7 +262,8 @@ export function createUi(ctx){
      row(E('input',{id:'lpScenarioName',type:'text',maxlength:80,placeholder:L('Scenario name','نام سناریو'),value:scenarioName}),button(L('Save','ذخیره'),save,'primary')),
      row(E('select',{id:'lpScenarioSelect'}),button(L('Load','بازکردن'),load),button(L('Delete','حذف'),remove)),
      row(button(L('Download calculation report (JSON)','دریافت گزارش محاسبات (JSON)'),exportReport)));
-   shell.append(main,left,side,details,storage);
+   main.append(left,side);
+   shell.append(main,details,storage);
    page.append(shell);
    updateScenarioSelect();results();sync();
    const frame=doc().getElementById('lpMap');
