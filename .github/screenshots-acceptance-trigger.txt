@@ -1,1 +1,2 @@
 2026-11-20: record actual rendered Link Planner desktop/mobile UI on disposable test database with synthetic SRTM samples. Keep VM and production records untouched.
+Refine outputs: neutral TEST MAP tiles and separate map/control and profile/result screenshots. No production data.
