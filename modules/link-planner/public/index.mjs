@@ -169,6 +169,9 @@ export function createUi(ctx){
    const v=outcome.value,b=radioBudget(v);
    const hasProfile=profile&&profileKey===coordKey(v);
    const assessment=hasProfile?assessTerrain(v,profile.elevations):null;
+   const minB=hasProfile?requiredOppositeTower(v,profile.elevations,'a'):null;
+   const minA=hasProfile?requiredOppositeTower(v,profile.elevations,'b'):null;
+   const capacity=estimateRadioCapacity(v,b);
    const status=assessment?.status==='clear'?L('Sampled path clear','مسیر نمونه‌برداری‌شده باز است'):
      assessment?.status==='obstructed'?L('Sampled path obstructed','مسیر نمونه‌برداری‌شده دارای مانع است'):
      L('Terrain not verified','ارتفاع مسیر تأیید نشده');
@@ -187,11 +190,52 @@ export function createUi(ctx){
        assessment?.status==='obstructed'?number(assessment.recommendedRaiseBothM,1)+' m':assessment?.status==='clear'?'0 m':'—',
        L('Uniform estimated increase','افزایش یکسان و تقریبی'))
    ));
+   // Each candidate fixes one site's current tower/building/offset and solves the opposite side.
+   // Do not invent a tower height without complete SRTM samples.
+   host.append(E('section',{class:'lp-height-solver'},
+     E('h4',{text:L('Minimum opposite tower — hold one side fixed','حداقل ارتفاع دکل مقابل — با ثابت بودن یک طرف')}),
+     E('div',{class:'lp-metrics'},
+       metric(L('Required B tower (A fixed)','حداقل دکل B (A ثابت)'),
+         minB?.status==='ok'?number(minB.requiredTowerM,1)+' m':'—',
+         L('Current A tower: ','ارتفاع فعلی دکل A: ')+number(v.siteA.tower,1)+' m'),
+       metric(L('Required A tower (B fixed)','حداقل دکل A (B ثابت)'),
+         minA?.status==='ok'?number(minA.requiredTowerM,1)+' m':'—',
+         L('Current B tower: ','ارتفاع فعلی دکل B: ')+number(v.siteB.tower,1)+' m')
+     ),
+     E('div',{class:'lp-row'},
+       button(L('Set B to minimum (A fixed)','ثبت ارتفاع حداقل B (A ثابت)'),()=>{
+         if(minB?.status!=='ok')return;
+         const value=Math.ceil(minB.requiredTowerM*10)/10;
+         input.siteB.tower=value;
+         const field=page.querySelector('[data-path="siteB.tower"]');if(field)field.value=String(value);
+         sync();
+       },'lp-apply-height'),
+       button(L('Set A to minimum (B fixed)','ثبت ارتفاع حداقل A (B ثابت)'),()=>{
+         if(minA?.status!=='ok')return;
+         const value=Math.ceil(minA.requiredTowerM*10)/10;
+         input.siteA.tower=value;
+         const field=page.querySelector('[data-path="siteA.tower"]');if(field)field.value=String(value);
+         sync();
+       },'lp-apply-height')),
+     text(L('A = ground + building + tower + antenna mount. Opposite-site tower is computed after subtracting its building and antenna mount. Site coverage depends on SRTM samples and configured Fresnel percentage.','ارتفاع آنتن = ارتفاع زمین + ساختمان + دکل + پایه آنتن. ارتفاع دکل سمت مقابل پس از کسر ارتفاع ساختمان و پایه آنتن محاسبه می‌شود. نتیجه تقریبی و وابسته به نمونه‌های SRTM و درصد فرنل است.'),'lp-muted')
+   ));
+   host.append(E('section',{class:'lp-capacity-reference'},
+     E('h4',{text:L('Radio modulation and capacity reference','مازولیشن و ظرفیت مرجع تجهیزات')}),
+     E('div',{class:'lp-metrics'},
+       metric(L('Protocol','پروتکل'),capacity.protocol||'—',capacity.status),
+       metric(L('Modulation / PHY reference','مازولیشن / PHY مرجع'),capacity.modulation||'—',L('Not a measured MCS','MCS اندازه‌گیری‌شده نیست')),
+       metric(L('Maximum theoretical PHY','حداکثر PHY نظری'),capacity.phyCeilingMbps!==null?number(capacity.phyCeilingMbps,1)+' Mbps':'—',L('Not payload throughput','توان عملیاتی واقعی نیست')),
+       metric(L('Actual throughput','توان عملیاتی واقعی'),'—',L('Needs vendor SNR/MCS + interference','نیازمند جدول MCS و تداخل')),
+       metric(L('Ideal uncoded symbol rate','نرخ نماد بدون کدینگ'),capacity.idealRawUpperMbps!=null?number(capacity.idealRawUpperMbps,1)+' Mb/s':'—',L('Microwave upper bound only','فقط سقف نظری مایکروویو')),
+       metric(L('Both-model brochure ceiling','حداکثر کاتالوگی دو مدل'),capacity.advertisedCeilingMbps!=null?number(capacity.advertisedCeilingMbps,0)+' Mbps':'—',L('Not predicted performance','عملکرد پیش‌بینی‌شده نیست'))
+     ),
+     text(capacity.note,'lp-muted')
+   ));
    host.append(chart(assessment));
    host.append(text(assessment?.status==='unavailable'?assessment.message:
     assessment?L('Estimated geometric clearance at sampled terrain points only. Buildings, trees and fine obstacles are excluded.','فقط برآورد هندسی در نقاط نمونه‌برداری‌شده است؛ ساختمان‌ها، درختان و موانع ریز لحاظ نشده‌اند.'):
     L('No verified terrain profile. FSPL and link margin above are mathematical estimates, not a clearance or availability guarantee.','بدون پروفایل زمین معتبر؛ FSPL و حاشیه لینک صرفاً محاسبه ریاضی هستند و تأیید دید یا دسترس‌پذیری نیستند.'),'lp-muted'));
-   host.append(text(L('Throughput / MCS / QAM and rain availability are not calculated without verified device and climate datasets.','Throughput، MCS، QAM و دسترس‌پذیری باران بدون داده معتبر تجهیزات و اقلیم محاسبه نمی‌شوند.'),'lp-muted'));
+   host.append(text(L('Actual throughput, adaptive MCS and rain Availability remain unknown without measured noise, licensed device specifications and climate data.','توان عملیاتی واقعی، MCS تطبیقی و Availability باران بدون داده معتبر تداخل، مشخصات لایسنس تجهیزات و اطلاعات اقلیم همچنان نامشخص‌اند.'),'lp-muted'));
  }
  function sync(){
    const v=validPlan();
@@ -261,8 +305,10 @@ export function createUi(ctx){
    const budget=radioBudget(v.value);
    const complete=profile&&profileKey===coordKey(v.value);
    const clearance=complete?assessTerrain(v.value,profile.elevations):null;
-   const report={format:'EMS-IPAM-Link-Planner-Report/1',generatedAt:new Date().toISOString(),
-     name:scenarioName||'Untitled',config:v.value,budget,terrain:complete?{source:profile.source,dataset:profile.dataset,retrievedAt:profile.retrievedAt,samples:profile.elevations,clearance}:null,
+   const capacity=estimateRadioCapacity(v.value,budget);
+   const oppositeTower=complete?{bWithAFixed:requiredOppositeTower(v.value,profile.elevations,'a'),aWithBFixed:requiredOppositeTower(v.value,profile.elevations,'b')}:null;
+   const report={format:'EMS-IPAM-Link-Planner-Report/2',generatedAt:new Date().toISOString(),
+     name:scenarioName||'Untitled',config:v.value,budget,capacityReference:capacity,oppositeTower,terrain:complete?{source:profile.source,dataset:profile.dataset,retrievedAt:profile.retrievedAt,samples:profile.elevations,clearance}:null,
      limitations:['Approximate terrain; buildings/trees absent','No verified throughput, rain availability or regulatory EIRP check','No real radio or network measurements']};
    const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
    const address=URL.createObjectURL(blob),link=E('a',{href:address,download:'ems-link-plan.json'});
@@ -279,7 +325,7 @@ export function createUi(ctx){
      E('div',{},E('span',{class:'lp-eyebrow',text:'EMS_IPAM / NETWORK PLANNING'}),
        E('h1',{text:L('Link Planner','طراحی لینک رادیویی')}),
        text(L('Two-site path analysis · no connection to your radio devices','بررسی مسیر بین دو سایت · بدون اتصال به تجهیزات رادیویی'),'lp-muted')),
-     E('span',{class:'lp-version',text:'MVP 0.1.0'})));
+     E('span',{class:'lp-version',text:'MVP 0.2.0'})));
    const main=E('div',{class:'lp-main'});
    const left=E('section',{class:'lp-map-card'},
      row(E('h2',{text:L('Path location','موقعیت مسیر')}),
