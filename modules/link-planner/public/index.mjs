@@ -1,10 +1,12 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds} from './model.mjs';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs';
+import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs';
 
 const INITIAL=()=>({
  a:{latitude:'',longitude:''},b:{latitude:'',longitude:''},
  siteA:{building:0,tower:12,mount:0},siteB:{building:0,tower:12,mount:0},
  frequencyGHz:5.8,txDbm:20,gainA:27,gainB:27,lossA:1,lossB:1,otherLoss:0,
- sensitivityDbm:-80,kFactor:4/3,fresnelClearance:0.6,deviceA:'',deviceB:''
+ sensitivityDbm:-80,kFactor:4/3,fresnelClearance:0.6,deviceA:'',deviceB:'',
+ radioA:'custom',radioB:'custom',protocol:'802.11ac',channelWidthMHz:40,spatialStreams:2,modulation:''
 });
 const DEM_NOTE='SRTM90m · approx. 90 m DEM, not a survey; no trees/buildings captured';
 export function createUi(ctx){
@@ -49,6 +51,65 @@ export function createUi(ctx){
  const stringRow=(label,path,placeholder='')=>E('label',{class:'lp-field'},E('span',{text:label}),E('input',{
    type:'text',maxlength:90,placeholder,value:get(path),onInput:event=>set(path,event.target.value)
  }));
+ function deviceChoices(which){
+   const code='radio'+which.toUpperCase(),current=radioById(input[code]),label=which.toUpperCase();
+   const brand=E('select',{id:'lpBrand'+label,onChange:event=>{
+     const first=RADIO_PROFILES.find(p=>p.brand===event.target.value);
+     if(!first)return;
+     input[code]=first.id;rebuildRadioControls();sync();
+   }},RADIO_BRANDS.map(b=>E('option',{value:b,text:b,selected:b===current.brand?true:null})));
+   const model=E('select',{id:'lpModel'+label,onChange:event=>{
+     input[code]=event.target.value;
+     const profile=radioById(event.target.value);
+     const gainKey=which==='a'?'gainA':'gainB';
+     if(profile.antennaGainDbi!==null){
+       input[gainKey]=profile.antennaGainDbi;
+       const gainField=page.querySelector('[data-path="'+gainKey+'"]');
+       if(gainField)gainField.value=String(input[gainKey]);
+     }
+     rebuildRadioControls();sync();
+   }});
+   const details=E('div',{class:'lp-profile-info',id:'lpProfileInfo'+label});
+   return E('div',{class:'lp-device-group'},
+     E('h4',{text:L('Site ','سایت ')+label}),
+     E('div',{class:'lp-field-grid'},
+       E('label',{class:'lp-field'},E('span',{text:L('Manufacturer','سازنده')}),brand),
+       E('label',{class:'lp-field'},E('span',{text:L('Model / family','مدل / خانواده')}),model)),
+     details);
+ }
+ function rebuildRadioControls(){
+   for(const which of ['a','b']){
+     const letter=which.toUpperCase(),profile=radioById(input['radio'+letter]);
+     const model=doc().getElementById('lpModel'+letter),brand=doc().getElementById('lpBrand'+letter);
+     if(!model||!brand)continue;
+     brand.value=profile.brand;
+     model.replaceChildren(...RADIO_PROFILES.filter(p=>p.brand===profile.brand).map(p=>E('option',{value:p.id,text:p.model})));
+     model.value=profile.id;
+     const details=doc().getElementById('lpProfileInfo'+letter);
+     if(details){
+       details.replaceChildren();
+       if(profile.notes)details.append(text(profile.notes,'lp-muted'));
+       if(profile.source)details.append(E('a',{href:profile.source,target:'_blank',rel:'noopener noreferrer',text:L('Manufacturer datasheet','مشخصات سازنده')}));
+       if(profile.antennaGainDbi!==null)details.append(text(L('Integrated antenna gain: ','گین آنتن داخلی: ')+profile.antennaGainDbi+' dBi','lp-muted'));
+     }
+   }
+   const select=doc().getElementById('lpProtocol');
+   if(select){
+     const protocols=protocolOverlap(input.radioA,input.radioB);
+     if(!protocols.includes(input.protocol))input.protocol=protocols[0]||'';
+     select.replaceChildren(...(protocols.length?protocols:[null]).map(p=>E('option',{value:p||'',text:p||L('No compatible PHY','پروتکل مشترک وجود ندارد')})));
+     select.value=input.protocol;
+   }
+   const mod=doc().getElementById('lpModulation');
+   if(mod){
+     const modes=modulationOptions(input.radioA,input.radioB);
+     if(!modes.includes(input.modulation))input.modulation='';
+     mod.replaceChildren(E('option',{value:'',text:L('Auto / not verified','خودکار / تأییدنشده')}),
+       ...modes.map(x=>E('option',{value:x,text:x})));
+     mod.value=input.modulation;
+     mod.disabled=input.protocol!=='Digital microwave ACM'||modes.length===0;
+   }
+ }
  function activeButton(which){
    active=which;
    for(const b of page.querySelectorAll('.lp-pick'))b.classList.toggle('selected',b.dataset.site===which);
@@ -252,8 +313,18 @@ export function createUi(ctx){
          siteRow(L('Building','ساختمان'),'siteB.building',0,1000),
          siteRow(L('Tower','دکل'),'siteB.tower',0,1000),
          siteRow(L('Antenna offset','ارتفاع پایه آنتن'),'siteB.mount',0,100)])),
+     card(L('Radio equipment & waveform','تجهیزات و پروتکل ارتباطی'),
+       deviceChoices('a'),deviceChoices('b'),
+       E('div',{class:'lp-field-grid'},[
+         E('label',{class:'lp-field'},E('span',{text:L('Common protocol / PHY','پروتکل مشترک / استاندارد')}),
+           E('select',{id:'lpProtocol',onChange:event=>{input.protocol=event.target.value;rebuildRadioControls();sync();}})),
+         E('label',{class:'lp-field'},E('span',{text:L('Microwave QAM (manual)','مازولیشن مایکروویو (دستی)')}),
+           E('select',{id:'lpModulation',onChange:event=>{input.modulation=event.target.value;sync();}}))]),
+       text(L('A/n/ac are Wi-Fi PHY standards, not frequency bands. Proprietary modes require compatible equipment at both ends.','a/n/ac استانداردهای وای‌فای هستند، نه باند فرکانسی. پروتکل اختصاصی نیازمند سازگاری دو طرف است.'),'lp-muted')),
      card(L('Radio assumptions','فرضیات رادیویی'),
        E('div',{class:'lp-field-grid'},[
+         siteRow(L('Channel width (MHz)','پهنای کانال (MHz)'),'channelWidthMHz',3.5,112,'.5'),
+         siteRow(L('Spatial streams','تعداد استریم فضایی'),'spatialStreams',1,8,'1'),
          siteRow('Frequency (GHz)','frequencyGHz',.1,100,'.1'),
          siteRow('TX power (dBm)','txDbm',-50,60,'.1'),
          siteRow('A gain (dBi)','gainA',-10,65,'.1'),
@@ -264,8 +335,7 @@ export function createUi(ctx){
          siteRow('RX sensitivity (dBm)','sensitivityDbm',-150,-20,'.1'),
          siteRow(L('Earth k-factor','ضریب زمین k'),'kFactor',.5,3,'.01'),
          siteRow(L('Fresnel clear fraction','درصد آزادبودن فرنل'),'fresnelClearance',0,1,'.05')]),
-       stringRow(L('Site A radio model (optional)','مدل رادیو سایت A (اختیاری)'),'deviceA','MikroTik / Mimosa / ...'),
-       stringRow(L('Site B radio model (optional)','مدل رادیو سایت B (اختیاری)'),'deviceB','MikroTik / Mimosa / ...')));
+       text(L('Actual equipment throughput requires firmware/licence-specific MCS sensitivity, interference and channel conditions.','توان عملیاتی واقعی به حساسیت MCS، نسخه نرم‌افزار، لایسنس، تداخل و شرایط کانال وابسته است.'),'lp-muted')));
    const details=E('section',{class:'lp-summary'},E('div',{id:'lpValidation',class:'lp-error'}),E('div',{id:'lpResults'}));
    const storage=card(L('Saved plans and reports','سناریوهای ذخیره‌شده و گزارش'),
      row(E('input',{id:'lpScenarioName',type:'text',maxlength:80,placeholder:L('Scenario name','نام سناریو'),value:scenarioName}),button(L('Save','ذخیره'),save,'primary')),
@@ -274,6 +344,7 @@ export function createUi(ctx){
    main.append(left,side);
    shell.append(main,details,storage);
    page.append(shell);
+   rebuildRadioControls();
    updateScenarioSelect();results();sync();
    const frame=doc().getElementById('lpMap');
    window.linkPlannerMessageHandler=event=>{
