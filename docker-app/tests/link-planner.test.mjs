@@ -5,7 +5,9 @@ import fs from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/link-planner/backend/index.mjs';
-import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints} from '../../modules/link-planner/public/model.mjs';
+import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower} from '../../modules/link-planner/public/model.mjs';
+
+import {RADIO_BRANDS,RADIO_PROFILES,radioById,protocolOverlap,estimateRadioCapacity} from '../../modules/link-planner/public/radio-profiles.mjs';
 
 const coords={a:{latitude:35.6,longitude:51.3},b:{latitude:35.65,longitude:51.35}};
 const valid=()=>normalizeInput({...coords,siteA:{building:0,tower:15,mount:2},siteB:{building:5,tower:12,mount:1},frequencyGHz:5.8,txDbm:22,gainA:27,gainB:27,lossA:1,lossB:1,sensitivityDbm:-80});
@@ -53,6 +55,53 @@ test('terrain clearance requires every sample; Earth bulge and 60% Fresnel may b
   assert.equal(assessTerrain(near,missing).status,'unavailable');
   assert.equal(assessTerrain(near,[]).status,'unavailable');
 });
+
+test('tower height: with A fixed at 20 m, solve required B independently, subtract B building and mount',()=>{
+  const p=normalizeInput({a:{latitude:0,longitude:0},b:{latitude:0,longitude:0.09},
+    siteA:{building:0,tower:20,mount:0},siteB:{building:0,tower:0,mount:0},frequencyGHz:5.8});
+  const terrain=Array(81).fill(100);
+  const result=requiredOppositeTower(p,terrain,'a');
+  assert.equal(result.status,'ok');
+  assert.ok(result.requiredTowerM>0);
+  assert.ok(result.requiredTowerM<30);
+  const changed=structuredClone(p);changed.siteB.tower=result.requiredTowerM+0.01;
+  assert.ok(assessTerrain(changed,terrain).worst.clearanceM> -0.01);
+  const shorter=structuredClone(p);shorter.siteB.tower=Math.max(0,result.requiredTowerM-2);
+  assert.equal(assessTerrain(shorter,terrain).status,'obstructed');
+  const raisedBuilding=structuredClone(p);raisedBuilding.siteB.building=3;
+  assert.ok(requiredOppositeTower(raisedBuilding,terrain,'a').requiredTowerM<=result.requiredTowerM);
+  assert.equal(requiredOppositeTower(p,terrain,'b').status,'ok');
+  const missing=[...terrain];missing[20]=null;
+  assert.equal(requiredOppositeTower(p,missing,'a').status,'unavailable');
+});
+test('curated equipment types, common IEEE PHY and honest non-prediction of measured throughput',()=>{
+  for(const brand of ['MikroTik','Mimosa','Ericsson','Huawei','RACOM'])
+    assert.ok(RADIO_BRANDS.includes(brand),'Missing brand '+brand);
+  for(const p of RADIO_PROFILES.filter(p=>p.id!=='custom'))assert.ok(p.source.startsWith('https://'),'Reference source required');
+  assert.ok(protocolOverlap('mt-lhg5ac','mt-lhgxl5ac').includes('802.11ac'));
+  assert.ok(!protocolOverlap('mt-lhg5','mt-lhg5ac').includes('802.11ac'));
+  assert.deepEqual(protocolOverlap('mim-c5c','rc-ray3-17'),[]);
+  assert.equal(radioById('mt-lhg5ac').antennaGainDbi,24.5);
+  const input=normalizeInput({...coords,radioA:'mt-lhg5ac',radioB:'mt-lhg5ac',
+    protocol:'802.11ac',channelWidthMHz:80,spatialStreams:2});
+  const b=radioBudget(input),capacity=estimateRadioCapacity(input,b);
+  assert.equal(capacity.status,'reference');
+  assert.ok(Math.abs(capacity.phyCeilingMbps-866.6)<.2);
+  assert.equal(capacity.modulation,'256QAM 5/6');
+  assert.equal(capacity.actualThroughputMbps,null);
+  const incompatible=estimateRadioCapacity({...input,radioA:'mim-c5c',radioB:'rc-ray3-17'},b);
+  assert.equal(incompatible.status,'incompatible');
+  const microwave=estimateRadioCapacity({...input,radioA:'rc-ray3-17',radioB:'rc-ray3-17',
+    protocol:'Digital microwave ACM',modulation:'256QAM',channelWidthMHz:28},b);
+  assert.equal(microwave.status,'reference');
+  assert.equal(microwave.idealRawUpperMbps,224);
+  assert.equal(microwave.actualThroughputMbps,null);
+  const mixed=estimateRadioCapacity({...input,radioA:'rc-ray3-17',radioB:'er-6600',
+    protocol:'Digital microwave ACM',modulation:'256QAM',channelWidthMHz:28},b);
+  assert.equal(mixed.status,'unverified');
+  assert.equal(mixed.idealRawUpperMbps,undefined);
+});
+
 test('module-only DB migration, validation, user scoping, scenario CRUD and terrain service bounded to fixed provider',async()=>{
  const db=new PGlite();
  const q=async(sql,params)=>{const r=params?.length?await db.query(sql,params):(await db.exec(sql)).at(-1);return {...r,rows:r?.rows||[],rowCount:r?.rowCount??r?.affectedRows??r?.rows?.length??0};};
