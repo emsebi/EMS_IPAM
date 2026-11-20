@@ -48,14 +48,34 @@ try{
  await page.locator('input[data-path="a.longitude"]').fill('51.300000');
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
  await page.locator('input[data-path="b.longitude"]').fill('51.350000');
+ await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
+ const bPin=mapFrame.locator('.planner-pin.b');
+ await bPin.waitFor({state:'visible'});
+ const pinPosition=await bPin.evaluate(pin=>{
+   const box=pin.getBoundingClientRect(),map=pin.closest('#map').getBoundingClientRect();
+   return {x:box.x-box.width/2-map.x,y:box.y-map.y,width:map.width,height:map.height};
+ });
+ assert.ok(pinPosition.x>=-20&&pinPosition.x<=pinPosition.width+20,'Focus B should bring B into visible map.');
+
  await page.waitForFunction(()=>document.querySelector('#lpResults')?.innerText.includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('EIRP'));
  // Same-origin map click updates the *selected* site, no external geolocation permission.
  await page.locator('.lp-pick[data-site="b"]').click();
  const before=await page.locator('input[data-path="b.longitude"]').inputValue();
- await page.frameLocator('#lpMap').locator('#map').click({position:{x:200,y:210}});
+ const mapFrame=page.frameLocator('#lpMap');
+ const tileState=()=>mapFrame.locator('#tiles img').evaluateAll(items=>items.map(img=>[img.src,img.style.left,img.style.top]));
+ const tilesBeforePick=await tileState();
+ await mapFrame.locator('#map').click({position:{x:200,y:210}});
  await page.waitForFunction(previous=>document.querySelector('input[data-path="b.longitude"]')?.value!==previous,before);
+ await page.waitForTimeout(80);
+ assert.deepEqual(await tileState(),tilesBeforePick,'A map click must not move map tiles or change zoom.');
+ // Wheel zoom is available while preserving the clicked map position.
+ await mapFrame.locator('#map').hover({position:{x:230,y:220}});
+ await page.mouse.wheel(0,-170);
+ await page.waitForTimeout(100);
+ assert.notDeepEqual(await tileState(),tilesBeforePick,'Wheel must zoom at the cursor.');
+
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
  await page.locator('input[data-path="b.longitude"]').fill('51.350000');
  // Public terrain endpoint remains the server-owned service; fake only the upstream result in browser test.
