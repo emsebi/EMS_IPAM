@@ -2,6 +2,7 @@
 // Tests real module routing and UI; only SRTM upstream HTTP is replaced by a labeled fixture.
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import fs from 'node:fs/promises';
 import {chromium} from 'playwright';
 
 const port=String(process.env.EMS_TEST_PORT||'18884'),base='http://127.0.0.1:'+port;
@@ -108,6 +109,8 @@ try{
  assert.equal(await page.locator('input[data-path="gainB"]').inputValue(),'27');
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('866.6'));
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('Actual throughput'));
+ await fs.mkdir('artifacts',{recursive:true});
+ await page.screenshot({path:'artifacts/link-planner-desktop.png',fullPage:true,animations:'disabled'});
 
  await page.locator('#lpScenarioName').fill('Fixture hill path');
  const save=page.locator('.lp-card').last().getByRole('button',{name:/Save|ذخیره/}).first();
@@ -126,6 +129,7 @@ try{
  await page.waitForTimeout(400);
  const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth,view:innerWidth}));
  assert.ok(overflow.document<=overflow.view+2,'Planner mobile overflow: '+JSON.stringify(overflow));
+ await page.screenshot({path:'artifacts/link-planner-mobile.png',fullPage:true,animations:'disabled'});
  assert.deepEqual(errors,[]);
  console.log('PASS Link Planner visible; A/B map picker, FSPL, terrain chart, scenario PostgreSQL save/reload, mobile width');
 }finally{
