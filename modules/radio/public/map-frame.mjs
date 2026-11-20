@@ -125,9 +125,9 @@ window.addEventListener('message',event=>{
   selectedId=String(data.selectedId||'');
   // A coordinate edit (from a map click or numeric field) must never move the viewport.
   // Initial available markers and explicit Fit/selection commands may recenter.
-  if(data.recenter || (!initialized && markers.length)){
-    initialized=true;fitAll();
-  }else draw();
+  if(data.recenter){initialized=true;fitAll();}
+  else if(!initialized){initialized=true;if(markers.length)fitAll();else draw();}
+  else draw();
   const ap=markers.some(m=>m.role==='ap');
   el('radioHint').textContent=!ap?
     'Save AP coordinates to display links and distances':
