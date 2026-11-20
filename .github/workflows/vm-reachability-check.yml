@@ -20,16 +20,17 @@ jobs:
           code="$(curl --noproxy '*' -sS -o /tmp/ems-vm-health.json -w '%{http_code}' --connect-timeout 3 --max-time 8 http://10.1.1.5:8888/health || true)"
           echo "HTTP from VM LAN address: $code"
           test "$code" = 200
-          node --input-type=module -e '
-            import fs from "node:fs";
-            const h=JSON.parse(fs.readFileSync("/tmp/ems-vm-health.json","utf8"));
-            const raw=h.modules||h.data?.modules||h.registeredModules||[];
-            const items=Array.isArray(raw)?raw.map(x=>typeof x==="string"?x:x.id||x.name):[];
-            const all=JSON.stringify(h);
-            console.log("Health OK; module list: "+items.join(", "));
-            for(const id of ["radio","link-planner"])if(!all.includes(id))throw new Error("Missing module in health "+id);
-            console.log("PASS radio and link-planner registered in live /health");
-          '
+          python3 - <<'PY'
+          import json
+          with open("/tmp/ems-vm-health.json", encoding="utf-8") as fp:
+              h=json.load(fp)
+          raw=h.get("modules") or h.get("data",{}).get("modules") or h.get("registeredModules") or []
+          ids=[(x if isinstance(x,str) else x.get("id",x.get("name"))) for x in raw]
+          print("Health OK; module list:", ids)
+          for module_id in ["radio","link-planner"]:
+              if module_id not in json.dumps(h): raise RuntimeError("Missing module "+module_id)
+          print("PASS radio and link-planner registered in live /health")
+          PY
           echo "CHECK container states (no modifications)"
           for container in ems-ipam-app-1 ems-ipam-db-1 ems-ipam-radius_ops-1; do
             test "$(docker inspect --format '{{.State.Running}}' "$container")" = true
