@@ -56,7 +56,14 @@ export function createUi(ctx){
    const brand=E('select',{id:'lpBrand'+label,onChange:event=>{
      const first=RADIO_PROFILES.find(p=>p.brand===event.target.value);
      if(!first)return;
-     input[code]=first.id;rebuildRadioControls();sync();
+     input[code]=first.id;
+     if(first.antennaGainDbi!==null){
+       const gainKey=which==='a'?'gainA':'gainB';
+       input[gainKey]=first.antennaGainDbi;
+       const field=page.querySelector('[data-path="'+gainKey+'"]');
+       if(field)field.value=String(input[gainKey]);
+     }
+     rebuildRadioControls();sync();
    }},RADIO_BRANDS.map(b=>E('option',{value:b,text:b,selected:b===current.brand?true:null})));
    const model=E('select',{id:'lpModel'+label,onChange:event=>{
      input[code]=event.target.value;
