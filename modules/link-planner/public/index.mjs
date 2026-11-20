@@ -63,6 +63,13 @@ export function createUi(ctx){
      a:valid(a)?{latitude:Number(a.latitude),longitude:Number(a.longitude)}:null,
      b:valid(b)?{latitude:Number(b.latitude),longitude:Number(b.longitude)}:null,active,fit},location.origin);
  }
+ function focusSite(which){
+   const p=input[which];
+   if(!p||p.latitude===''||p.longitude===''||!Number.isFinite(Number(p.latitude))||!Number.isFinite(Number(p.longitude)))
+     return toast(L('Enter the coordinates for this site first.','ابتدا مختصات این سایت را وارد کنید.'));
+   sendMap();
+   doc().getElementById('lpMap')?.contentWindow?.postMessage({type:'ems:planner:focus',which},location.origin);
+ }
  function chart(analysis){
    const box=E('div',{class:'lp-chart'});
    if(!analysis||!Array.isArray(analysis.samples)){
@@ -215,6 +222,7 @@ export function createUi(ctx){
    const main=E('div',{class:'lp-main'});
    const left=E('section',{class:'lp-map-card'},
      row(E('h2',{text:L('Path location','موقعیت مسیر')}),
+       button(L('Fit A + B','نمایش هر دو نقطه'),()=>sendMap(true),'lp-fit'),
        button(L('Pick A','انتخاب A'),()=>activeButton('a'),'lp-pick'+(active==='a'?' selected':'')),
        button(L('Pick B','انتخاب B'),()=>activeButton('b'),'lp-pick'+(active==='b'?' selected':''))),
      E('iframe',{id:'lpMap',src:'/api/link-planner/map',title:L('OpenStreetMap two-site map','نقشه انتخاب دو سایت'),loading:'eager'}),
@@ -231,7 +239,8 @@ export function createUi(ctx){
    const locationFields=E('div',{class:'lp-site-inputs'});
    for(const [prefix,letter] of [['a','A'],['b','B']]){
      locationFields.append(E('div',{class:'lp-site'},E('h4',{text:L('Site ','سایت ')+letter}),
-       row(siteRow('Latitude',prefix+'.latitude',-90,90,'0.000001'),siteRow('Longitude',prefix+'.longitude',-180,180,'0.000001'))));
+       row(siteRow('Latitude',prefix+'.latitude',-90,90,'0.000001'),siteRow('Longitude',prefix+'.longitude',-180,180,'0.000001')),
+       button(L('Go to site ','برو به سایت ')+letter,()=>focusSite(prefix),'lp-focus-site')));
    }
    side.append(card(L('Endpoints','نقاط ابتدا و انتها'),locationFields),
      card(L('Heights above terrain (m)','ارتفاع‌ها از سطح زمین (متر)'),
