@@ -2,7 +2,7 @@
 import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs';
 const get=id=>document.getElementById(id);
 const map=get('map'),tiles=get('tiles'),links=get('line'),pins=get('pins'),hint=get('hint');
-let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null;
+let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null,initialFit=false;
 const size=256,ns='http://www.w3.org/2000/svg';
 const world=()=>size*2**zoom;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -65,12 +65,14 @@ function fit(){
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='ems:planner:data')return;
  const msg=event.data;
- const previous=JSON.stringify(sites);
  sites={};
  for(const key of ['a','b'])if(validGeoPoint(msg[key]))sites[key]={latitude:Number(msg[key].latitude),longitude:Number(msg[key].longitude)};
  active=msg.active==='b'?'b':'a';
  hint.textContent=(active==='a'?'A':'B')+' · click map to set '+(active==='a'?'Site A':'Site B');
- if(previous!==JSON.stringify(sites)||msg.fit)fit();else refresh();
+ // Picking a point edits a marker, never the viewport. Only initial data or explicit Fit may pan/zoom.
+ if(msg.fit || (!initialFit && Object.values(sites).some(validGeoPoint))){
+   initialFit=true;fit();
+ }else refresh();
 });
 map.addEventListener('pointerdown',e=>{
  if(e.button!==0||e.target.closest('#controls')||e.target.closest('#credit'))return;
