@@ -33,24 +33,23 @@ jobs:
             printf 'SERVICE_%s=RUNNING\n' "$c"
           done
           curl -fsS --max-time 7 http://127.0.0.1:8888/health >/tmp/ems-accept-health.json
-          node --input-type=module -e '
-            import fs from "node:fs";
-            const data=JSON.parse(fs.readFileSync("/tmp/ems-accept-health.json","utf8"));
-            console.log("HEALTH="+(data.status||"ok"));
-            const list=Array.isArray(data.modules)?data.modules:[];
-            for(const name of ["radio","link-planner"]){
-              const module=list.find(x=>(typeof x==="string"?x:x.id)===name);
-              console.log("REGISTERED_"+name+"="+(module?"YES":"NOT_IN_HEALTH_LIST"));
-            }
+          python3 -c '
+          import json
+          data=json.load(open("/tmp/ems-accept-health.json"))
+          print("HEALTH="+str(data.get("status","ok")))
+          modules=data.get("modules",[])
+          for name in ("radio","link-planner"):
+              found=any((item if isinstance(item,str) else item.get("id"))==name for item in modules)
+              print("REGISTERED_"+name+"="+("YES" if found else "NOT_IN_HEALTH_LIST"))
           '
           for module in radio link-planner; do
             source="$DEPLOY/modules/$module/module.json"
             if test -f "$source"; then
-              MODULE="$module" SOURCE="$source" node --input-type=module -e '
-                import fs from "node:fs";
-                const m=JSON.parse(fs.readFileSync(process.env.SOURCE,"utf8"));
-                if(m.id!==process.env.MODULE)process.exit(1);
-                console.log("INSTALLED_MODULE_"+m.id+"="+m.version);
+              MODULE="$module" SOURCE="$source" python3 -c '
+              import os,json
+              m=json.load(open(os.environ["SOURCE"]))
+              assert m["id"]==os.environ["MODULE"]
+              print("INSTALLED_MODULE_"+m["id"]+"="+m["version"])
               '
             else
               echo "MODULE_NOT_FOUND_$module"
