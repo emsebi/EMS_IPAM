@@ -88,6 +88,27 @@ try{
  await page.locator('[data-line="los"]').waitFor({state:'attached'});
  await page.locator('[data-line="ground"]').waitFor({state:'attached'});
  await page.locator('[data-line="fresnel"]').waitFor({state:'attached'});
+
+ // The engineer can fix a 20 m A tower and solve the minimum B tower.
+ await page.locator('input[data-path="siteA.tower"]').fill('20');
+ await page.locator('input[data-path="siteB.tower"]').fill('0');
+ await page.locator('.lp-height-solver').waitFor({state:'visible'});
+ assert.ok((await page.locator('.lp-height-solver').innerText()).includes('Required B tower'));
+ await page.getByRole('button',{name:/Set B to minimum|ثبت ارتفاع حداقل B/}).click();
+ const solvedB=Number(await page.locator('input[data-path="siteB.tower"]').inputValue());
+ assert.ok(Number.isFinite(solvedB)&&solvedB>=0);
+ // Change both ends to two specified MikroTik 802.11ac products and inspect the reference PHY result.
+ await page.locator('#lpBrandA').selectOption('MikroTik');
+ await page.locator('#lpBrandB').selectOption('MikroTik');
+ await page.locator('#lpModelA').selectOption('mt-lhg5ac');
+ await page.locator('#lpModelB').selectOption('mt-lhgxl5ac');
+ await page.locator('#lpProtocol').selectOption('802.11ac');
+ await page.locator('input[data-path="channelWidthMHz"]').fill('80');
+ assert.equal(await page.locator('input[data-path="gainA"]').inputValue(),'24.5');
+ assert.equal(await page.locator('input[data-path="gainB"]').inputValue(),'27');
+ assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('866.6'));
+ assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('Actual throughput'));
+
  await page.locator('#lpScenarioName').fill('Fixture hill path');
  const save=page.locator('.lp-card').last().getByRole('button',{name:/Save|ذخیره/}).first();
  await save.click();
