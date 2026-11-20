@@ -60,6 +60,10 @@ export function estimateRadioCapacity(params,budget){
    note:'No measurement: actual MCS, adaptive modulation and throughput cannot be inferred without vendor sensitivity curves, noise/interference, FEC and licence data.'};
  if(!protocol||!a.protocols.includes(protocol)||!b.protocols.includes(protocol))
    return {...base,status:'incompatible',note:'The selected radio protocol is not supported by both selected model profiles.'};
+ // Proprietary waveform names are categories, NOT a universal interoperability standard.
+ if(['vendor','microwave'].includes(a.kind)&&a.kind===b.kind&&a.id!==b.id){
+   return {...base,status:'unverified',note:'Different proprietary radio models may not interoperate, even within one brand. Verify the exact paired ODU/firmware modes before estimating QAM or capacity.'};
+ }
  if(a.kind==='wifi'&&b.kind==='wifi'&&WIFI_PHY[protocol]){
    const rate=WIFI_PHY[protocol][width];
    if(!rate)return {...base,status:'incompatible',note:'This channel width is not defined for the selected IEEE PHY.'};
