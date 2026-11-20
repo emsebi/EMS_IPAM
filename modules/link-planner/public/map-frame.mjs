@@ -76,9 +76,9 @@ window.addEventListener('message',event=>{
  active=msg.active==='b'?'b':'a';
  hint.textContent=(active==='a'?'A':'B')+' · click map to set '+(active==='a'?'Site A':'Site B');
  // Picking a point edits a marker, never the viewport. Only initial data or explicit Fit may pan/zoom.
- if(msg.fit || (!initialFit && Object.values(sites).some(validGeoPoint))){
-   initialFit=true;fit();
- }else refresh();
+ if(msg.fit){ initialFit=true;fit(); }
+ else if(!initialFit){ initialFit=true; if(Object.values(sites).some(validGeoPoint))fit();else refresh(); }
+ else refresh();
 });
 map.addEventListener('pointerdown',e=>{
  if(e.button!==0||e.target.closest('#controls')||e.target.closest('#credit'))return;
@@ -125,6 +125,6 @@ map.addEventListener('dblclick',event=>{
 get('zoomIn').addEventListener('click',()=>reposition(center,zoom+1));
 get('zoomOut').addEventListener('click',()=>reposition(center,zoom-1));
 get('fit').addEventListener('click',fit);
-window.addEventListener('resize',fit);
+window.addEventListener('resize',refresh);
 window.parent.postMessage({type:'ems:planner:ready'},location.origin);
 refresh();
