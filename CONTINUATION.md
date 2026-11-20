@@ -1,3 +1,13 @@
+# Link Planner request checkpoint — 2026-11-20 (OPEN / NOT IMPLEMENTED)
+
+[GitHub Issue #66](https://github.com/emsebi/EMS_IPAM/issues/66) records the user's 2026-11-18 request for a **separate Link Planner module**, not a new Radio monitor. At this checkpoint there is **no Link Planner module, implementation PR, test or VM deployment**. Do not report it as completed merely because planning was discussed.
+
+Acceptance scope: two map-selected sites, traceable SRTM-like terrain profile, LOS/Fresnel, tower/building/antenna heights, RF link budget and clearly sourced equipment models (MikroTik / Mimosa / microwave). Rain fade / Availability and MCS/QAM/Throughput require credible climate and device data, with unknown/unavailable values honestly distinguished from predictions. Professional report layout is an objective but cannot claim Pathloss-equivalent accuracy by default.
+
+Priority handoff: follow Issue #66 with its own implementation branch, tests and PR, and explicit VM verification; **no automated SSH, SNMP, device changes or interference with existing RADIUS, Radio 2.3, Inventory and Core**. Make progress visible as branch/commit/PR/CI, not just a design note. This checkpoint registers a missing task, not a finished implementation.
+
+---
+
 # Resume cleanup after lost archive/purge responses (2026-11-19 UTC)
 
 [PR #63](https://github.com/emsebi/EMS_IPAM/pull/63) merged at `2607e6dd4d49a2b4be410ba1923d76cd1e88a842` after PR CI 44448977718 and push CI 44448972824 succeeded. PostgreSQL job 135307949508 passed the process-exit and ambiguous-create cases and all 25 HTTP tests without failures/skips. [Merge CI 44455678717](https://github.com/emsebi/EMS_IPAM/actions/runs/44455678717) succeeded. Fresh main `5478d05c42d376da90660a9b1d96c200123f1c3d` adds only generated Radio screenshots; PR #12 remains inactive/draft.
