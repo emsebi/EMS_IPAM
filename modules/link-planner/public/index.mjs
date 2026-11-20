@@ -249,7 +249,7 @@ export function createUi(ctx){
    const footer=doc().getElementById('lpValidation');
    if(footer)footer.textContent=v.error||'';
    results();sendMap();
-   if(profile&&(!v.value||profileKey!==coordKey(v))){
+   if(profile&&(!v.value||profileKey!==coordKey(v.value))){
      const tag=doc().getElementById('lpTerrainStatus');if(tag)tag.textContent=L('Coordinates changed; reload terrain.','مختصات تغییر کرد؛ پروفایل را دوباره دریافت کنید.');
    }
  }
