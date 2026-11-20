@@ -41,3 +41,6 @@ CI: `cd docker-app && npm ci && node --test tests/link-planner.test.mjs`; browse
 2. Test source fetch in the deployment network. Where internet is blocked, show explicit error and keep purely mathematical RF budget available.
 3. Test correct SRTM path / buildings / clearance on a known benchmark and compare with survey data before relying on mounting heights.
 4. Test save/reload and report download; confirm RADIUS login and existing Radio 2.3 preserved.
+
+## 0.1.1-lab.1 — Stable location navigation
+The map no longer automatically fits/refocuses after a geographic click or manual edit. The current center/zoom stays fixed while positioning A and B, and **Fit A+B** is the explicit overview action. Mouse wheel zoom is anchored at the cursor; double-click zoom is supported. A separate **Go to site A/B** button in the endpoint panel jumps to typed GPS coordinates intentionally. The public OSM provider is used only for imagery; users can look up a site in their preferred geocoding/map tool and paste the coordinates. No unmanaged public reverse-geocoder or automatic requests are added.
