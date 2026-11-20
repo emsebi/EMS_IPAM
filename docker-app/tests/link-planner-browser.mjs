@@ -22,6 +22,13 @@ try{
  const context=await browser.newContext({baseURL:base,viewport:{width:1400,height:1000}});
  const page=await context.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const tileReferers=[];
+ // Exercise real browser headers, without contacting or exhausting the community tile host.
+ await page.route('https://tile.openstreetmap.org/**',route=>{
+   tileReferers.push(route.request().headers()['referer']||'');
+   return route.fulfill({status:200,contentType:'image/png',
+     body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLttAAAAABJRU5ErkJggg==','base64')});
+ });
  await page.goto(base+'/');
  await page.locator('#loginUsername').fill('test-admin');
  await page.locator('#loginPassword').fill('Test-Password-01');
@@ -32,6 +39,11 @@ try{
  await page.locator('.lp-header h1').waitFor({state:'visible'});
  assert.ok((await page.locator('#lpMap').getAttribute('src')).includes('/api/link-planner/map'));
  await page.locator('#lpMap').contentFrame().locator('#map').waitFor({state:'visible'});
+ await page.waitForFunction(() => document.getElementById('lpMap')?.contentDocument?.getElementById('tiles')?.childElementCount>0);
+ await page.waitForTimeout(100);
+ assert.ok(tileReferers.length>0,'Expected OSM tiles to be requested');
+ assert.ok(tileReferers.every(ref=>ref.startsWith(base+'/')),
+   'OSM tile requests must include a real same-origin Referer: '+JSON.stringify(tileReferers));
  await page.locator('input[data-path="a.latitude"]').fill('35.600000');
  await page.locator('input[data-path="a.longitude"]').fill('51.300000');
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
