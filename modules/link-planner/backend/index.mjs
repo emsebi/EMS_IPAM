@@ -62,6 +62,8 @@ export function createModule(ctx) {
    if(pathname==='/api/link-planner/terrain'){
      if(method!=='GET')throw fail('Method not allowed',405);
      const {a,b}=validatePair(url.searchParams);
+     if(Math.abs(a.latitude)>60||Math.abs(b.latitude)>60)
+       throw fail('SRTM90 covers latitudes -60° to +60°. Terrain is unavailable for this path.',422);
      const key=[a.latitude,a.longitude,b.latitude,b.longitude].map(x=>x.toFixed(6)).join(',');
      const stored=cache.get(key);
      if(stored&&stored.expires>Date.now())return json(res,200,{...stored.value,cached:true});
