@@ -1,0 +1,53 @@
+name: EMS-IPAM VM Read-Only Connectivity Probe
+
+on:
+  push:
+    branches:
+      - work/radio-map-stability-20261120
+    paths:
+      - .github/vm-connectivity-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-connectivity-probe
+  cancel-in-progress: true
+
+jobs:
+  vm-connectivity:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - name: Verify actual lab VM and running services without changing anything
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "PROBE_RUNNER=CONNECTED"
+          echo "PROBE_HOSTNAME=$(hostname)"
+          for target in ems-ipam-app-1 ems-ipam-db-1 ems-ipam-radius_ops-1; do
+            state="$(docker inspect --format '{{.State.Status}}' "$target" 2>/dev/null || echo missing)"
+            printf 'CONTAINER_%s=%s\n' "$target" "$state"
+            test "$state" = running
+          done
+          health="$(curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/health)"
+          printf 'EMS_HEALTH_HTTP=%s\n' "$health"
+          test "$health" = 200
+          for path in /api/link-planner/map /api/radio/map; do
+            code="$(curl -sS --max-time 8 -o /dev/null -w '%{http_code}' "http://127.0.0.1:8888$path")"
+            printf 'ANONYMOUS_%s_HTTP=%s\n' "$path" "$code"
+            test "$code" = 401
+          done
+          docker exec ems-ipam-app-1 node --input-type=module -e '
+            import fs from "node:fs";
+            for(const key of ["radio","link-planner"]){
+              const filename="/app/modules/"+key+"/module.json";
+              try{
+                const json=JSON.parse(fs.readFileSync(filename,"utf8"));
+                console.log("MODULE_"+key+"="+json.version);
+              }catch(e){
+                console.log("MODULE_"+key+"=unavailable("+e.code+")");
+              }
+            }
+          '
+          echo "PROBE_RESULT=PASS"
