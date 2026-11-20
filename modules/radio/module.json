@@ -1,7 +1,7 @@
 {
   "id": "radio",
   "name": "Radio Management",
-  "version": "2.3.0",
+  "version": "2.3.1-lab.1",
   "description": "Documentation-first multi-AP map with selective AP/Station visibility, parent links, saved locations, uplink records and manual Ping.",
   "enabled": true,
   "permissions": [
