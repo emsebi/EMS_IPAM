@@ -1,0 +1,26 @@
+{
+  "id": "link-planner",
+  "name": "Link Planner",
+  "version": "0.2.0-lab.1",
+  "description": "Point-to-point wireless planning with SRTM90 terrain, inverse tower height, curated model/PHY references, LOS/Fresnel and RF link budget; no radio monitoring.",
+  "enabled": true,
+  "apiVersion": 1,
+  "roles": [
+    "admin"
+  ],
+  "permissions": [
+    "link-planner.read",
+    "link-planner.write"
+  ],
+  "backend": "backend/index.mjs",
+  "navigation": {
+    "label": "Link Planner",
+    "labels": {
+      "en": "Link Planner",
+      "fa": "طراحی لینک رادیویی"
+    },
+    "icon": "⌁",
+    "order": 35,
+    "panel": true
+  }
+}

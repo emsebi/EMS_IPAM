@@ -1,0 +1,35 @@
+name: Link Planner Live SRTM Provider Probe
+
+on:
+  push:
+    branches:
+      - work/link-planner-mvp-20261120
+    paths:
+      - .github/link-planner-terrain-probe-trigger.txt
+
+permissions:
+  contents: read
+
+jobs:
+  vm-terrain-egress:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - name: Check SRTM90 availability from the actual app container (no device traffic)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(docker inspect --format '{{.State.Running}}' ems-ipam-app-1)" = true
+          docker exec ems-ipam-app-1 node --input-type=module -e '
+            const url="https://api.opentopodata.org/v1/srtm90m?locations=35.600000%2C51.300000%7C35.610000%2C51.310000&samples=5";
+            try {
+              const r=await fetch(url,{headers:{Accept:"application/json"},signal:AbortSignal.timeout(10000)});
+              if(!r.ok) throw new Error("HTTP "+r.status);
+              const data=await r.json();
+              if(data.status!=="OK"||data.results?.length!==5)throw new Error("Invalid 5-sample SRTM response");
+              console.log("PASS SRTM90 terrain provider reachable from app container; 5 samples; missing="+data.results.filter(x=>x.elevation===null).length);
+            }catch(e){
+              console.error("FAIL SRTM90 terrain provider unreachable from app container: "+e.message);
+              process.exitCode=1;
+            }
+          '

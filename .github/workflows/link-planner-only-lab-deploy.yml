@@ -1,0 +1,102 @@
+name: EMS-IPAM Link Planner Only VM Deployment
+
+on:
+  push:
+    branches:
+      - work/link-planner-mvp-20261120
+    paths:
+      - .github/link-planner-deploy-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  install-link-planner:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated module branch
+        uses: actions/checkout@v4
+        with:
+          path: link-planner-src
+          clean: false
+      - name: Backup database and deploy only Link Planner (rollback module on failure)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          BEFORE="$HOME/ems-ipam-lab/link-planner-backups/$GITHUB_SHA"
+          APP=ems-ipam-app-1
+          DB=ems-ipam-db-1
+          RADIUS=ems-ipam-radius_ops-1
+          test -s "$ENV_FILE"
+          test -f "$DEPLOY/compose.yml"
+          test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/module.json"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/backend/index.mjs"
+          test -f "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/migrations/001-scenarios.sql"
+          test -f "$DEPLOY/scripts/radius-upgrade-check.py"
+          grep -qx 'EMS_HTTP_PORT=8888' "$ENV_FILE"
+          for container in "$APP" "$DB" "$RADIUS"; do
+            test "$(docker inspect --format '{{.State.Running}}' "$container")" = true
+          done
+          APP_ID="$(docker inspect --format '{{.Id}}' "$APP")"
+          DB_ID="$(docker inspect --format '{{.Id}}' "$DB")"
+          RADIUS_ID="$(docker inspect --format '{{.Id}}' "$RADIUS")"
+          mkdir -p "$BEFORE"
+          if test -d "$DEPLOY/modules/link-planner"; then
+            cp -a "$DEPLOY/modules/link-planner" "$BEFORE/old-module"
+          fi
+          echo "Backing up complete PostgreSQL database (private file; no secrets logged)."
+          docker exec "$DB" sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$BEFORE/pre-link-planner.dump"
+          test -s "$BEFORE/pre-link-planner.dump"
+          docker exec -i "$DB" sh -c 'exec pg_restore --list' < "$BEFORE/pre-link-planner.dump" > /dev/null
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --snapshot "$BEFORE/radius-before.json"
+
+          COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml")
+          INSTALLED=0
+          rollback() {
+            code=$?
+            if [ "$INSTALLED" -eq 1 ]; then
+              echo "::warning::Link Planner installation verification failed. Restoring previous module files (database backup retained)."
+              rm -rf "$DEPLOY/modules/link-planner"
+              if test -d "$BEFORE/old-module"; then cp -a "$BEFORE/old-module" "$DEPLOY/modules/link-planner"; fi
+              "${COMPOSE[@]}" restart app || true
+            fi
+            exit "$code"
+          }
+          trap rollback EXIT
+
+          STAGED="$DEPLOY/modules/.link-planner-staged-$GITHUB_SHA"
+          mkdir -p "$STAGED"
+          cp -a "$GITHUB_WORKSPACE/link-planner-src/modules/link-planner/." "$STAGED/"
+          chmod -R u+rwX "$STAGED"
+          rm -rf "$DEPLOY/modules/link-planner"
+          mv "$STAGED" "$DEPLOY/modules/link-planner"
+          INSTALLED=1
+          "${COMPOSE[@]}" restart app
+          healthy=0
+          for i in $(seq 1 50); do
+            if curl -fsS --max-time 4 http://127.0.0.1:8888/health > "$BEFORE/health.json"; then
+              if grep -q '"link-planner"' "$BEFORE/health.json"; then healthy=1; break; fi
+            fi
+            sleep 2
+          done
+          test "$healthy" -eq 1 || { echo "::error::Link Planner not listed in app health."; exit 1; }
+          python3 "$DEPLOY/scripts/installed-modules-check.py"
+          docker exec "$DB" sh -eu -c 'psql -X -v ON_ERROR_STOP=1 -A -t -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM link_planner_scenarios" | grep -Eq "^[0-9]+$"'
+          code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8888/api/link-planner/map)"
+          test "$code" = 401 || { echo "::error::Planner iframe must reject anonymous requests, got $code."; exit 1; }
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BEFORE/radius-before.json"
+          test "$(docker inspect --format '{{.Id}}' "$DB")" = "$DB_ID"
+          test "$(docker inspect --format '{{.Id}}' "$RADIUS")" = "$RADIUS_ID"
+          # App restart is required to load module. No Core, DB or RADIUS container replacement.
+          INSTALLED=0
+          echo "PASS LINK_PLANNER_MODULE_DEPLOYED commit=$GITHUB_SHA port=8888"
+          echo "PASS DB backup kept privately and RADIUS contents unchanged; other modules intact."

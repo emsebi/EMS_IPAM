@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link Planner — Site Picker</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#112b45;background:#e5edf5}*{box-sizing:border-box}body{margin:0}
+#map{position:relative;height:100vh;min-height:320px;overflow:hidden;touch-action:none;cursor:crosshair;background:#d9e7ef}
+#tiles,#pins,#line{position:absolute;inset:0;pointer-events:none}
+.tile{position:absolute;width:256px;height:256px;max-width:none}
+#line{width:100%;height:100%;overflow:hidden;z-index:2}
+#pins{z-index:3}
+.planner-pin{position:absolute;transform:translate(-50%,-100%);padding:5px 9px;border-radius:9px;border:2px solid #fff;color:#fff;font-weight:700;box-shadow:0 2px 6px #20303c88;min-width:37px;text-align:center;pointer-events:auto;cursor:pointer}
+.planner-pin.a{background:#1970cf}.planner-pin.b{background:#e07027}
+#hint{position:absolute;top:10px;left:10px;background:#ffffffea;border:1px solid #ddd;border-radius:8px;padding:7px 10px;font-size:12px;max-width:70%;z-index:5}
+#controls{position:absolute;right:11px;top:10px;display:grid;gap:5px;z-index:5}
+#controls button{border:1px solid #b6c7d6;border-radius:8px;background:white;color:#193a51;min-width:35px;min-height:35px;font-size:21px;cursor:pointer}
+#credit{position:absolute;right:6px;bottom:6px;border-radius:4px;background:#fffffff1;padding:3px 6px;font-size:10px;z-index:5}
+#credit a{color:#1866b6}
+#legend{position:absolute;left:8px;bottom:8px;background:#fffffff0;border-radius:7px;padding:6px 9px;font-size:12px;z-index:5}
+#legend b{padding:2px 5px;border-radius:5px;color:white}#legend .a{background:#1970cf}#legend .b{background:#e07027}
+</style>
+<script type="module" src="/m/link-planner/map-frame.mjs?v=0.2.0-lab.1"></script>
+</head>
+<body>
+<div id="map" role="application" aria-label="Choose link endpoints on the map">
+  <div id="tiles"></div>
+  <svg id="line" aria-hidden="true"></svg>
+  <div id="pins"></div>
+  <div id="hint">Select endpoint A or B, then click the map</div>
+  <div id="controls"><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button><button id="fit" aria-label="Fit both endpoints" title="Fit endpoints">⌖</button></div>
+  <div id="legend"><b class="a">A</b> Site A &nbsp; <b class="b">B</b> Site B</div>
+  <div id="credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></div>
+</div>
+</body>
+</html>
