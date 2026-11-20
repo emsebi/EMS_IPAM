@@ -131,12 +131,13 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onOpenAp}) 
      if(count)count.textContent=shownAps.size+' AP · '+markers.filter(m=>m.role==='station').length+' ST';
      externalUrl();updateDistances();
    }
-   liveRefresh=()=>{if(state.view==='radios'&&state.selectedRadioApId===ap.id&&document.getElementById('radioGeoFrame')===frame)sendMap();};
+   liveRefresh=()=>{if(state.view==='radios'&&state.selectedRadioApId===ap.id&&document.getElementById('radioGeoFrame')===frame)sendMap(true);};
    function selectTarget(id){
      if(!targets.some(t=>t.id===id))return;
      currentTarget=id;sel.value=id;
      const point=record();lat.value=point?.latitude??'';lon.value=point?.longitude??'';
-     sendMap(true);
+     // Selecting a pin must not recenter the map; use the explicit Focus button instead.
+    sendMap(false);
    }
    function updateChecks(){
      document.querySelectorAll('.radio-map-choose-ap').forEach(input=>{
