@@ -101,6 +101,44 @@ export function assessTerrain(input, elevations) {
     endpointAmslM:aHeight,endpointBmslM:bHeight,
     method:'Spherical effective-Earth k-factor + first Fresnel zone; point samples do not capture all obstacles.'};
 }
+// Fix one side's existing building + tower + antenna mount, solve the least
+// tower on the *opposite* side required for sampled LOS+Fresnel clearance.
+// The terrain-derived requiredM is independent of the current antenna heights.
+export function requiredOppositeTower(input,elevations,fixedSide='a') {
+  if(!['a','b'].includes(fixedSide))throw problem('fixedSide must be a or b.');
+  const analysis=assessTerrain(input,elevations);
+  if(analysis.status==='unavailable')return {status:'unavailable',fixedSide,requiredTowerM:null,reason:analysis.message};
+  const targetSide=fixedSide==='a'?'b':'a';
+  const fixed= input[fixedSide==='a'?'siteA':'siteB'];
+  const target=input[targetSide==='a'?'siteA':'siteB'];
+  const groundFixed=fixedSide==='a'?elevations[0]:elevations.at(-1);
+  const groundTarget=targetSide==='a'?elevations[0]:elevations.at(-1);
+  const fixedAbsoluteM=groundFixed+fixed.building+fixed.tower+fixed.mount;
+  let minimumTargetAbsoluteM=-Infinity;
+  for(let i=0;i<analysis.samples.length;i++){
+    const point=analysis.samples[i];
+    const proportion=i/(analysis.samples.length-1);
+    const weight=fixedSide==='a'?proportion:1-proportion;
+    if(weight<=1e-12){
+      if(point.requiredM>fixedAbsoluteM+0.00001)
+        return {status:'impossible-fixed-end',fixedSide,targetSide,requiredTowerM:null,
+          reason:'The fixed antenna itself does not clear the endpoint obstacle.'};
+      continue;
+    }
+    const needed=(point.requiredM-(1-weight)*fixedAbsoluteM)/weight;
+    minimumTargetAbsoluteM=Math.max(minimumTargetAbsoluteM,needed);
+  }
+  const requiredTowerM=Math.max(0,minimumTargetAbsoluteM-groundTarget-target.building-target.mount);
+  return {status:requiredTowerM>1000?'exceeds-limit':'ok',
+    fixedSide,targetSide,requiredTowerM,
+    configuredTowerM:target.tower,
+    differenceM:requiredTowerM-target.tower,
+    fixedTowerM:fixed.tower,
+    targetBuildingM:target.building,
+    targetMountM:target.mount,
+    endpointAbsoluteM:groundTarget+target.building+requiredTowerM+target.mount,
+    note:'Minimum opposite tower relative to SRTM terrain, sampled curvature and selected Fresnel clearance; not a construction recommendation.'};
+}
 export function profileBounds(points){
   if(!points?.length)return {min:0,max:1};
   const vals=points.flatMap(s=>[s.groundM,s.lineM,s.requiredM]).filter(finite);
