@@ -112,7 +112,13 @@ function fitAll(){
   else updateView({latitude:0,longitude:0},2);
 }
 window.addEventListener('message',event=>{
-  if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='ems:radio:geo:data')return;
+  if(event.origin!==location.origin||event.source!==window.parent)return;
+  if(event.data?.type==='ems:radio:geo:focus'){
+    const point=markers.find(item=>item.id===String(event.data.id));
+    if(point)updateView(point,Math.max(zoom,14));
+    return;
+  }
+  if(event.data?.type!=='ems:radio:geo:data')return;
   const data=event.data;
   markers=(Array.isArray(data.markers)?data.markers:[]).slice(0,120).filter(m=>m&&['ap','station'].includes(m.role)&&validGeoPoint(m))
     .map(m=>({id:String(m.id),name:String(m.name||m.id),role:m.role,parentId:String(m.parentId||''),latitude:Number(m.latitude),longitude:Number(m.longitude)}));
@@ -150,6 +156,27 @@ map.addEventListener('pointerup',event=>{
  }
 });
 map.addEventListener('pointercancel',()=>{pan=null;});
+
+function zoomAt(clientX,clientY,direction){
+  const rect=map.getBoundingClientRect();
+  const next=clamp(zoom+direction,2,18);
+  if(next===zoom)return;
+  // Keep the point underneath the mouse exactly fixed while zooming.
+  const offsetX=clientX-rect.left-rect.width/2,offsetY=clientY-rect.top-rect.height/2;
+  const oldCenter=geoProject(center.latitude,center.longitude,zoom);
+  const anchorPoint=geoUnproject(oldCenter.x+offsetX,oldCenter.y+offsetY,zoom);
+  const anchorPixel=geoProject(anchorPoint.latitude,anchorPoint.longitude,next);
+  updateView(geoUnproject(anchorPixel.x-offsetX,anchorPixel.y-offsetY,next),next);
+}
+map.addEventListener('wheel',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,event.deltaY<0?1:-1);
+},{passive:false});
+map.addEventListener('dblclick',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,1);
+});
+
 el('zoomIn').addEventListener('click',()=>updateView(center,zoom+1));
 el('zoomOut').addEventListener('click',()=>updateView(center,zoom-1));
 el('fitRadio').addEventListener('click',fitAll);
