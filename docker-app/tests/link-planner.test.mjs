@@ -16,7 +16,7 @@ test('Link Planner is a separate admin-only panel using module contract v1',asyn
   assert.equal(manifest.backend,'backend/index.mjs');
   const text=await fs.readFile(new URL('../../modules/link-planner/public/index.mjs',import.meta.url),'utf8');
   assert.match(text,/createUi/);assert.match(text,/openPage/);
-  assert.doesNotMatch(text,/ssh2|radius-ops|\\/api\\/ping\\/host/);
+  assert.doesNotMatch(text,/ssh2|radius-ops|pingMany/);
 });
 test('WGS84 distance and location validation preserve missing instead of pretending zero',()=>{
   assert.ok(Math.abs(greatCircleMeters({latitude:0,longitude:0},{latitude:0,longitude:1})-111195)<2);
