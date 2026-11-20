@@ -63,7 +63,13 @@ function fit(){
  else reposition(center,zoom);
 }
 window.addEventListener('message',event=>{
- if(event.origin!==location.origin||event.source!==window.parent||event.data?.type!=='ems:planner:data')return;
+ if(event.origin!==location.origin||event.source!==window.parent)return;
+ if(event.data?.type==='ems:planner:focus'){
+   const point=sites[event.data.which];
+   if(validGeoPoint(point))reposition(point,Math.max(zoom,14));
+   return;
+ }
+ if(event.data?.type!=='ems:planner:data')return;
  const msg=event.data;
  sites={};
  for(const key of ['a','b'])if(validGeoPoint(msg[key]))sites[key]={latitude:Number(msg[key].latitude),longitude:Number(msg[key].longitude)};
@@ -95,6 +101,27 @@ map.addEventListener('pointerup',e=>{
  window.parent.postMessage({type:'ems:planner:pick',which:active,latitude:Number(picked.latitude.toFixed(6)),longitude:Number(picked.longitude.toFixed(6))},location.origin);
 });
 map.addEventListener('pointercancel',()=>pan=null);
+
+function zoomAt(clientX,clientY,direction){
+  const rect=map.getBoundingClientRect();
+  const next=clamp(zoom+direction,2,18);
+  if(next===zoom)return;
+  // Keep the point underneath the mouse exactly fixed while zooming.
+  const offsetX=clientX-rect.left-rect.width/2,offsetY=clientY-rect.top-rect.height/2;
+  const oldCenter=geoProject(center.latitude,center.longitude,zoom);
+  const anchorPoint=geoUnproject(oldCenter.x+offsetX,oldCenter.y+offsetY,zoom);
+  const anchorPixel=geoProject(anchorPoint.latitude,anchorPoint.longitude,next);
+  reposition(geoUnproject(anchorPixel.x-offsetX,anchorPixel.y-offsetY,next),next);
+}
+map.addEventListener('wheel',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,event.deltaY<0?1:-1);
+},{passive:false});
+map.addEventListener('dblclick',event=>{
+  event.preventDefault();
+  zoomAt(event.clientX,event.clientY,1);
+});
+
 get('zoomIn').addEventListener('click',()=>reposition(center,zoom+1));
 get('zoomOut').addEventListener('click',()=>reposition(center,zoom-1));
 get('fit').addEventListener('click',fit);
