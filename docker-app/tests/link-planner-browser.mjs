@@ -48,15 +48,6 @@ try{
  await page.locator('input[data-path="a.longitude"]').fill('51.300000');
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
  await page.locator('input[data-path="b.longitude"]').fill('51.350000');
- await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
- const bPin=mapFrame.locator('.planner-pin.b');
- await bPin.waitFor({state:'visible'});
- const pinPosition=await bPin.evaluate(pin=>{
-   const box=pin.getBoundingClientRect(),map=pin.closest('#map').getBoundingClientRect();
-   return {x:box.x-box.width/2-map.x,y:box.y-map.y,width:map.width,height:map.height};
- });
- assert.ok(pinPosition.x>=-20&&pinPosition.x<=pinPosition.width+20,'Focus B should bring B into visible map.');
-
  await page.waitForFunction(()=>document.querySelector('#lpResults')?.innerText.includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('EIRP'));
@@ -78,6 +69,15 @@ try{
 
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
  await page.locator('input[data-path="b.longitude"]').fill('51.350000');
+ await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
+ const bPin=mapFrame.locator('.planner-pin.b');
+ await bPin.waitFor({state:'visible'});
+ const pinPosition=await bPin.evaluate(pin=>{
+   const box=pin.getBoundingClientRect(),map=pin.closest('#map').getBoundingClientRect();
+   return {x:box.left+box.width/2-map.left,y:box.top+box.height/2-map.top,width:map.width,height:map.height};
+ });
+ assert.ok(pinPosition.x>=-20&&pinPosition.x<=pinPosition.width+20,'Focus B should bring B into visible map.');
+
  // Public terrain endpoint remains the server-owned service; fake only the upstream result in browser test.
  await page.route('**/api/link-planner/terrain?**',route=>route.fulfill({
    status:200,contentType:'application/json',
