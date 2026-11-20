@@ -60,3 +60,18 @@
 @media(max-width:610px){.lp-header h1{font-size:1.32rem}.lp-shell #lpMap{height:365px;min-height:300px}.lp-map-card,.lp-card,.lp-summary{padding:12px}.lp-side{display:block}.lp-side .lp-card{margin-top:12px}.lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-field-grid{gap:9px}}
 @media(max-width:370px){.lp-field-grid,.lp-metrics{grid-template-columns:minmax(0,1fr)}.lp-shell #lpMap{height:330px}}
 @media print{.lp-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.lp-map-card{position:static}.lp-shell #lpMap{height:240px}.lp-shell .btn,.lp-card select{display:none}.lp-header{break-after:avoid}.lp-summary{break-inside:avoid}.lp-metrics{grid-template-columns:repeat(4,1fr)}}
+
+/* Link Planner 0.2: device/protocol catalogue and two-way tower solver. */
+.lp-device-group{border:1px solid var(--lp-grid);border-radius:10px;padding:11px 12px;margin-bottom:11px;background:var(--soft,#fafcff)}
+.lp-device-group h4{margin:0 0 9px}
+.lp-device-group .lp-field{min-width:0}
+.lp-profile-info{margin-top:9px;font-size:.78rem;line-height:1.6}
+.lp-profile-info p{margin:0 0 4px}
+.lp-profile-info a{color:var(--link,#1769b5);text-decoration:underline}
+.lp-capacity-reference,.lp-height-solver{border:1px solid var(--lp-grid);border-radius:11px;padding:13px;margin:13px 0 14px;min-width:0}
+.lp-capacity-reference h4,.lp-height-solver h4{margin:0 0 9px;font-size:.98rem}
+.lp-height-solver{border-color:#98badc}
+.lp-height-solver .lp-row .btn{white-space:normal;min-width:150px}
+.lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{margin:10px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:650px){.lp-capacity-reference .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-height-solver .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:395px){.lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{grid-template-columns:minmax(0,1fr)}}
