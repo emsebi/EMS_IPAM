@@ -1,4 +1,4 @@
-import {distanceMeters,formatDistance,validGeoPoint} from './geo-math.mjs?v=2.3.0';
+import {distanceMeters,formatDistance,validGeoPoint} from './geo-math.mjs?v=2.3.1-lab.1';
 
 // Radio documentation only: the requests below read existing IPAM/PostgreSQL records.
 // Never SSH/SNMP/poll any radio. AP visibility and the selected AP for editing are separate.
