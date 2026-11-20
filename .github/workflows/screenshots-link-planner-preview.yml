@@ -1,0 +1,37 @@
+name: EMS-IPAM Link Planner Screenshot Acceptance
+
+on:
+  push:
+    branches:
+      - work/combined-radio-linkplanner-verification-20261120
+    paths:
+      - .github/screenshots-acceptance-trigger.txt
+
+permissions:
+  contents: read
+
+jobs:
+  rendered-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: docker-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docker-app/package-lock.json
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Real browser test and screenshots with synthetic test sites
+        run: node tests/link-planner-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ems-ipam-link-planner-ui-preview
+          path: docker-app/artifacts/*.png
+          if-no-files-found: warn
+          retention-days: 14
