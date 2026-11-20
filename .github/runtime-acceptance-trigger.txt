@@ -1,1 +1,2 @@
 User-requested 2026-11-20 final read-only VM acceptance: check installed Radio/Link Planner, DB/RADIUS, health and route security. No restarts.
+Retry with Python available on the self-hosted runner. No VM data changes.
