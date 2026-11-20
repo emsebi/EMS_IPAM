@@ -108,3 +108,36 @@ export function profileBounds(points){
   const min=Math.min(...vals),max=Math.max(...vals),pad=Math.max(5,(max-min)*.08);
   return {min:min-pad,max:max+pad};
 }
+
+export function validGeoPoint(p){
+  return Boolean(p&&p.latitude!==''&&p.longitude!==''&&p.latitude!==null&&p.longitude!==null&&
+    Number.isFinite(Number(p.latitude))&&Number.isFinite(Number(p.longitude))&&
+    Number(p.latitude)>=-90&&Number(p.latitude)<=90&&Number(p.longitude)>=-180&&Number(p.longitude)<=180);
+}
+export function geoProject(latitude,longitude,zoom=0){
+  const lat=Math.max(-85.05112878,Math.min(85.05112878,Number(latitude)))*rad;
+  const scale=256*2**zoom;
+  return {x:(Number(longitude)+180)/360*scale,y:(1-Math.log(Math.tan(lat)+1/Math.cos(lat))/Math.PI)/2*scale};
+}
+export function geoUnproject(x,y,zoom=0){
+  const scale=256*2**zoom,n=Math.PI-2*Math.PI*y/scale;
+  return {latitude:Math.atan(Math.sinh(n))/rad,longitude:(((x/scale*360)%360)+540)%360-180};
+}
+export function fitGeoPoints(points,width,height,{padding=65,minZoom=2,maxZoom=18}={}){
+  const selected=(points||[]).filter(validGeoPoint);
+  if(!selected.length)return null;
+  if(selected.length===1)return {...selected[0],latitude:Number(selected[0].latitude),longitude:Number(selected[0].longitude),zoom:14};
+  const projected=selected.map(p=>geoProject(p.latitude,p.longitude));
+  const first=projected[0].x;
+  for(const point of projected){
+    while(point.x-first>128)point.x-=256;
+    while(point.x-first< -128)point.x+=256;
+  }
+  const xs=projected.map(p=>p.x),ys=projected.map(p=>p.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  let zoom=minZoom;
+  for(let z=maxZoom;z>=minZoom;z--){
+    if((maxX-minX)*2**z<=Math.max(60,width-2*padding)&&(maxY-minY)*2**z<=Math.max(60,height-2*padding)){zoom=z;break;}
+  }
+  return {...geoUnproject((minX+maxX)/2,(minY+maxY)/2),zoom};
+}
