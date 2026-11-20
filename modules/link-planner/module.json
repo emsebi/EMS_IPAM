@@ -1,7 +1,7 @@
 {
   "id": "link-planner",
   "name": "Link Planner",
-  "version": "0.1.0-lab.1",
+  "version": "0.1.1-lab.1",
   "description": "Point-to-point wireless planning with SRTM90 terrain, LOS/Fresnel and RF link budget; no radio monitoring.",
   "enabled": true,
   "apiVersion": 1,
