@@ -1,0 +1,71 @@
+name: EMS-IPAM Radio and Link Planner Runtime Acceptance
+
+on:
+  push:
+    branches:
+      - work/combined-radio-linkplanner-verification-20261120
+    paths:
+      - .github/runtime-acceptance-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-runtime-readonly-acceptance
+  cancel-in-progress: true
+
+jobs:
+  runtime-acceptance:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 6
+    steps:
+      - name: Read-only check current installed modules and protected endpoints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APP=ems-ipam-app-1
+          DB=ems-ipam-db-1
+          RADIUS=ems-ipam-radius_ops-1
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          echo "VM_HOST=$(hostname)"
+          for c in "$APP" "$DB" "$RADIUS"; do
+            test "$(docker inspect --format '{{.State.Running}}' "$c")" = true
+            printf 'SERVICE_%s=RUNNING\n' "$c"
+          done
+          curl -fsS --max-time 7 http://127.0.0.1:8888/health >/tmp/ems-accept-health.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const data=JSON.parse(fs.readFileSync("/tmp/ems-accept-health.json","utf8"));
+            console.log("HEALTH="+(data.status||"ok"));
+            const list=Array.isArray(data.modules)?data.modules:[];
+            for(const name of ["radio","link-planner"]){
+              const module=list.find(x=>(typeof x==="string"?x:x.id)===name);
+              console.log("REGISTERED_"+name+"="+(module?"YES":"NOT_IN_HEALTH_LIST"));
+            }
+          '
+          for module in radio link-planner; do
+            source="$DEPLOY/modules/$module/module.json"
+            if test -f "$source"; then
+              MODULE="$module" SOURCE="$source" node --input-type=module -e '
+                import fs from "node:fs";
+                const m=JSON.parse(fs.readFileSync(process.env.SOURCE,"utf8"));
+                if(m.id!==process.env.MODULE)process.exit(1);
+                console.log("INSTALLED_MODULE_"+m.id+"="+m.version);
+              '
+            else
+              echo "MODULE_NOT_FOUND_$module"
+              exit 1
+            fi
+          done
+          for route in /api/link-planner/map /api/radio/map; do
+            code="$(curl -sS --max-time 7 -o /dev/null -w '%{http_code}' "http://127.0.0.1:8888$route")"
+            echo "ANONYMOUS_$route=$code"
+            test "$code" = 401
+          done
+          docker exec "$DB" sh -euc '
+            for t in link_planner_scenarios radio_doc_locations radio_doc_uplinks; do
+              psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM $t" >/dev/null
+              echo "TABLE_$t=OK"
+            done
+          '
+          echo "RUNTIME_ACCEPTANCE=PASS"
