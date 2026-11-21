@@ -38,6 +38,7 @@ jobs:
           RADIUS=ems-ipam-radius_ops-1
           IMAGE=ems-ipam-base:1.7.2
           SAVE_TAG="ems-ipam-ui-rollback:$GITHUB_RUN_ID"
+          STAGED_TAG="ems-ipam-light-staged:$GITHUB_RUN_ID"
           test -f "$SRC/docker-app/public/styles.css"
           test -f "$SRC/docker-app/public/index.html"
           test -f "$DEPLOY/compose.yml"
@@ -84,6 +85,7 @@ jobs:
           fi
 
           UPDATED=0
+          APP_REPLACED=0
           rollback() {
             code=$?
             if test "$code" -ne 0 && test "$UPDATED" = 1; then
@@ -91,9 +93,11 @@ jobs:
               cp -a "$BACK/styles.css" "$DEPLOY/docker-app/public/styles.css"
               cp -a "$BACK/index.html" "$DEPLOY/docker-app/public/index.html"
               docker image tag "$SAVE_TAG" "$IMAGE"
-              docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
-                -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
-                up -d --no-deps --force-recreate app || true
+              if test "$APP_REPLACED" = 1; then
+                docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
+                  -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
+                  up -d --no-deps --force-recreate app || true
+              fi
             fi
             exit "$code"
           }
@@ -104,10 +108,22 @@ jobs:
           install -m 0644 "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
           install -m 0644 "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
 
-          echo "Rebuilding only existing app image with updated static UI files."
-          docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
-            -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
-            build app
+          echo "VERIFY updated host CSS / HTML copied exactly from the tested commit"
+          cmp "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
+          cmp "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
+          grep -q -- '--muted:#46566d' "$DEPLOY/docker-app/public/styles.css"
+          grep -q -- '--line:#8e9eb3' "$DEPLOY/docker-app/public/styles.css"
+          echo "Building staged image from the explicit verified docker-app directory."
+          docker build -t "$STAGED_TAG" "$DEPLOY/docker-app"
+          echo "VERIFY staged image files BEFORE replacing the running App."
+          docker run --rm --network none --entrypoint sh "$STAGED_TAG" -c \
+            'grep -q -- "--muted:#46566d" /app/public/styles.css && grep -q -- "--line:#8e9eb3" /app/public/styles.css && grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html' || {
+              echo "::error::Staged Docker image does not contain the new CSS/HTML. Live App was not replaced."
+              exit 1
+            }
+          echo "Staged image contains verified high contrast files; switching only App image."
+          docker image tag "$STAGED_TAG" "$IMAGE"
+          APP_REPLACED=1
           docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
             -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
             up -d --no-deps --force-recreate app
