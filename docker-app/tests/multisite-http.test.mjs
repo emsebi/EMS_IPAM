@@ -644,6 +644,75 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(reexported.source, pkg.source);
   });
 
+  await t.test('portable preview is scoped, read-only and matches skip/replace including trash and late conflicts', async () => {
+    const source = (await admin('POST', '/api/spaces', { companyId: north.companyId, name: 'Portable source', cidr: '198.18.88.0/24' }, 201)).id;
+    const target = (await admin('POST', '/api/spaces', { companyId: south.companyId, name: 'Portable target', cidr: '198.18.88.0/24' }, 201)).id;
+    const cidrs = ['198.18.88.0/25', '198.18.88.128/26', '198.18.88.192/27'];
+    for (const cidr of cidrs) await admin('POST', '/api/prefixes', { spaceId: source, cidr, name: 'Source range' });
+    const prefixIds = [];
+    for (const cidr of cidrs.slice(0, 2)) prefixIds.push((await admin('POST', '/api/prefixes', { spaceId: target, cidr, name: 'Target range' })).id);
+    await admin('DELETE', '/api/prefixes/' + prefixIds[1]);
+    for (const last of [10, 11, 12, 13]) await admin('PUT', '/api/hosts', { spaceId: source, ip: '198.18.88.' + last, name: 'Source ' + last });
+    const hostIds = [];
+    for (const last of [10, 11]) hostIds.push((await admin('PUT', '/api/hosts', { spaceId: target, ip: '198.18.88.' + last, name: 'Target ' + last })).id);
+    await admin('DELETE', '/api/hosts/' + target + '/198.18.88.11');
+    const reader = await client('north-reader'), editor = await client('north-editor');
+    const pkg = await admin('GET', '/api/spaces/' + source + '/export');
+    const body = { destinationSpaceId: target, package: pkg };
+    const snapshot = async () => ({
+      source: await admin('GET', '/api/spaces/' + source + '/data'),
+      target: await admin('GET', '/api/spaces/' + target + '/data'),
+      trash: await admin('GET', '/api/trash'),
+    });
+    const before = await snapshot();
+    const unauthenticated = await fetch(base + '/api/imports/subnet/preview', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-EMS-CSRF': '1' }, body: JSON.stringify(body) });
+    assert.equal(unauthenticated.status, 401);
+    await reader('POST', '/api/imports/subnet/preview', body, 403);
+    await editor('POST', '/api/imports/subnet/preview', body, 403);
+    await editor('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: source }, 403);
+    await admin('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: 'missing' }, 404);
+    const ownPreview = await admin('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: source });
+    assert.equal(ownPreview.summary.hosts.existing, 4);
+    const preview = await admin('POST', '/api/imports/subnet/preview', body);
+    assert.deepEqual(preview.summary, {
+      prefixes: { total: 3, newRecords: 1, existing: 2, archived: 1 },
+      hosts: { total: 4, newRecords: 2, existing: 2, archived: 1 },
+    });
+    assert.equal(preview.destinationSpaceId, target);
+    assert.equal(preview.sample.hosts.find(h => h.ip === '198.18.88.11').archived, true);
+    for (const malformed of [
+      { ...pkg, hosts: [{ ip: '203.0.113.10' }] },
+      { ...pkg, hosts: [pkg.hosts[0], pkg.hosts[0]] },
+      { ...pkg, prefixes: [pkg.prefixes[0], pkg.prefixes[0]] },
+      { ...pkg, hosts: [null] },
+    ]) {
+      for (const endpoint of ['/api/imports/subnet/preview', '/api/imports/subnet']) {
+        await admin('POST', endpoint, { ...body, package: malformed }, 400);
+      }
+    }
+    assert.deepEqual(await snapshot(), before, 'preview and invalid requests must preserve source, target and trash');
+    // A record created after preview is rechecked by commit, never overwritten in skip mode.
+    const late = (await admin('PUT', '/api/hosts', { spaceId: target, ip: '198.18.88.12', name: 'Late record' })).id;
+    const skipped = (await admin('POST', '/api/imports/subnet', { ...body, mode: 'skip' })).result;
+    assert.deepEqual([skipped.prefixesCreated, skipped.prefixesSkipped, skipped.hostsCreated, skipped.hostsSkipped], [1, 2, 1, 3]);
+    const afterSkip = await admin('GET', '/api/spaces/' + target + '/data');
+    assert.equal(afterSkip.hosts.find(h => h.id === late).name, 'Late record');
+    assert.equal(afterSkip.hosts.some(h => h.id === hostIds[1]), false, 'skip does not restore trash');
+    const replaced = (await admin('POST', '/api/imports/subnet', { ...body, mode: 'replace' })).result;
+    assert.deepEqual([replaced.prefixesUpdated, replaced.hostsUpdated], [3, 4]);
+    const afterReplace = await admin('GET', '/api/spaces/' + target + '/data');
+    assert.equal(afterReplace.hosts.find(h => h.ip === '198.18.88.10').id, hostIds[0]);
+    assert.equal(afterReplace.hosts.find(h => h.ip === '198.18.88.11').id, hostIds[1]);
+    assert.equal(afterReplace.hosts.find(h => h.id === late).name, 'Source 12');
+    assert.equal(afterReplace.prefixes.find(p => p.cidr === cidrs[1]).id, prefixIds[1]);
+    assert.deepEqual(afterReplace.space, before.target.space);
+    assert.deepEqual(await admin('GET', '/api/spaces/' + source + '/data'), before.source);
+    const roundTrip = await admin('GET', '/api/spaces/' + target + '/export');
+    assert.deepEqual(roundTrip.hosts.map(({ sourceId, ...rest }) => rest), pkg.hosts.map(({ sourceId, ...rest }) => rest));
+    assert.deepEqual(roundTrip.prefixes, pkg.prefixes);
+  });
+
   await t.test('MS-03 HTTP search and direct reads isolate overlapping Spaces in the same branch', {
     skip: !postgres && 'requires the disposable PostgreSQL database with domain-scoped uniqueness',
   }, async t => {

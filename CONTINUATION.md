@@ -1,3 +1,19 @@
+# Portable JSON server preview and conflict round-trip — 2026-11-22
+
+Fresh main remains `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; PR #90 starts from `770f5c721e6fd2c99669eaa9d421cdf6fbed802c`, whose CI 44954749978 passed all four gates and 46 browser/API scenarios. Open #83/#85 are green, #84 failed, and #12 remains draft; no color/Radio branch is changed.
+
+The unified dialog now calls POST /api/imports/subnet/preview instead of trusting a local sample. The endpoint shares commit authorization (currently admin-only), destination lookup and package validation. It runs only SELECTs in a repeatable-read, read-only transaction, counting new/existing/archived prefixes and hosts in the selected Space. Safe samples are bounded to 50 per kind with conflicts first; totals cover the entire validated file. The UI displays skip/replace effects, explains restoration of trash and replacement of device ports, and explicitly says commit rechecks current state. No preview token promises that the database is locked until commit.
+
+Shared validation rejects malformed/oversized record lists instead of silently truncating, rejects unaligned/duplicate prefixes, and canonicalizes IP/CIDR identities before duplicate checks. Legacy missing lists and source host IDs remain supported. No schema/migration/RADIUS/module/config/container change. RADIUS remains healthy, user-accepted and frozen; no new real RADIUS testing is in the plan.
+
+Tests add actual HTTP preview/invalid-request no-write comparisons (source, destination and trash), unauthorized viewer/branch requests, missing destination, active and archived conflicts, a new conflict inserted after preview, skip preservation, replace restoration with stable IDs, and export/import/export round-trip. Browser tests exercise held late responses for both spreadsheet and JSON paths, invalid JSON records rejected by the server with Commit disabled, and a real export uploaded under a .csv filename through preview, skip and replace. Spreadsheet workflows and Dark Mode checks remain intact.
+
+Local targeted validation: 38 passed, 0 failed, 8 native-PostgreSQL-only cases skipped (46 including parent). The new HTTP case passes under PGlite; native PostgreSQL and browser evidence must come from this candidate's CI, recorded in #90/#89. Local Chromium's previously confirmed socket restriction remains; do not claim a local browser pass. Syntax, whitespace, checksum-tool tests and manifest are checked before publication.
+
+VM/deployed SHA: no VM access, write, deployment, restart, migration, scan or config push. Latest observed old UI deployment remains 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`, not evidence of the full current installed tree. Acceptance stays PARTIAL. Next: inspect all candidate gates, finish file-detection edge cases and review compatibility/guarded rollout with backup, identity capture and regression protection. Backend preview is a new route, so a UI-only copy is insufficient for deployment. Work implements, Chat handles decisions/feedback, GitHub/#89 owns status.
+
+---
+
 # Unified Import CI recovery and stale-preview guard — 2026-11-22
 
 Current authority: Issue #89 and the user's 2026-11-22 instruction. **RADIUS is healthy and user-accepted, frozen and outside development scope.** All older requests below for real MikroTik Full/Read or new real RADIUS tests are superseded and removed from the current plan. No RADIUS code/config/database/schema/users/NAS/secrets/credentials/container/image/migration/restart/redeploy changes are authorized. Existing isolated CI regression tests do not authorize live service tests. Other deployments require backup, identity capture, health/regression and stop/rollback on risk.

@@ -753,11 +753,24 @@ async function classifyIpamImportFile(file) {
   if(/\.csv$/i.test(name) || /^(?:IP|\uFEFFIP)\s*[,;]/i.test(sample))return {kind:"sheet"};
   throw new Error("فایل Excel (.xlsx)، CSV (.csv) یا Portable JSON (.json) انتخاب کنید.");
 }
-function checkPortableImportDestination(payload,spaceId) {
-  const space=state.bootstrap.spaces.find(item=>item.id===spaceId);
-  const root=parseCidr(space?.cidr),scope=parseCidr(payload.source?.cidr);
-  if(!root||!scope||!contains(root,scope))throw new Error("Subnet بسته JSON داخل Space مقصد نیست. رنج مقصد مناسب را انتخاب کنید.");
-  return scope;
+function renderPortableImportPreview(preview) {
+  const replace = $("bulkIpamMode").value === "update";
+  const { summary, sample, sampleLimit } = preview;
+  const sections = [["prefixes", "cidr", "Subnet"], ["hosts", "ip", "IP/تجهیز"]].map(([kind, key, label]) => {
+    const counts = summary[kind];
+    const rows = sample[kind].map(item => {
+      const status = item.archived ? "موجود در سطل بازیافت" : item.existing ? "موجود" : "جدید";
+      const action = !item.existing ? "ایجاد" : !replace ? "رد شدن بدون تغییر" : item.archived ? "بازیابی و جایگزینی" : "جایگزینی";
+      return '<tr><td>' + escapeHtml(item[key]) + '</td><td>' + escapeHtml(item.name) + '</td><td>' + status + '</td><td>' + action + '</td></tr>';
+    }).join("");
+    return '<h4>' + label + ' · کل: ' + formatNumber(counts.total) + ' · جدید: ' + formatNumber(counts.newRecords) +
+      ' · موجود: ' + formatNumber(counts.existing) + ' · از موجودها در سطل بازیافت: ' + formatNumber(counts.archived) +
+      '</h4><p>نمونه تا ' + formatNumber(sampleLimit) + ' ردیف، ابتدا موارد تکراری:</p>' +
+      '<div class="bulk-preview-scroll"><table><thead><tr><th>IP / CIDR</th><th>Name</th><th>وضعیت مقصد</th><th>عملیات انتخاب‌شده</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  });
+  $("bulkIpamPreview").innerHTML = '<b>Portable JSON · محدوده ' + escapeHtml(preview.cidr) + '</b>' + sections.join("") +
+    '<p>جایگزینی، مشخصات و پورت‌های رکورد موجود را با اطلاعات فایل عوض می‌کند و موارد حذف‌شده را بازیابی می‌کند؛ شناسه مقصد حفظ می‌شود. رمزهای تجهیزات منتقل نمی‌شوند.</p>' +
+    '<p>این پیش‌نمایش داده‌ای ذخیره نمی‌کند. وضعیت مقصد ممکن است تغییر کند؛ مجوز، اعتبار فایل و تعارض‌ها هنگام ثبت دوباره بررسی می‌شوند.</p>';
 }
 
 function readBulkIpamFile(file) {
@@ -2173,6 +2186,9 @@ $("importButton").addEventListener("click", () => openBulkIpamDialog());
 $("bulkIpamCompany").addEventListener("change", syncBulkIpamSpaces);
 $("bulkIpamSpace").addEventListener("change", resetBulkIpamPreview);
 $("bulkIpamDialog").addEventListener("close", resetBulkIpamPreview);
+$("bulkIpamMode").addEventListener("change", () => {
+  if (state.bulkIpamPreview?.kind === "portable") renderPortableImportPreview(state.bulkIpamPreview);
+});
 $("bulkIpamFile").addEventListener("change", async () => {
   state.bulkIpamFile=null;
   resetBulkIpamPreview();
@@ -2204,17 +2220,15 @@ $("bulkIpamForm").addEventListener("submit",async event=>{
     const identified=await classifyIpamImportFile(file);
     if (!isCurrent()) return;
     if(identified.kind==="portable"){
-      const payload=identified.payload,scope=checkPortableImportDestination(payload,destinationSpaceId);
-      // Preview only; actual duplicate handling and permissions are revalidated by the server at commit.
-      const lines=payload.prefixes.slice(0,5).map(item=>"<li>Subnet: "+escapeHtml(item.cidr||"")+"</li>")
-        .concat(payload.hosts.slice(0,8).map(item=>"<li>"+escapeHtml(item.ip||"")+" — "+escapeHtml(item.name||"")+"</li>"));
-      $("bulkIpamPreview").innerHTML="<b>Portable JSON · محدوده "+escapeHtml(scope.cidr)+
-        " · "+formatNumber(payload.prefixes.length)+" زیرSubnet · "+formatNumber(payload.hosts.length)+
-        " تجهیز/IP</b><p>نمونه اطلاعات فایل:</p><ul>"+lines.join("")+
-        "</ul><p>تکراری‌ها هنگام ثبت مطابق گزینه انتخاب‌شده بررسی می‌شوند. رمزهای تجهیزات در بسته قابل انتقال نیستند.</p>";
-      state.bulkIpamFile={kind:"portable",destinationSpaceId,payload};
-      state.bulkIpamPreview={kind:"portable"};
-      $("bulkIpamCommit").disabled=!(payload.prefixes.length||payload.hosts.length);
+      const payload = identified.payload;
+      const response = await request("/api/imports/subnet/preview", {
+        method: "POST", body: { destinationSpaceId, package: payload },
+      });
+      if (!isCurrent()) return;
+      state.bulkIpamFile = { kind: "portable", destinationSpaceId, payload };
+      state.bulkIpamPreview = { kind: "portable", ...response };
+      renderPortableImportPreview(response);
+      $("bulkIpamCommit").disabled = !(response.summary.prefixes.total || response.summary.hosts.total);
     }else{
       const base64=await readBulkIpamFile(file);
       if (!isCurrent()) return;

@@ -1410,13 +1410,19 @@ try {
   // Hold real preview responses, then invalidate the selection before they return.
   // Submit remains busy until that request settles, providing a deterministic
   // completion signal for the negative assertions (no fixed sleep or mock data).
-  for (const change of ['file', 'destination', 'close/reopen']) {
+  for (const kind of ['sheet', 'portable']) for (const change of ['file', 'destination', 'close/reopen']) {
     await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
     await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
-    await page.locator('#bulkIpamFile').setInputFiles(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+    await page.locator('#bulkIpamFile').setInputFiles(kind === 'sheet'
+      ? path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx')
+      : { name: 'held-preview.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+        format: 'EMS-IPAM-SUBNET', formatVersion: 1, source: { cidr: '192.0.2.0/24' }, prefixes: [],
+        hosts: [{ ip: '192.0.2.50', name: 'Held JSON' }, { ip: '192.0.2.94', name: 'New JSON' }],
+      })) });
     let release;
     const held = new Promise(resolve => { release = resolve; });
-    const endpoint = '**/api/imports/ipam/preview';
+    const previewPath = kind === 'sheet' ? '/api/imports/ipam/preview' : '/api/imports/subnet/preview';
+    const endpoint = '**' + previewPath;
     const holdPreview = async route => {
       const response = await route.fetch();
       await held;
@@ -1425,7 +1431,7 @@ try {
     await page.route(endpoint, holdPreview, { times: 1 });
     try {
       await Promise.all([
-        page.waitForRequest(r => new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+        page.waitForRequest(r => new URL(r.url()).pathname === previewPath),
         page.locator('#bulkIpamForm button[type=submit]').click(),
       ]);
       assert.equal(await page.locator('#bulkIpamForm button[type=submit]').isDisabled(), true);
@@ -1540,6 +1546,69 @@ try {
     assert.deepEqual(await api('/api/spaces/' + sibling.spaceId + '/data'), siblingBefore);
   }
   check('same-branch import selects routing-domain labels in English and Persian without changing sibling records');
+
+  // Real export file -> unified preview -> skip -> replace in isolated Spaces.
+  const portableSource = await api('/api/spaces', 'POST', {
+    companyId: searchSites[1].companyId, name: 'Portable browser source', cidr: '198.18.91.0/24',
+  }, 201);
+  const portableTarget = await api('/api/spaces', 'POST', {
+    companyId: 'test-co', name: 'Portable browser target', cidr: '198.18.91.0/24',
+  }, 201);
+  await api('/api/prefixes', 'POST', { spaceId: portableSource.id, cidr: '198.18.91.0/25', name: 'Portable range' });
+  for (const last of [10, 11]) await api('/api/hosts', 'PUT', {
+    spaceId: portableSource.id, ip: '198.18.91.' + last, name: '<سوئیچ & ' + last + '>',
+  });
+  const existingPortable = await api('/api/hosts', 'PUT', {
+    spaceId: portableTarget.id, ip: '198.18.91.10', name: 'Keep until replace',
+  });
+  const exportedPortable = await api('/api/spaces/' + portableSource.id + '/export');
+  const sourceBefore = await api('/api/spaces/' + portableSource.id + '/data');
+  const portableBefore = await api('/api/spaces/' + portableTarget.id + '/data');
+  const openPortable = async (pkg = exportedPortable) => {
+    await page.goto('/#/ipam/' + portableTarget.id);
+    await page.locator('#ipamExcelImport').click();
+    await page.locator('#bulkIpamFile').setInputFiles({ name: 'export-with-csv-extension.csv', mimeType: 'text/csv',
+      buffer: Buffer.from(JSON.stringify(pkg)) });
+  };
+  const previewPortable = async (expected = 200) => {
+    const [response] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/subnet/preview'),
+      page.locator('#bulkIpamForm button[type=submit]').click(),
+    ]);
+    assert.equal(response.status(), expected);
+    await page.locator('#bulkIpamForm button[type=submit]:not([disabled])').waitFor();
+    return response.json();
+  };
+  await page.reload();
+  await openPortable({ ...exportedPortable, hosts: [{ ip: '203.0.113.10' }] });
+  await previewPortable(400);
+  assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true);
+  await page.locator('#bulkIpamDialog [data-close]').first().click();
+  await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+  for (const mode of ['skip', 'replace']) {
+    await openPortable();
+    const preview = await previewPortable();
+    assert.deepEqual(preview.summary.hosts, mode === 'skip'
+      ? { total: 2, newRecords: 1, existing: 1, archived: 0 }
+      : { total: 2, newRecords: 0, existing: 2, archived: 0 });
+    assert.ok((await page.locator('#bulkIpamPreview').innerText()).includes('<سوئیچ & 10>'));
+    assert.equal(await page.locator('#bulkIpamPreview img, #bulkIpamPreview script').count(), 0);
+    if (mode === 'skip') assert.deepEqual(await api('/api/spaces/' + portableTarget.id + '/data'), portableBefore);
+    await page.locator('#bulkIpamMode').selectOption(mode === 'replace' ? 'update' : 'skip');
+    const [commit] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/subnet'),
+      page.locator('#bulkIpamCommit').click(),
+    ]);
+    assert.equal(commit.status(), 200);
+    assert.equal(commit.request().postDataJSON().mode, mode);
+    await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+    const target = await api('/api/spaces/' + portableTarget.id + '/data');
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.10').id, existingPortable.id);
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.10').name, mode === 'skip' ? 'Keep until replace' : '<سوئیچ & 10>');
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.11').name, '<سوئیچ & 11>');
+    assert.deepEqual(await api('/api/spaces/' + portableSource.id + '/data'), sourceBefore);
+  }
+  check('Portable JSON server preview rejects invalid content and round-trips exported records with skip/replace and stable destination IDs');
 
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');
