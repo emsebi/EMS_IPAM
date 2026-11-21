@@ -20,6 +20,32 @@ let serverLog = '';
 const checks = [];
 const check = (name) => { checks.push(name); console.log(`PASS: ${name}`); };
 let browser, page;
+// Resolve and measure the current DOM in one browser task. A locator can retain
+// a detached grid while an asynchronous Device Types refresh replaces page HTML.
+function readDeviceTypeLayout(expectedIds) {
+  const grid = document.getElementById('deviceTypesList');
+  if (!grid?.isConnected) return null;
+  const renderedIds = new Set([...grid.querySelectorAll('.edit-device-type')].map(button => button.dataset.id));
+  if (!expectedIds.every(id => renderedIds.has(id))) return null;
+  const rows = [...grid.querySelectorAll('.device-type-item')];
+  const rectangles = rows.map(row => row.getBoundingClientRect());
+  if (!rows.length || rectangles.some(rect => rect.width <= 0 || rect.height <= 0)) return null;
+  const first = rows[0], name = first.querySelector('.device-type-info b').getBoundingClientRect();
+  const actions = first.querySelector('.device-type-actions').getBoundingClientRect();
+  return {
+    columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    positions: rectangles.map(rect => ({ x: Math.round(rect.x), y: Math.round(rect.y) })),
+    firstRowCenterDelta: Math.abs((name.top + name.bottom) / 2 - (actions.top + actions.bottom) / 2),
+    actionsWrap: getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
+    firstHeight: rectangles[0].height,
+    cards: rows.map((row, i) => ({ width: rectangles[i].width, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth })),
+  };
+}
+async function waitForDeviceTypeLayout(expectedIds) {
+  const result = await page.waitForFunction(readDeviceTypeLayout, expectedIds);
+  try { return await result.jsonValue(); }
+  finally { await result.dispose(); }
+}
 try {
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`Server startup timed out: ${serverLog}`)), 30000);
@@ -100,16 +126,35 @@ try {
     const created=await api('/api/device-types','POST',{name:'Layout Preview '+n,color:'#3157d5'},201);
     demoTypeIds.push(created.id);
   }
-  await page.locator('#deviceTypesButton').click();
-  await page.waitForFunction(()=>document.querySelectorAll('#deviceTypesList .device-type-item').length>=6);
-  const desktopLayout=await page.locator('#deviceTypesList').evaluate(grid=>{
-    const rows=[...grid.querySelectorAll('.device-type-item')],columns=getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-    const positions=rows.map(item=>({x:Math.round(item.getBoundingClientRect().x),y:Math.round(item.getBoundingClientRect().y)}));
-    const first=rows[0],name=first.querySelector('.device-type-info b').getBoundingClientRect(),actions=first.querySelector('.device-type-actions').getBoundingClientRect();
-    return {columns,positions,firstRowCenterDelta:Math.abs((name.top+name.bottom)/2-(actions.top+actions.bottom)/2),
-      actionsWrap:getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
-      firstHeight:first.getBoundingClientRect().height};
+  // Hold the real refresh response: existing rows already exceed the former
+  // count threshold, but must not qualify as the newly requested layout.
+  let releaseTypes, typesReceived, typesDeadline;
+  const heldTypes = new Promise(resolve => { releaseTypes = resolve; });
+  const receivedTypes = new Promise((resolve, reject) => {
+    typesReceived = resolve;
+    typesDeadline = setTimeout(() => reject(new Error('Device Types refresh response was not intercepted')), 12000);
   });
+  const holdTypes = async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    typesReceived();
+    await heldTypes;
+    await route.fulfill({ response });
+  };
+  await page.route('**/api/device-types', holdTypes);
+  let desktopLayout;
+  try {
+    await page.locator('#deviceTypesButton').click();
+    await receivedTypes;
+    assert.equal(await page.evaluate(readDeviceTypeLayout, demoTypeIds), null,
+      'Existing rows must not satisfy readiness while the real refresh is held');
+    releaseTypes();
+    desktopLayout = await waitForDeviceTypeLayout(demoTypeIds);
+  } finally {
+    releaseTypes();
+    clearTimeout(typesDeadline);
+    await page.unroute('**/api/device-types', holdTypes);
+  }
   assert.ok(desktopLayout.columns>=2,'Device Types desktop must have multiple columns: '+JSON.stringify(desktopLayout));
   assert.ok(new Set(desktopLayout.positions.map(p=>p.x)).size>=2,'Cards should occupy multiple horizontal columns');
   assert.ok(desktopLayout.firstRowCenterDelta<15,'Name and Edit/Delete must appear on the same line');
@@ -117,10 +162,7 @@ try {
   assert.ok(desktopLayout.firstHeight<=64,'Device Type rows should be compact: '+desktopLayout.firstHeight);
   await page.screenshot({path:path.join(outputDir,'device-types-compact-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
-  const mobileLayout=await page.locator('#deviceTypesList').evaluate(grid=>({
-    columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
-    cards:[...grid.querySelectorAll('.device-type-item')].map(el=>({width:el.getBoundingClientRect().width,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}))
-  }));
+  const mobileLayout = await waitForDeviceTypeLayout(demoTypeIds);
   assert.equal(mobileLayout.columns,1,'Device Types mobile should be a single column');
   assert.ok(mobileLayout.cards.every(c=>c.scrollWidth<=c.clientWidth+2),'Device Type action buttons must not overflow mobile cards');
   await page.screenshot({path:path.join(outputDir,'device-types-compact-mobile.png'),fullPage:true});
