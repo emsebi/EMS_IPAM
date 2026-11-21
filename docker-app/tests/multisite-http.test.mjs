@@ -974,7 +974,7 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.equal((await admin('GET', '/api/spaces/' + south.spaceId + '/data')).hosts.find(h => h.id === south.id).id, south.id);
   });
 
-  for (const relation of ['child companies', 'Company grants', 'Space grants']) {
+  for (const relation of ['child companies', 'Company grants', 'Space grants', 'Personnel']) {
     await t.test('XLSX cleanup and recovery preserve ' + relation + ' for active and archived fixtures', {
       skip: !postgres && 'requires a separate SQL connection to the running fixture database',
     }, async () => {
@@ -983,6 +983,10 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       try {
         const userId = (await db.query("SELECT id FROM users WHERE username='north-reader'")).rows[0].id;
         const originalParent = (await db.query('SELECT parent_company_id FROM companies WHERE id=$1', [south.companyId])).rows[0].parent_company_id;
+        const personnelId = relation === 'Personnel' ? randomUUID() : null;
+        if (personnelId) await db.query('INSERT INTO personnel(id,full_name,company_id,active) VALUES ($1,$2,$3,false)',
+          [personnelId, 'Synthetic existing Personnel', south.companyId]);
+        const originalPersonnel = personnelId ? (await db.query('SELECT * FROM personnel WHERE id=$1', [personnelId])).rows[0] : null;
         const beforeCleanup = async id => {
           await assertFixtureRadioIsolation(db, id);
           await assertFixtureCompanyIsolation(db, id);
@@ -1000,6 +1004,7 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
             spaces: (await db.query('SELECT * FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY id', [[south.companyId, destination.companyId]])).rows,
             companyGrants: (await db.query('SELECT * FROM user_company_access ORDER BY user_id,company_id')).rows,
             spaceGrants: (await db.query('SELECT * FROM user_space_access ORDER BY user_id,space_id')).rows,
+            personnel: (await db.query('SELECT * FROM personnel ORDER BY id')).rows,
           });
           const blocked = error => error instanceof AggregateError && error.errors.some(e => e.message.includes(relation));
           try {
@@ -1011,8 +1016,10 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
                 await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [site.companyId, south.companyId]);
               } else if (relation === 'Company grants') {
                 await db.query('INSERT INTO user_company_access(user_id,company_id) VALUES ($1,$2)', [userId, site.companyId]);
-              } else {
+              } else if (relation === 'Space grants') {
                 await db.query('INSERT INTO user_space_access(user_id,space_id) VALUES ($1,$2)', [userId, site.spaceId]);
+              } else {
+                await db.query('UPDATE personnel SET company_id=$1 WHERE id=$2', [site.companyId, personnelId]);
               }
               linkedRows = await snapshot();
             }, { journalPath, beforeCleanup }), blocked);
@@ -1034,9 +1041,11 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
               // Undo only this case's injected relationship in the disposable database.
               if (relation === 'child companies') await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [originalParent, south.companyId]);
               else if (relation === 'Company grants') await db.query('DELETE FROM user_company_access WHERE user_id=$1 AND company_id=$2', [userId, destination.companyId]);
-              else await db.query('DELETE FROM user_space_access WHERE user_id=$1 AND space_id=$2', [userId, destination.spaceId]);
+              else if (relation === 'Space grants') await db.query('DELETE FROM user_space_access WHERE user_id=$1 AND space_id=$2', [userId, destination.spaceId]);
+              else await db.query('UPDATE personnel SET company_id=$1 WHERE id=$2', [originalPersonnel.company_id, personnelId]);
               await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
               await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+              if (personnelId) assert.deepEqual((await db.query('SELECT * FROM personnel WHERE id=$1', [personnelId])).rows[0], originalPersonnel);
             }
           }
         }
