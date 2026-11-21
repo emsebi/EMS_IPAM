@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
 import { assertFixtureRadioIsolation } from './helpers/fixture-radio-isolation.mjs';
+import { assertFixtureCompanyIsolation } from './helpers/fixture-company-isolation.mjs';
 import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
 import { openFixtureJournal } from './helpers/fixture-journal.mjs';
 import { withXlsxHttpFixture, recoverXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
@@ -972,6 +973,76 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     }
     assert.equal((await admin('GET', '/api/spaces/' + south.spaceId + '/data')).hosts.find(h => h.id === south.id).id, south.id);
   });
+
+  for (const relation of ['child companies', 'Company grants', 'Space grants']) {
+    await t.test('XLSX cleanup and recovery preserve ' + relation + ' for active and archived fixtures', {
+      skip: !postgres && 'requires a separate SQL connection to the running fixture database',
+    }, async () => {
+      const db = new pg.Client({ connectionString: env.DATABASE_URL });
+      await db.connect();
+      try {
+        const userId = (await db.query("SELECT id FROM users WHERE username='north-reader'")).rows[0].id;
+        const originalParent = (await db.query('SELECT parent_company_id FROM companies WHERE id=$1', [south.companyId])).rows[0].parent_company_id;
+        const beforeCleanup = async id => {
+          await assertFixtureRadioIsolation(db, id);
+          await assertFixtureCompanyIsolation(db, id);
+        };
+        for (const archived of [false, true]) {
+          const journalPath = path.join(backups, 'company-reference-' + relation.replaceAll(' ', '-') + '-' + archived + '.jsonl');
+          let destination, linkedRows;
+          const deletes = [];
+          const call = async (method, url, ...args) => {
+            if (method === 'DELETE') deletes.push(url);
+            return admin(method, url, ...args);
+          };
+          const snapshot = async () => ({
+            companies: (await db.query('SELECT * FROM companies WHERE id=ANY($1::text[]) ORDER BY id', [[south.companyId, destination.companyId]])).rows,
+            spaces: (await db.query('SELECT * FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY id', [[south.companyId, destination.companyId]])).rows,
+            companyGrants: (await db.query('SELECT * FROM user_company_access ORDER BY user_id,company_id')).rows,
+            spaceGrants: (await db.query('SELECT * FROM user_space_access ORDER BY user_id,space_id')).rows,
+          });
+          const blocked = error => error instanceof AggregateError && error.errors.some(e => e.message.includes(relation));
+          try {
+            await assert.rejects(withXlsxHttpFixture(call, async site => {
+              destination = site;
+              // Rehearse a relationship introduced after archive as well as before it.
+              if (archived) await admin('DELETE', '/api/companies/' + site.companyId);
+              if (relation === 'child companies') {
+                await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [site.companyId, south.companyId]);
+              } else if (relation === 'Company grants') {
+                await db.query('INSERT INTO user_company_access(user_id,company_id) VALUES ($1,$2)', [userId, site.companyId]);
+              } else {
+                await db.query('INSERT INTO user_space_access(user_id,space_id) VALUES ($1,$2)', [userId, site.spaceId]);
+              }
+              linkedRows = await snapshot();
+            }, { journalPath, beforeCleanup }), blocked);
+            assert.deepEqual(await snapshot(), linkedRows);
+            assert.ok(!deletes.some(url => url.endsWith('/' + destination.companyId)));
+            deletes.length = 0;
+            const journalBefore = await fs.readFile(journalPath);
+            await assert.rejects(recoverXlsxHttpFixture(call, journalPath, { beforeCleanup }), blocked);
+            assert.deepEqual(await fs.readFile(journalPath), journalBefore);
+            assert.deepEqual(await snapshot(), linkedRows);
+            assert.deepEqual(deletes, []);
+            if (archived) {
+              assert.ok((await admin('GET', '/api/trash')).items.some(item => item.kind === 'company' && item.id === destination.companyId));
+            } else {
+              assert.equal((await admin('GET', '/api/companies/' + destination.companyId)).company.id, destination.companyId);
+            }
+          } finally {
+            if (destination) {
+              // Undo only this case's injected relationship in the disposable database.
+              if (relation === 'child companies') await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [originalParent, south.companyId]);
+              else if (relation === 'Company grants') await db.query('DELETE FROM user_company_access WHERE user_id=$1 AND company_id=$2', [userId, destination.companyId]);
+              else await db.query('DELETE FROM user_space_access WHERE user_id=$1 AND space_id=$2', [userId, destination.spaceId]);
+              await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+              await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+            }
+          }
+        }
+      } finally { await db.end(); }
+    });
+  }
 
   await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {
     const read = site => admin('GET', '/api/spaces/' + site.spaceId + '/data');
