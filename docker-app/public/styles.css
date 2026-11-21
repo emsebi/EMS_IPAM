@@ -439,3 +439,9 @@ html[data-theme="light"] #sheetSelect{
 .prefix-inherit-choice{display:flex!important;align-items:center;gap:10px;line-height:1.7;cursor:pointer}
 .prefix-inherit-choice input{width:18px;height:18px;min-width:18px;accent-color:var(--blue,#2581ed)}
 .prefix-inherit-help{display:block;color:var(--muted);font-size:.78rem;grid-column:1/-1;margin-top:-7px}
+
+/* Reversible color inheritance display switch, using existing theme colors. */
+.ipam-inheritance-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:.8rem;color:var(--ink,inherit);cursor:pointer}
+.ipam-inheritance-toggle input{width:17px;height:17px;accent-color:var(--blue,#2581ed);margin:0}
+.ipam-inheritance-control{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:8px 12px;border:1px solid var(--line,#dce3ed);border-radius:10px;margin:9px 0;background:var(--card,transparent)}
+.ipam-inheritance-control small{color:var(--muted,#66758b);font-size:.74rem}
