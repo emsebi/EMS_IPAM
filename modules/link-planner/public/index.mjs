@@ -1,5 +1,5 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,terrainElevationSummary,requiredOppositeTower} from './model.mjs?v=0.2.2-lab.1';
-import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.2-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,terrainElevationSummary,requiredOppositeTower} from './model.mjs?v=0.2.2-lab.2';
+import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.2-lab.2';
 
 const INITIAL=()=>({
  a:{latitude:'',longitude:''},b:{latitude:'',longitude:''},
@@ -127,9 +127,14 @@ export function createUi(ctx){
    if(!frame)return;
    const a=input.a,b=input.b;
    const valid=p=>p&&p.latitude!==''&&p.longitude!==''&&Number.isFinite(Number(p.latitude))&&Number.isFinite(Number(p.longitude))&&Math.abs(Number(p.latitude))<=90&&Math.abs(Number(p.longitude))<=180;
+   const plan=profile ? validPlan().value : null;
+   const heights=plan&&profileKey===coordKey(plan)&&Array.isArray(profile.elevations)&&
+     profile.elevations.length>=3&&profile.elevations.every(n=>typeof n==='number'&&Number.isFinite(n))
+     ?profile.elevations:null;
    frame.contentWindow?.postMessage({type:'ems:planner:data',
      a:valid(a)?{latitude:Number(a.latitude),longitude:Number(a.longitude)}:null,
-     b:valid(b)?{latitude:Number(b.latitude),longitude:Number(b.longitude)}:null,active,fit},location.origin);
+     b:valid(b)?{latitude:Number(b.latitude),longitude:Number(b.longitude)}:null,
+     terrainHeights:heights,active,fit},location.origin);
  }
  function focusSite(which){
    const p=input[which];
@@ -299,11 +304,11 @@ export function createUi(ctx){
      if(!response?.ok||!Array.isArray(response.elevations))throw new Error('Invalid terrain response');
      profile=response;profileKey=coordKey(plan);
      status.textContent=response.missing?L('Some elevation samples are missing: clearance is unknown.','برخی نقاط ارتفاعی موجود نیستند؛ نتیجه نامشخص است.'):L('SRTM90 profile loaded.','پروفایل SRTM90 دریافت شد.');
-     results();
+     results();sendMap();
    }catch(error){
      profile=null;profileKey='';
      profileError=error.message;status.textContent=L('Terrain unavailable: ','پروفایل در دسترس نیست: ')+error.message;
-     results();
+     results();sendMap();
    }finally{busy=false;if(button?.isConnected)button.disabled=false;}
  }
  async function refreshScenarios(){
