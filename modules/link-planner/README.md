@@ -59,3 +59,6 @@ The map no longer automatically fits/refocuses after a geographic click or manua
 - Uses the same 81 SRTM90 values already fetched; no automatic external calls, new database fields or changes to Radio Management/RADIUS.
 - All elevations are estimates from a ~90 m DEM; obstacles (trees/buildings) and ridges between samples are not represented. Invalid/missing samples never silently become zero or a claim of a clear link.
 - Preserves the current dark and light themes; no global CSS changes.
+
+## 0.2.2-lab.2 — Elevation ribbon beside the route on the map
+Once terrain is loaded, the map draws a green sampled terrain ribbon adjacent to the A–B route. This is a schematic, vertically exaggerated two-dimensional offset of SRTM90 elevations, **not** a perspective/3D survey or an exact vertical scale. The full metric graph remains below. Moving a site removes a stale ribbon until terrain is loaded again. The profile uses the same sampled terrain response and makes no extra map or terrain requests.
