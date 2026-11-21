@@ -575,7 +575,7 @@ async function spaceData(user, spaceId) {
   const space = await getSpaceForUser(user, spaceId);
   const [prefixes, hosts, pings, devicePorts] = await Promise.all([
     pool.query(
-      `SELECT id,cidr,name,status,role,vlan,gateway,color,description,
+      `SELECT id,cidr,name,status,role,vlan,gateway,color,inherit_color AS "inheritColor",description,
               updated_at AS "updatedAt" FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
       [spaceId],
     ),
@@ -1652,7 +1652,7 @@ async function api(req, res, url, user) {
     const values = [
       id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
-      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), cleanText(body.description, 2000), user.id,
+      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), cleanText(body.description, 2000), user.id, body.inheritColor === undefined ? true : body.inheritColor === true,
     ];
     if (requestedId) {
       const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1 AND deleted_at IS NULL", [requestedId]);
@@ -1661,14 +1661,14 @@ async function api(req, res, url, user) {
       }
       await pool.query(
         `UPDATE prefixes SET cidr=$3,name=$4,status=$5,role=$6,vlan=$7,gateway=$8,color=$9,
-             description=$10,updated_by=$11,updated_at=now()
+             description=$10,updated_by=$11,updated_at=now(),inherit_color=$12
           WHERE id=$1 AND space_id=$2`,
         values,
       );
     } else {
       await pool.query(
-        `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+        `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by,inherit_color)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12)`,
         values,
       );
     }
