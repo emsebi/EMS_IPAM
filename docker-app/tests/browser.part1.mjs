@@ -227,6 +227,27 @@ try {
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
+  // Child-color setting is persisted per prefix; explicit white descendants win.
+  const colorSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Child color options',cidr:'198.18.0.0/22'},201);
+  const colorParent=await api('/api/prefixes','POST',{spaceId:colorSpace.id,cidr:'198.18.0.0/24',name:'Blue parent',color:'#3157d5',inheritColor:false});
+  assert.ok(colorParent.id);
+  let colorData=await api('/api/spaces/'+colorSpace.id+'/data');
+  assert.equal(colorData.prefixes.find(x=>x.id===colorParent.id).inheritColor,false);
+  await ipamPreview.goto('/#/ipam/'+colorSpace.id+'/198.18.0.0%2F24');
+  await ipamPreview.locator('.edit-exact-prefix').first().click();
+  await ipamPreview.locator('#prefixInheritColor').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#prefixInheritColor').isChecked(),false);
+  await ipamPreview.locator('#prefixInheritColor').check();
+  await ipamPreview.locator('#prefixForm [type=submit]').click();
+  await ipamPreview.locator('#prefixDialog').waitFor({state:'hidden'});
+  colorData=await api('/api/spaces/'+colorSpace.id+'/data');
+  assert.equal(colorData.prefixes.find(x=>x.id===colorParent.id).inheritColor,true);
+  await api('/api/prefixes','POST',{spaceId:colorSpace.id,cidr:'198.18.0.128/25',name:'Explicit white',color:'#ffffff',inheritColor:false});
+  await ipamPreview.goto('/#/ipam/'+colorSpace.id+'/198.18.0.0%2F24');
+  const sheetColors=await ipamPreview.evaluate(()=>[document.querySelector('.detail-block .subnet-span')?.getAttribute('style'), document.querySelector('.sheet-banner')?.getAttribute('style')]);
+  assert.ok(sheetColors[1]?.includes('#3157d5'),'Parent color remains visible');
+  await api('/api/spaces/'+colorSpace.id,'DELETE');
+  check('child color checkbox persists, while explicit descendant white is preserved');
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
