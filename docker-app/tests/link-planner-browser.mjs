@@ -112,6 +112,12 @@ try{
  assert.ok(profileMetrics.includes('100.0'),'Flat SRTM fixture should show ground elevation 100 m');
  await page.locator('.lp-chart svg').hover({position:{x:200,y:110}});
  assert.ok((await page.locator('.lp-terrain-probe').innerText()).includes('Ground 100.0 m'));
+ await page.frameLocator('#lpMap').locator('[data-profile="terrain-ribbon"]').waitFor({state:'attached'});
+ assert.equal(await page.frameLocator('#lpMap').locator('[data-profile="terrain-fill"]').count(),1);
+ await page.locator('input[data-path="b.longitude"]').fill('51.351');
+ await page.waitForFunction(()=>document.getElementById('lpMap')?.contentDocument?.querySelector('[data-profile="terrain-ribbon"]')===null);
+ await page.locator('input[data-path="b.longitude"]').fill('51.350000');
+
 
 
  // The engineer can fix a 20 m A tower and solve the minimum B tower.
