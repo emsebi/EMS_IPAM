@@ -1041,33 +1041,67 @@ function renderTreeView(selected) {
   return `<div class="tree-toolbar"><div class="tree-current"><span>مسیر انتخاب</span><span class="tree-breadcrumbs">${trail.map((cidr, index) => `<button class="tree-jump" data-cidr="${escapeHtml(cidr)}">${index ? "← " : ""}${escapeHtml(cidr)}</button>`).join("")}</span><small>نمایش فعلی تا /${endPrefix}</small></div><div>${safeFocus.prefix > selected.prefix ? `<button class="btn sm tree-up" data-cidr="${escapeHtml(networkAt(safeFocus.start, safeFocus.prefix - 1).cidr)}">یک سطح بالاتر</button>` : ""}${canWrite() && safeFocus.prefix <= 31 ? `<button class="btn sm primary tree-edit-prefix" data-cidr="${escapeHtml(safeFocus.cidr)}">ثبت مشخصات این رنج</button>` : ""}</div></div><div class="tree-scroll" tabindex="0"><ul class="subnet-tree">${treeBranch(safeFocus, depth)}</ul></div><p class="mode-note tree-note">برای رسیدن به /30 و /32 روی شاخهٔ موردنظر کلیک کنید. کادر درخت در هر دو جهت اسکرول می‌شود و کلیک روی /32 فرم همان IP را باز می‌کند.</p>`;
 }
 
-function applySheetLiveSearch(query, jump=false) {
-  const search=document.getElementById('sheetLiveSearch');
-  const status=document.getElementById('sheetSearchCount');
-  if(!search||!status)return;
-  const term=String(query||'').trim().toLocaleLowerCase();
-  const selected=parseCidr(state.sheetCidr);
-  const ip=/^(\\d{1,3}\\.){3}\\d{1,3}$/.test(term)?ipv4ToInt(term):null;
-  if(jump&&ip!==null&&selected&&contains(selected,ip)&&state.displayMode==='table') {
-    const required=Math.floor((ip-selected.start)/256)+1;
-    if(required>state.tableVisibleBlocks){
-      state.tableVisibleBlocks=required;
-      renderSheet();
-      const restored=document.getElementById('sheetLiveSearch');
-      if(restored){restored.value=query;applySheetLiveSearch(query,true);restored.focus();}
-      return;
-    }
-  }
-  const rows=[...page.querySelectorAll('.detail-block .vertical-subnet-table tbody tr')];
-  let hits=0,first=null;
-  for(const row of rows){
-    const match=!term||row.textContent.toLocaleLowerCase().includes(term);
-    row.hidden=Boolean(term)&&!match;
-    row.classList.toggle('sheet-search-hit',Boolean(term)&&match);
-    if(term&&match){hits++;first ||= row;}
-  }
-  status.textContent=!term?'برای جست‌وجو تایپ کنید':hits?`${hits} ردیف یافت شد`:'در جدول‌های نمایش‌داده‌شده نتیجه‌ای نیست';
-  if(jump&&first)first.scrollIntoView({block:'center'});
+function sheetSearchMatches(query) {
+ const term=String(query||'').trim().toLocaleLowerCase(),selected=parseCidr(state.sheetCidr);
+ if(!selected||!term)return [];
+ const results=[];
+ for(const host of state.data?.hosts||[]){
+  const ip=ipv4ToInt(host.ip);
+  if(!Number.isFinite(ip)||!contains(selected,ip))continue;
+  if([host.ip,host.name,host.description,host.type,host.hostname,host.mac].filter(Boolean).some(v=>String(v).toLocaleLowerCase().includes(term)))
+   results.push({ip:host.ip,label:host.name||host.ip,detail:host.ip});
+ }
+ for(const item of state.data?.prefixes||[]){
+  const info=prefixInfo(item);
+  if(!info||info.end<selected.start||info.start>selected.end)continue;
+  if([item.cidr,item.name,item.description,item.role].filter(Boolean).some(v=>String(v).toLocaleLowerCase().includes(term)))
+   results.push({ip:intToIpv4(Math.max(info.start,selected.start)),label:item.name||item.cidr,detail:item.cidr});
+ }
+ if(/^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(term)&&term.split('.').every(v=>Number(v)<=255)){
+  const ip=ipv4ToInt(term);
+  if(contains(selected,ip)&&!results.some(v=>v.ip===term))
+   results.unshift({ip:term,label:term,detail:'موقعیت IP در جدول'});
+ }
+ results.sort((a,b)=>Number(b.ip===term)-Number(a.ip===term)||a.ip.localeCompare(b.ip));
+ return results;
+}
+function focusSheetSearchMatch(match,query) {
+ const selected=parseCidr(state.sheetCidr),address=ipv4ToInt(match.ip);
+ if(!selected||!Number.isFinite(address)||!contains(selected,address))return;
+ const find=()=>page.querySelector('.map-ip-cell[data-ip="'+match.ip+'"], .ip-cell[data-ip="'+match.ip+'"]');
+ if(!find()){
+  state.sheetCidr=networkAt(address,24).cidr;
+  state.tableScopeCidr=null;
+  state.displayMode='table';
+  renderSheet();
+ }
+ const input=document.getElementById('sheetLiveSearch');
+ if(input)input.value=query;
+ page.querySelectorAll('.sheet-search-hit').forEach(node=>node.classList.remove('sheet-search-hit'));
+ const target=find();
+ if(target){target.classList.add('sheet-search-hit');target.scrollIntoView({block:'center'});}
+ const status=document.getElementById('sheetSearchCount');
+ if(status)status.textContent='موقعیت نتیجه: '+match.ip;
+ document.getElementById('sheetSearchMatches')?.replaceChildren();
+}
+function applySheetLiveSearch(query) {
+ const status=document.getElementById('sheetSearchCount'),results=document.getElementById('sheetSearchMatches');
+ if(!status||!results)return;
+ results.replaceChildren();
+ page.querySelectorAll('.sheet-search-hit').forEach(node=>node.classList.remove('sheet-search-hit'));
+ const term=String(query||'').trim();
+ if(!term){status.textContent='برای جست‌وجو تایپ کنید';return;}
+ const matches=sheetSearchMatches(term);
+ status.textContent=matches.length?matches.length+' نتیجه در محدوده انتخاب‌شده':'نتیجه‌ای در محدوده انتخاب‌شده پیدا نشد';
+ for(const item of matches.slice(0,40)){
+  const button=document.createElement('button');button.type='button';button.className='sheet-search-result';
+  const title=document.createElement('b');title.textContent=item.label;
+  const detail=document.createElement('small');detail.textContent=item.detail;
+  button.append(title,detail);
+  button.addEventListener('click',()=>focusSheetSearchMatch(item,term));
+  results.append(button);
+ }
+ if(matches.length>40){const note=document.createElement('small');note.textContent='۴۰ نتیجه نخست؛ برای محدودکردن نتایج بیشتر تایپ کنید.';results.append(note);}
 }
 
 function renderSheet() {
@@ -1121,10 +1155,10 @@ function renderSheet() {
   const usable = blockCount * 254;
   page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div><div class="sheet-context"><i></i><div><span>${contextIsExact ? "مشخصات همین رنج" : `رنج ثبت‌شدهٔ والد /${contextInfo.prefix}`}</span><b>${escapeHtml(contextTitle)}</b><small class="mono ltr">${escapeHtml(contextInfo.cidr)}</small><em>${escapeHtml(contextDescription)}</em></div></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
     <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span></div></section>
-    <div class="sheet-search-bar"><label for="sheetLiveSearch">جست‌وجو در جدول</label><input type="search" id="sheetLiveSearch" autocomplete="off" placeholder="IP، Hostname، نام Subnet…" aria-describedby="sheetSearchCount"><small id="sheetSearchCount" aria-live="polite">برای جست‌وجو تایپ کنید</small></div>
+    <div class="sheet-search-bar"><label for="sheetLiveSearch">جست‌وجو در جدول</label><input type="search" id="sheetLiveSearch" autocomplete="off" placeholder="IP، Hostname، نام Subnet…" aria-describedby="sheetSearchCount"><small id="sheetSearchCount" aria-live="polite">برای جست‌وجو تایپ کنید</small><div id="sheetSearchMatches" class="sheet-search-matches" aria-label="نتایج جست‌وجو"></div></div>
     <div class="detail-stack">${blocks}</div>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
-  $("sheetLiveSearch")?.addEventListener("input", (event) => applySheetLiveSearch(event.target.value,true));
+  $("sheetLiveSearch")?.addEventListener("input", (event) => applySheetLiveSearch(event.target.value));
   $("overviewBack").addEventListener("click", () => { state.view = "overview"; state.paint = false; renderOverview(); });
   $("prevSheet").addEventListener("click", () => { if (selectionIndex > 0) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex - 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
