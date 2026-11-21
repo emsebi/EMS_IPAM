@@ -75,3 +75,15 @@
 .lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{margin:10px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:650px){.lp-capacity-reference .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-height-solver .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:395px){.lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Path elevation inspection: highlighted map segment and matching profile cursor. */
+.lp-profile-overview{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 15px;margin:0 0 8px;font-size:.83rem;color:var(--lp-muted)}
+.lp-profile-overview>strong{font-size:.95rem;color:var(--text,#18364f)}
+.lp-path-alert{color:#bb3342;font-weight:700}
+.lp-path-clear{color:#188454;font-weight:700}
+.lp-inspect-readout{border:1px solid var(--lp-grid);border-radius:9px;margin:8px 0;padding:10px 12px;background:var(--soft,#f1f7fc);font-size:.86rem;line-height:1.7;overflow-wrap:anywhere;min-height:45px}
+.lp-inspect-readout[data-obstructed="true"]{background:#fff2f2;border-color:#d98b91;color:#a32332;font-weight:650}
+.lp-inspect-readout[data-obstructed="false"]{border-color:#9dcab7;color:#176846}
+.lp-chart svg [data-profile-hover-area]{touch-action:none;cursor:crosshair}
+.lp-chart svg [data-obstruction-index]{pointer-events:none}
+.lp-dot.obstruction{background:#d83b44}
