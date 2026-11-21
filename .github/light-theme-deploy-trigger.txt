@@ -1,1 +1,2 @@
 2026-11-21 user-authorized improvement: apply high-contrast light theme on EMS_IPAM lab VM. Four project CI jobs passed https://github.com/emsebi/EMS_IPAM/actions/runs/44883526889 on exact CSS / index / browser test. Deploy only two public files; verify full database backup, RADIUS unchanged, health and rollback. Do not touch network devices or credentials.
+Retry after verified healthy rollback (read-only probe 44883901065). Add explicit checks for container CSS, HTTP response, browser version and RADIUS; preserves prior DB/backups.
