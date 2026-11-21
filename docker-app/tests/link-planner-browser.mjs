@@ -106,6 +106,13 @@ try{
  await page.locator('[data-line="los"]').waitFor({state:'attached'});
  await page.locator('[data-line="ground"]').waitFor({state:'attached'});
  await page.locator('[data-line="fresnel"]').waitFor({state:'attached'});
+ await page.locator('.lp-terrain-profile-header h4').waitFor({state:'visible'});
+ assert.ok((await page.locator('.lp-terrain-metrics').innerText()).includes('Terrain relief'));
+ const profileMetrics=await page.locator('.lp-terrain-metrics').innerText();
+ assert.ok(profileMetrics.includes('100.0'),'Flat SRTM fixture should show ground elevation 100 m');
+ await page.locator('.lp-chart svg').hover({position:{x:200,y:110}});
+ assert.ok((await page.locator('.lp-terrain-probe').innerText()).includes('Ground 100.0 m'));
+
 
  // The engineer can fix a 20 m A tower and solve the minimum B tower.
  await page.locator('input[data-path="siteA.tower"]').fill('20');
