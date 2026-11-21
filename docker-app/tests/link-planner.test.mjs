@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/link-planner/backend/index.mjs';
-import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower} from '../../modules/link-planner/public/model.mjs';
+import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower,geoProject,geoUnproject} from '../../modules/link-planner/public/model.mjs';
 
 import {RADIO_BRANDS,RADIO_PROFILES,radioById,protocolOverlap,estimateRadioCapacity} from '../../modules/link-planner/public/radio-profiles.mjs';
 
@@ -31,6 +31,23 @@ test('WGS84 distance and location validation preserve missing instead of pretend
   assert.equal(points.length,81);assert.ok(Math.abs(points[40].longitude)>179.9);
   assert.ok(fitGeoPoints(points,900,540).zoom>3);
 });
+test('map projection round-trip preserves longitude in both hemispheres',()=>{
+ for (const point of [
+  {latitude:35.783831,longitude:50.981214},
+  {latitude:35.783831,longitude:-129.018786},
+  {latitude:0,longitude:0},
+  {latitude:-33.86,longitude:151.21},
+  {latitude:35.6,longitude:51.3},
+ ]) {
+  for (const zoom of [2,8,14]) {
+   const position=geoProject(point.latitude,point.longitude,zoom);
+   const recovered=geoUnproject(position.x,position.y,zoom);
+   assert.ok(Math.abs(recovered.latitude-point.latitude)<1e-7,JSON.stringify({point,recovered,zoom}));
+   assert.ok(Math.abs(recovered.longitude-point.longitude)<1e-7,JSON.stringify({point,recovered,zoom}));
+  }
+ }
+});
+
 test('budget formula FSPL, EIRP, RX and margin are mathematical estimates not throughput',()=>{
   const p=normalizeInput({a:{latitude:0,longitude:0},b:{latitude:0,longitude:0.089932},frequencyGHz:5.8,txDbm:20,gainA:27,gainB:27,lossA:1,lossB:1,otherLoss:0,sensitivityDbm:-80});
   const result=radioBudget(p);
