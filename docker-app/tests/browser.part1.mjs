@@ -61,22 +61,24 @@ try {
   check('real login and application bootstrap');
   // Per-prefix inheritance is persisted, opt-out stays false after reload,
   // and migration defaults existing prefixes to the earlier inherited behavior.
+  const colorSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Color inheritance isolated test',cidr:'198.18.52.0/24'},201);
   const parentPref=await api('/api/prefixes','POST',{
-    spaceId:'test-space',cidr:'192.0.2.128/26',name:'Color propagation fixture',
+    spaceId:colorSpace.id,cidr:'198.18.52.128/26',name:'Color propagation fixture',
     color:'#334455',inheritColorToChildren:false
   });
-  let prefData=await api('/api/spaces/test-space/data');
+  let prefData=await api('/api/spaces/'+colorSpace.id+'/data');
   assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,false);
   await api('/api/prefixes','POST',{
-    id:parentPref.id,spaceId:'test-space',cidr:'192.0.2.128/26',name:'Color propagation fixture',
+    id:parentPref.id,spaceId:colorSpace.id,cidr:'198.18.52.128/26',name:'Color propagation fixture',
     color:'#334455',inheritColorToChildren:true
   });
-  prefData=await api('/api/spaces/test-space/data');
+  prefData=await api('/api/spaces/'+colorSpace.id+'/data');
   assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,true);
-  await page.goto('/#/ipam/test-space/192.0.2.0%2F24');
+  await page.goto('/#/ipam/'+colorSpace.id+'/198.18.52.0%2F24');
   await page.locator('#sheetSelect').waitFor({state:'visible'});
   assert.equal(await page.locator('#prefixInheritColorToChildren').count(),1);
   await api('/api/prefixes/'+parentPref.id,'DELETE');
+  await api('/api/spaces/'+colorSpace.id,'DELETE');
   check('per-subnet color inheritance persists and checkbox exists in subnet editor');
 
   // The header search is live, not a submit form. Ctrl+K disappears while typing.
