@@ -89,7 +89,7 @@ jobs:
             sleep 2
           done
           test "$healthy" -eq 1 || { echo "::error::Link Planner not listed in app health."; exit 1; }
-          grep -q '0.2.2-lab.1' "$DEPLOY/modules/link-planner/module.json"
+          grep -q '0.2.2-lab.2' "$DEPLOY/modules/link-planner/module.json"
           grep -Fq 'terrainElevationSummary' "$DEPLOY/modules/link-planner/public/model.mjs"
           grep -Fq 'lp-terrain-profile-header' "$DEPLOY/modules/link-planner/public/index.mjs"
           python3 "$DEPLOY/scripts/installed-modules-check.py"
