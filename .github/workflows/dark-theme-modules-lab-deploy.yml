@@ -49,6 +49,7 @@ jobs:
             test -f "$DEPLOY/modules/$mod/public/style.css"
             test -f "$SRC/modules/$mod/public/style.css"
             cp -a "$DEPLOY/modules/$mod/public/style.css" "$BACK/$mod.css"
+            cp -a "$DEPLOY/modules/$mod/module.json" "$BACK/$mod.json"
           done
           COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml")
           UPDATED=0
@@ -58,6 +59,7 @@ jobs:
               echo "::warning::CSS validation failed, restoring original module styles."
               for mod in radio network-map reports; do
                 cp -a "$BACK/$mod.css" "$DEPLOY/modules/$mod/public/style.css"
+                cp -a "$BACK/$mod.json" "$DEPLOY/modules/$mod/module.json"
               done
               "${COMPOSE[@]}" restart app || true
             fi
@@ -67,6 +69,7 @@ jobs:
           UPDATED=1
           for mod in radio network-map reports; do
             install -m 0644 "$SRC/modules/$mod/public/style.css" "$DEPLOY/modules/$mod/public/style.css"
+            install -m 0644 "$SRC/modules/$mod/module.json" "$DEPLOY/modules/$mod/module.json"
           done
           "${COMPOSE[@]}" restart app
           ready=0
