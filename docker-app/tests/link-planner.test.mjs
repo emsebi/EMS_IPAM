@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/link-planner/backend/index.mjs';
-import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower} from '../../modules/link-planner/public/model.mjs';
+import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower,geoProject,geoUnproject} from '../../modules/link-planner/public/model.mjs';
 
 import {RADIO_BRANDS,RADIO_PROFILES,radioById,protocolOverlap,estimateRadioCapacity} from '../../modules/link-planner/public/radio-profiles.mjs';
 
@@ -31,6 +31,31 @@ test('WGS84 distance and location validation preserve missing instead of pretend
   assert.equal(points.length,81);assert.ok(Math.abs(points[40].longitude)>179.9);
   assert.ok(fitGeoPoints(points,900,540).zoom>3);
 });
+test('Web Mercator inverse roundtrip does not shift longitude by 180 degrees when dragging',()=>{
+  // Regression for the 403-map follow-up: a click-and-drag previously jumped across hemispheres.
+  const points=[
+    {latitude:35.700001,longitude:51.399991},
+    {latitude:0,longitude:0},
+    {latitude:-23.2,longitude:43.1},
+    {latitude:45.15,longitude:-75.5},
+    {latitude:0,longitude:179.2},
+    {latitude:0,longitude:-179.2}
+  ];
+  for(const zoom of [2,5,11,17]){
+    for(const location of points){
+      const pixel=geoProject(location.latitude,location.longitude,zoom);
+      const inverse=geoUnproject(pixel.x,pixel.y,zoom);
+      assert.ok(Math.abs(inverse.latitude-location.latitude)<1e-7,JSON.stringify({zoom,location,inverse}));
+      assert.ok(Math.abs(inverse.longitude-location.longitude)<1e-7,JSON.stringify({zoom,location,inverse}));
+    }
+  }
+  const start={latitude:35.7,longitude:51.4},zoom=9,px=geoProject(start.latitude,start.longitude,zoom);
+  const dragged=geoUnproject(px.x-100,px.y,zoom);
+  const expectedShift=-100*360/(256*2**zoom);
+  assert.ok(Math.abs(dragged.longitude-(start.longitude+expectedShift))<1e-7);
+  assert.ok(Math.abs(dragged.latitude-start.latitude)<1e-7);
+});
+
 test('budget formula FSPL, EIRP, RX and margin are mathematical estimates not throughput',()=>{
   const p=normalizeInput({a:{latitude:0,longitude:0},b:{latitude:0,longitude:0.089932},frequencyGHz:5.8,txDbm:20,gainA:27,gainB:27,lossA:1,lossB:1,otherLoss:0,sensitivityDbm:-80});
   const result=radioBudget(p);
