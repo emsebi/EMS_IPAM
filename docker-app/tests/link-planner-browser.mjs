@@ -124,7 +124,7 @@ try{
 
  // Real interaction: with SRTM terrain loaded, map line displays green pass and red obstruction
  // segments. Hover the highest terrain in the chart -> map probe at that identical route index.
- await page.getByRole('button',{name:/Fit A \\+ B|نمایش هر دو نقطه/}).click();
+ await page.getByRole('button',{name:/Fit A \+ B|نمایش هر دو نقطه/}).click();
  await mapFrame.locator('line[data-route-segment="40"]').waitFor({state:'attached'});
  assert.equal(await mapFrame.locator('line[data-route-segment]').count(),80,'Route should use 81 geodesic SRTM samples.');
  assert.ok(await mapFrame.locator('line[data-obstructed="true"]').count()>0,'Raised ridge must be shown as red potentially obstructed path.');
