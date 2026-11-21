@@ -65,6 +65,40 @@ try {
   await page.locator('#deviceTypeForm [type=submit]').click();
   await page.locator('#deviceTypesList').getByText('Test Device', { exact: true }).waitFor();
   check('standalone Device Types creation');
+  // Screenshot/user-feedback regression: compact Device Type rows must be inline,
+  // desktop list multi-column, mobile single-column, with all actions on the same line.
+  const demoTypeIds=[];
+  for(let n=1;n<=5;n++){
+    const created=await api('/api/device-types','POST',{name:'Layout Preview '+n,color:'#3157d5'},201);
+    demoTypeIds.push(created.item.id);
+  }
+  await page.locator('#deviceTypesButton').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#deviceTypesList .device-type-item').length>=6);
+  const desktopLayout=await page.locator('#deviceTypesList').evaluate(grid=>{
+    const rows=[...grid.querySelectorAll('.device-type-item')],columns=getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+    const positions=rows.map(item=>({x:Math.round(item.getBoundingClientRect().x),y:Math.round(item.getBoundingClientRect().y)}));
+    const first=rows[0],name=first.querySelector('.device-type-info b').getBoundingClientRect(),actions=first.querySelector('.device-type-actions').getBoundingClientRect();
+    return {columns,positions,firstRowCenterDelta:Math.abs((name.top+name.bottom)/2-(actions.top+actions.bottom)/2),
+      actionsWrap:getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
+      firstHeight:first.getBoundingClientRect().height};
+  });
+  assert.ok(desktopLayout.columns>=2,'Device Types desktop must have multiple columns: '+JSON.stringify(desktopLayout));
+  assert.ok(new Set(desktopLayout.positions.map(p=>p.x)).size>=2,'Cards should occupy multiple horizontal columns');
+  assert.ok(desktopLayout.firstRowCenterDelta<15,'Name and Edit/Delete must appear on the same line');
+  assert.equal(desktopLayout.actionsWrap,'nowrap');
+  assert.ok(desktopLayout.firstHeight<=64,'Device Type rows should be compact: '+desktopLayout.firstHeight);
+  await page.screenshot({path:path.join(outputDir,'device-types-compact-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  const mobileLayout=await page.locator('#deviceTypesList').evaluate(grid=>({
+    columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    cards:[...grid.querySelectorAll('.device-type-item')].map(el=>({width:el.getBoundingClientRect().width,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}))
+  }));
+  assert.equal(mobileLayout.columns,1,'Device Types mobile should be a single column');
+  assert.ok(mobileLayout.cards.every(c=>c.scrollWidth<=c.clientWidth+2),'Device Type action buttons must not overflow mobile cards');
+  await page.screenshot({path:path.join(outputDir,'device-types-compact-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:980});
+  for(const id of demoTypeIds)await api('/api/device-types/'+encodeURIComponent(id),'DELETE');
+  check('Device Types compact desktop grid, single-row actions and mobile responsiveness');
   await page.locator('#inventoryButton').click();
   await page.locator('#newInventoryDevice').click();
   await page.locator('#inventoryCreateSpace').selectOption('test-space');
