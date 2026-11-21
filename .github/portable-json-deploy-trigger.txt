@@ -1,0 +1,1 @@
+Deploy verified main Portable JSON import entry buttons to authorized EMS-IPAM lab VM (10.1.1.5:8888). UI-only, preserve DB, RADIUS and module data; health/rollback required.
