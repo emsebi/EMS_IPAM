@@ -1,4 +1,4 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower,interpolateGreatCircle} from './model.mjs?v=0.2.1-lab.1';
 import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.1-lab.1';
 
 const INITIAL=()=>({
@@ -13,6 +13,7 @@ export function createUi(ctx){
  const {state,page,request,toast}=ctx;
  const L=(english,persian)=>state.language==='fa'?persian:english;
  let input=INITIAL(),active='a',profile=null,profileKey='',scenarioName='',scenarios=[],busy=false,notice='',profileError='';
+ let inspectedIndex=null,inspectChart=()=>{};
  const ID='link-planner';
  const current=()=>state.view==='module'&&state.currentModuleId===ID;
  const doc=()=>document;
@@ -127,9 +128,27 @@ export function createUi(ctx){
    if(!frame)return;
    const a=input.a,b=input.b;
    const valid=p=>p&&p.latitude!==''&&p.longitude!==''&&Number.isFinite(Number(p.latitude))&&Number.isFinite(Number(p.longitude))&&Math.abs(Number(p.latitude))<=90&&Math.abs(Number(p.longitude))<=180;
+   const plan=validPlan().value;
+   const complete=plan&&profile&&profileKey===coordKey(plan);
+   const analysis=complete?assessTerrain(plan,profile.elevations):null;
+   const coords=analysis?.samples?interpolateGreatCircle(plan.a,plan.b,analysis.samples.length):[];
+   const path=analysis?.samples?.map((sample,i)=>({
+     latitude:coords[i].latitude,longitude:coords[i].longitude,
+     distanceKm:sample.distanceKm,groundM:sample.groundM,
+     lineM:sample.lineM,requiredM:sample.requiredM,clearanceM:sample.clearanceM
+   }))||[];
    frame.contentWindow?.postMessage({type:'ems:planner:data',
      a:valid(a)?{latitude:Number(a.latitude),longitude:Number(a.longitude)}:null,
-     b:valid(b)?{latitude:Number(b.latitude),longitude:Number(b.longitude)}:null,active,fit},location.origin);
+     b:valid(b)?{latitude:Number(b.latitude),longitude:Number(b.longitude)}:null,
+     active,fit,path},location.origin);
+ }
+ function inspectSample(index,fromMap=false){
+   const accepted=Number.isInteger(index)&&index>=0&&index<81?index:null;
+   inspectedIndex=accepted;
+   inspectChart(accepted);
+   if(!fromMap)doc().getElementById('lpMap')?.contentWindow?.postMessage({
+     type:'ems:planner:inspect',index:accepted
+   },location.origin);
  }
  function focusSite(which){
    const p=input[which];
@@ -267,11 +286,11 @@ export function createUi(ctx){
      if(!response?.ok||!Array.isArray(response.elevations))throw new Error('Invalid terrain response');
      profile=response;profileKey=coordKey(plan);
      status.textContent=response.missing?L('Some elevation samples are missing: clearance is unknown.','برخی نقاط ارتفاعی موجود نیستند؛ نتیجه نامشخص است.'):L('SRTM90 profile loaded.','پروفایل SRTM90 دریافت شد.');
-     results();
+     results();sendMap();
    }catch(error){
      profile=null;profileKey='';
      profileError=error.message;status.textContent=L('Terrain unavailable: ','پروفایل در دسترس نیست: ')+error.message;
-     results();
+     results();sendMap();
    }finally{busy=false;if(button?.isConnected)button.disabled=false;}
  }
  async function refreshScenarios(){
@@ -405,6 +424,7 @@ export function createUi(ctx){
      const d=event.data||{};
      if(d.type==='ems:planner:ready')sendMap(true);
      if(d.type==='ems:planner:select')activeButton(d.which);
+     if(d.type==='ems:planner:inspect-changed')inspectSample(d.index,true);
      if(d.type==='ems:planner:pick'){
        if(!['a','b'].includes(d.which)||!Number.isFinite(d.latitude)||!Number.isFinite(d.longitude)||Math.abs(d.latitude)>90||Math.abs(d.longitude)>180)return;
        input[d.which]={latitude:d.latitude,longitude:d.longitude};
@@ -412,6 +432,7 @@ export function createUi(ctx){
        for(const f of fields)if(f.dataset.path===d.which+'.latitude')f.value=d.latitude;
        else if(f.dataset.path===d.which+'.longitude')f.value=d.longitude;
        sync();
+       if(d.which==='a' && (input.b.latitude===''||input.b.longitude===''))activeButton('b');
      }
    };
    sendMap();
