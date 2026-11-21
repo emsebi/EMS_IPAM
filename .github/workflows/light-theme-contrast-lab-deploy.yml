@@ -22,8 +22,9 @@ jobs:
       - name: Checkout tested UI source into isolated runner directory
         uses: actions/checkout@v4
         with:
-          path: light-theme-source
-          clean: false
+          path: light-contrast-source-v2
+          ref: ${{ github.sha }}
+          clean: true
       - name: UI-only app image deployment, with private backup and automatic rollback
         shell: bash
         run: |
@@ -39,6 +40,11 @@ jobs:
           IMAGE=ems-ipam-base:1.7.2
           SAVE_TAG="ems-ipam-ui-rollback:$GITHUB_RUN_ID"
           STAGED_TAG="ems-ipam-light-staged:$GITHUB_RUN_ID"
+          CHECKED_OUT_HEAD="$(git -C "$SRC" rev-parse --verify HEAD)"
+          test "$CHECKED_OUT_HEAD" = "$GITHUB_SHA" || {
+            echo "::error::Refusing stale checkout; expected $GITHUB_SHA got $CHECKED_OUT_HEAD"
+            exit 1
+          }
           test -f "$SRC/docker-app/public/styles.css"
           test -f "$SRC/docker-app/public/index.html"
           test -f "$DEPLOY/compose.yml"
