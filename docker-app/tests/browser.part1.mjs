@@ -70,7 +70,7 @@ try {
   const demoTypeIds=[];
   for(let n=1;n<=5;n++){
     const created=await api('/api/device-types','POST',{name:'Layout Preview '+n,color:'#3157d5'},201);
-    demoTypeIds.push(created.item.id);
+    demoTypeIds.push(created.id);
   }
   await page.locator('#deviceTypesButton').click();
   await page.waitForFunction(()=>document.querySelectorAll('#deviceTypesList .device-type-item').length>=6);
