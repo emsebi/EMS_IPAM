@@ -1650,7 +1650,7 @@ async function api(req, res, url, user) {
     const requestedId = cleanText(body.id, 80);
     const id = requestedId || crypto.randomUUID();
     const values = [
-      id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
+      id, body.spaceId, cidr, cleanText(body.name, 160),
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
       cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), cleanText(body.description, 2000), user.id, body.inheritColor === undefined ? true : body.inheritColor === true,
     ];
