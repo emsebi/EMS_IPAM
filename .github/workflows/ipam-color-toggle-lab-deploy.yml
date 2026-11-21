@@ -148,7 +148,7 @@ jobs:
           docker exec "$APP" sh -c 'grep -q "function effectiveSubnetColor" /app/public/app.js'
           docker exec "$APP" sh -c 'grep -q "prefixInheritColorToChildren" /app/public/index.html'
           docker exec "$APP" sh -c 'grep -q "inherit_color_to_children" /app/server/main.mjs'
-          docker exec "$DB" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT column_name FROM information_schema.columns WHERE table_name=\x27prefixes\x27 AND column_name=\x27inherit_color_to_children\x27"' | grep -qx inherit_color_to_children
+          docker exec "$DB" sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\\d prefixes"' | grep -q inherit_color_to_children
           test "$(curl -fsS --max-time 6 http://127.0.0.1:8888/app.js | grep -c "function applySheetLiveSearch")" -gt 0
           python3 "$DEPLOY/scripts/installed-modules-check.py"
           python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BACK/radius-before.json"
