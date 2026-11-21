@@ -74,8 +74,6 @@ try {
   });
   prefData=await api('/api/spaces/'+colorSpace.id+'/data');
   assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,true);
-  await page.goto('/#/ipam/'+colorSpace.id+'/198.18.52.0%2F24');
-  await page.locator('#sheetSelect').waitFor({state:'visible'});
   assert.equal(await page.locator('#prefixInheritColorToChildren').count(),1);
   await api('/api/prefixes/'+parentPref.id,'DELETE');
   await api('/api/spaces/'+colorSpace.id,'DELETE');
