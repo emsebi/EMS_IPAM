@@ -1,3 +1,29 @@
+# Integrate Device Types readiness fix with current search/theme work — 2026-11-21 UTC
+
+PR #78 original head `b5bed9e28e7dbedeefa3ac1021ff2858cc6a9b0f` passed both [PR CI 44906660455](https://github.com/emsebi/EMS_IPAM/actions/runs/44906660455) and [push CI 44906652687](https://github.com/emsebi/EMS_IPAM/actions/runs/44906652687). Browser job 136853605742 passed 43 real HTTP/browser scenarios at 13:01:36 UTC, including the held real Device Types refresh and desktop/mobile layout assertions. Test, Docker and native PostgreSQL gates succeeded. This does not retroactively turn merge CI 44901729931 into success.
+
+Fresh main `7cc2f5a23c8b96871c41d5c8f435ad89e2d2b7dd` includes merged Link Planner #79/#80, global live-search #81 and module dark-theme #82 plus generated screenshots. Those PRs are closed; only #78 and inactive draft #12 remain open. Bring main into #78 without replacing any application/module/workflow/screenshot bytes. The browser test merges cleanly, retaining the new global-search/Ctrl+K assertions and the Device Types atomic layout snapshot. Resolve only the SHA256SUMS conflict by using the current main manifest and recomputing the changed test/checkpoint hashes.
+
+Local checks: Node syntax, listed-source checksums and whitespace against fresh main. New integration CI IDs/status are recorded in #78. Next: require all gates on the integrated head, especially both the global-search/Ctrl+K case and delayed Device Types desktop/mobile case (44 browser/API scenarios expected). Re-read both refs before expected-SHA merge; preserve intervening main changes. Older candidate success is not evidence for this new integrated tree. If pending, follow the recorded run IDs next turn rather than waiting indefinitely.
+
+After P0 integration, resume the recorded Company hierarchy/access-grant cleanup preflight and preservation tests before an installed-loopback XLSX runner. No VM write/deployment, application/schema change, device discovery or router push. Radio operator acceptance, installed XLSX acceptance and real MikroTik Full/Read login remain open.
+
+---
+
+# P0 browser readiness repair after PR #65 merge — 2026-11-21 UTC
+
+PR #65 merged with expected head at `1ac9fc9fee1a55bdb3409198b9d3df8033e16a6e`, after both candidate CIs passed all four gates and native PostgreSQL job 136825476390 passed all 28 HTTP tests with no failures/skips. Its merge CI [44901729931](https://github.com/emsebi/EMS_IPAM/actions/runs/44901729931) subsequently **failed** in browser job 136838868126 at 12:00:58 UTC: Device Types desktop measured one column and every row at x/y/height zero. Ordinary tests, Docker and PostgreSQL succeeded. Do not describe that merge run as successful.
+
+New main `15028b4dc443a7e372192187bf43b807f8c8bd11` contains Link Planner longitude PR #77; [CI 44906244285](https://github.com/emsebi/EMS_IPAM/actions/runs/44906244285) passed all gates, including browser. Current base `31297c49375d0a808db1641423356ebdae9bda39` adds only seven generated screenshots. Preserve the active Link Planner work and all deployed UI changes.
+
+This bounded P0 step repairs the Device Types browser readiness check. The previous count >= 6 could accept the pre-refresh list; locator evaluation could then measure a grid detached by asynchronous page replacement (consistent with the observed zero geometry). The replacement requires all newly created fixture IDs and positive card dimensions, and reads the current connected DOM and its layout in one browser task. Desktop/mobile column counts, row alignment, wrapping, compact height and overflow assertions remain unchanged. A held real GET response proves the pre-refresh list is rejected before the response is released; no API data is fabricated and no fixed sleep/retry hides a failed layout assertion. Response interception and DOM readiness are bounded by timeouts.
+
+Local checks: Node syntax, listed-source checksum verification and diff whitespace. Full browser behavior requires this candidate's CI; run IDs/status are in the PR body. Next: inspect the held-response readiness case and the complete browser gate plus the other gates before expected-SHA merge with fresh main. Do not repeat the old 44901729931 success claim or treat newer main success as proof of this patch. If CI remains pending, follow the recorded runs next turn.
+
+After this P0 gate is green, resume the already recorded Company/access-grant cleanup preflight (companies.parent_company_id, user_company_access.company_id, user_space_access.space_id), with exact-row/journal preservation and no DELETE on refusal; then module references and private preservation evidence before any installed-loopback XLSX runner. That work was deferred in this turn to address the observed CI failure. No VM write/deployment, application/schema change, device discovery, router push or real-device acceptance. Installed XLSX, Radio operator acceptance and actual MikroTik login remain open.
+
+---
+
 # PR #65 integrated with current IPAM/Radio main — 2026-11-21 UTC
 
 Fresh main is `e7f877281e8361ad20225255a58f257cb30927eb`, preserving the IPAM live-search/inherited-color and Radio compact-UI merges (#75/#74), Link Planner, all generated screenshots and their workflows. PR #12 remains draft/inactive. Only the fixture helper/tests, this checkpoint and source manifest differ from that main; no active UI/module files are edited or deployed.
