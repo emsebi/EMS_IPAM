@@ -159,18 +159,29 @@ export function createUi(ctx){
  }
  function chart(analysis){
    const box=E('div',{class:'lp-chart'});
+   inspectChart=()=>{};
    if(!analysis||!Array.isArray(analysis.samples)){
      box.append(text(L('Terrain profile unavailable. Load valid SRTM elevation data to assess clearance.','پروفایل زمین در دسترس نیست. ابتدا ارتفاعات معتبر SRTM را دریافت کنید.'),'lp-muted'));
      return box;
    }
-   const p=analysis.samples,bounds=profileBounds(p);
-   const x=i=>52+i/(p.length-1)*850;
+   const p=analysis.samples,bounds=profileBounds(p),left=52,right=902;
+   const x=i=>left+i/(p.length-1)*(right-left);
    const y=m=>285-(m-bounds.min)/(bounds.max-bounds.min)*238;
-   const svg=E('svg',{viewBox:'0 0 960 320',role:'img','aria-label':L('Terrain, line of sight and Fresnel clearance profile','پروفایل ارتفاع زمین، دید مستقیم و فرنل')});
+   const peaks=p.reduce((best,s,i)=>s.groundM>p[best].groundM?i:best,0);
+   const blocked=p.filter(s=>s.clearanceM<0).length;
+   const header=E('div',{class:'lp-profile-overview'},
+     E('strong',{text:L('Elevation along the path','پستی و بلندی مسیر')}),
+     E('span',{text:L('Highest sampled terrain: ','بالاترین ارتفاع زمین: ')+
+       number(p[peaks].groundM,1)+' m · '+number(p[peaks].distanceKm,2)+' km'}),
+     E('span',{class:blocked?'lp-path-alert':'lp-path-clear',text:blocked?
+       L('Potentially obstructed samples: ','نمونه‌های دارای مانع احتمالی: ')+blocked:
+       L('No sampled obstruction (not a field survey)','در نمونه‌ها مانعی دیده نشد (جایگزین بررسی میدانی نیست)')}));
+   const svg=E('svg',{id:'lpProfileSvg',viewBox:'0 0 960 320',role:'img',
+     'aria-label':L('Interactive elevation profile: green ground, blue LOS, orange Fresnel clearance, red possible obstruction','پروفایل تعاملی ارتفاع: سبز زمین، آبی خط دید، نارنجی فرنل و قرمز مانع احتمالی')});
    const pathValues=key=>p.map((s,i)=>(i===0?'M':'L')+x(i).toFixed(2)+' '+y(s[key]).toFixed(2)).join(' ');
    const ground=pathValues('groundM')+' L '+x(p.length-1)+' 292 L '+x(0)+' 292 Z';
-   const add=(tag,attrs)=>svg.append(E(tag,attrs));
-   for(const [pos,label] of [[0,'0'],[.5,number(bounds.min+(bounds.max-bounds.min)*.5,0)],[1,number(bounds.max,0)]]){
+   const add=(tag,attrs)=>{const element=E(tag,attrs);svg.append(element);return element;};
+   for(const [pos,label] of [[0,number(bounds.min,0)],[.5,number(bounds.min+(bounds.max-bounds.min)*.5,0)],[1,number(bounds.max,0)]]){
      const yy=285-pos*238;
      add('line',{x1:50,y1:yy,x2:907,y2:yy,stroke:'var(--lp-grid,#dbe5ee)','stroke-width':1});
      add('text',{x:4,y:yy+4,fill:'var(--lp-muted,#677b8e)','font-size':12,text:label});
@@ -179,12 +190,62 @@ export function createUi(ctx){
    add('path',{d:pathValues('groundM'),fill:'none',stroke:'#498e66','stroke-width':2.5,'data-line':'ground'});
    add('path',{d:pathValues('requiredM'),fill:'none',stroke:'#ef9a43','stroke-width':2,'stroke-dasharray':'6 5','data-line':'fresnel'});
    add('path',{d:pathValues('lineM'),fill:'none',stroke:'#2469bb','stroke-width':2.5,'data-line':'los'});
+   for(let i=0;i<p.length;i++)if(p[i].clearanceM<0){
+     add('circle',{cx:x(i),cy:y(p[i].requiredM),r:3,fill:'#d83b44',
+       'data-obstruction-index':i,'aria-label':'Possible obstructed sample '+i});
+   }
+   add('circle',{cx:x(peaks),cy:y(p[peaks].groundM),r:5,fill:'#226447',stroke:'white','stroke-width':1.8,
+     'data-highest-point':peaks});
    add('text',{x:50,y:312,fill:'var(--lp-muted,#677b8e)','font-size':12,text:'0 km'});
    add('text',{x:838,y:312,fill:'var(--lp-muted,#677b8e)','font-size':12,text:number(p.at(-1).distanceKm,2)+' km'});
-   box.append(svg,E('div',{class:'lp-chart-legend'},
+   const marker=add('g',{'data-profile-cursor':'true'});
+   marker.style.display='none';
+   const vertical=E('line',{x1:0,y1:38,x2:0,y2:285,stroke:'#25374b','stroke-width':1.6,'stroke-dasharray':'5 4'});
+   const groundDot=E('circle',{cx:0,cy:0,r:5,fill:'#498e66',stroke:'#fff','stroke-width':2});
+   const losDot=E('circle',{cx:0,cy:0,r:5,fill:'#2469bb',stroke:'#fff','stroke-width':2});
+   marker.append(vertical,groundDot,losDot);
+   const hit=add('rect',{x:50,y:35,width:854,height:260,fill:'transparent','data-profile-hover-area':'true'});
+   hit.style.cursor='crosshair';
+   const readout=E('div',{id:'lpInspectReadout',class:'lp-inspect-readout',
+     role:'status',text:L('Move the pointer along this elevation profile or the map link to inspect a specific point.','موس را روی نمودار ارتفاع یا خط مسیر روی نقشه حرکت دهید تا ارتفاع و مانع هر نقطه را ببینید.')});
+   const inspect=index=>{
+     const ok=Number.isInteger(index)&&index>=0&&index<p.length;
+     marker.style.display=ok?'':'none';
+     if(!ok){
+       readout.removeAttribute('data-obstructed');
+       readout.textContent=L('Move the pointer along this elevation profile or the map link to inspect a specific point.','موس را روی نمودار ارتفاع یا خط مسیر روی نقشه حرکت دهید تا ارتفاع و مانع هر نقطه را ببینید.');
+       return;
+     }
+     const sample=p[index],xx=x(index),obstructed=sample.clearanceM<0;
+     vertical.setAttribute('x1',xx);vertical.setAttribute('x2',xx);
+     groundDot.setAttribute('cx',xx);groundDot.setAttribute('cy',y(sample.groundM));
+     losDot.setAttribute('cx',xx);losDot.setAttribute('cy',y(sample.lineM));
+     readout.dataset.obstructed=String(obstructed);
+     readout.textContent=(obstructed?L('Potential obstruction','مانع احتمالی'):L('Clear at sampled point','در نمونه مسیر آزاد'))+
+       ' · '+L('From A','فاصله از A')+' '+number(sample.distanceKm,2)+' km'+
+       ' · '+L('Terrain','ارتفاع زمین')+' '+number(sample.groundM,1)+' m'+
+       ' · LOS '+number(sample.lineM,1)+' m'+
+       ' · '+L('Fresnel boundary','مرز فرنل')+' '+number(sample.requiredM,1)+' m'+
+       ' · '+L('Clearance','فاصله آزاد')+' '+number(sample.clearanceM,1)+' m';
+   };
+   hit.addEventListener('pointermove',event=>{
+     const rect=svg.getBoundingClientRect();
+     const scaledX=(event.clientX-rect.left)*960/rect.width;
+     inspectSample(Math.max(0,Math.min(p.length-1,Math.round((scaledX-left)/(right-left)*(p.length-1)))));
+   });
+   hit.addEventListener('pointerdown',event=>{
+     const rect=svg.getBoundingClientRect();
+     const scaledX=(event.clientX-rect.left)*960/rect.width;
+     inspectSample(Math.max(0,Math.min(p.length-1,Math.round((scaledX-left)/(right-left)*(p.length-1)))));
+   });
+   svg.addEventListener('pointerleave',()=>inspectSample(null));
+   box.append(header,svg,readout,E('div',{class:'lp-chart-legend'},
      E('span',{},E('b',{class:'lp-dot terrain'}),L('Ground','زمین')),
      E('span',{},E('b',{class:'lp-dot los'}),'LOS'),
-     E('span',{},E('b',{class:'lp-dot fresnel'}),L('Terrain + curvature + Fresnel clearance','زمین + انحنای زمین + فرنل'))));
+     E('span',{},E('b',{class:'lp-dot fresnel'}),L('Terrain + curvature + Fresnel clearance','زمین + انحنای زمین + فرنل')),
+     E('span',{},E('b',{class:'lp-dot obstruction'}),L('Possible obstruction','مانع احتمالی'))));
+   inspectChart=inspect;
+   inspect(inspectedIndex);
    return box;
  }
  function results(){
