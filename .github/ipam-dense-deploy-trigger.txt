@@ -1,0 +1,2 @@
+User-requested VM UI preview: compact /24 vertical table (34px), graphical grid (43px), /16 consistency, compact Device Types, aligned MAC/IP/Device headings. All four CI gates passed run 44879692738 on exact UI code. Perform app-image-only update with full DB backup, RADIUS fingerprint and rollback. Leave other modules' source unchanged.
+Retry after benign pre-deploy stop: original container image ID was pruned; validate live source hashes and build private old-image rollback before altering any UI files. GitHub CI 44879692738 PASS.
