@@ -65,7 +65,28 @@ jobs:
           cp -a "$DEPLOY/docker-app/public/index.html" "$BACK/index.html"
           cp -a "$DEPLOY/modules/ipam" "$BACK/ipam"
           cp -a "$DEPLOY/modules/network-access" "$BACK/network-access"
-          docker image tag "$OLD_IMAGE_ID" "$SAVE_TAG"
+          if docker image inspect "$OLD_IMAGE_ID" >/dev/null 2>&1; then
+            # Exact old image still exists, tag that image as our rollback copy.
+            docker image tag "$OLD_IMAGE_ID" "$SAVE_TAG"
+          else
+            # The original immutable container image may have been pruned.
+            # Only rebuild an old rollback image if the installed source matches
+            # the actual live app's JS/static assets, before applying any patch.
+            echo "Original app image digest pruned; verifying installed source against live container."
+            for rel in package-lock.json public/app.js public/styles.css public/index.html server/main.mjs; do
+              source_hash="$(sha256sum "$DEPLOY/docker-app/$rel" | cut -d' ' -f1)"
+              installed_hash="$(docker exec "$APP" sha256sum "/app/$rel" | cut -d' ' -f1)"
+              test "$source_hash" = "$installed_hash" || {
+                echo "::error::Installed source and running app differ for $rel; cannot safely build rollback."
+                exit 1
+              }
+            done
+            echo "Building pre-update rollback image from verified installed source."
+            docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
+              -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
+              build app
+            docker image tag "$IMAGE" "$SAVE_TAG"
+          fi
 
           UPDATED=0
           rollback() {
