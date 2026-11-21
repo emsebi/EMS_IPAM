@@ -417,3 +417,12 @@ html[data-theme="light"] #sheetSelect{
   color:var(--ink);
 }
 /* Keep the existing dark table headers and their white text unchanged. */
+
+/* Scoped inline IPAM search: no submit button, immediate filtering. */
+.sheet-search-bar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--line,#dce3ed);border-radius:12px;margin:12px 0}
+.sheet-search-bar label{font-size:.85rem;font-weight:700}
+.sheet-search-bar input{flex:1;min-width:190px;border:1px solid var(--line,#cbd5e1);border-radius:8px;padding:9px 11px;color:var(--ink,#14243c);background:var(--card,#fff)}
+.sheet-search-bar small{color:var(--muted,#66758b);font-size:.75rem}
+.vertical-subnet-table tr[hidden]{display:none!important}
+.vertical-subnet-table tr.sheet-search-hit>td:first-child{outline:2px solid #2b83ed;outline-offset:-2px}
+@media(max-width:630px){.sheet-search-bar{padding:9px}.sheet-search-bar input{min-width:100%}}
