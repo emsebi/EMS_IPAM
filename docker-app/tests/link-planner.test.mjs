@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/link-planner/backend/index.mjs';
-import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower,geoProject,geoUnproject} from '../../modules/link-planner/public/model.mjs';
+import {coordinate,greatCircleMeters,normalizeInput,radioBudget,assessTerrain,interpolateGreatCircle,fitGeoPoints,requiredOppositeTower,terrainElevationSummary,geoProject,geoUnproject} from '../../modules/link-planner/public/model.mjs';
 
 import {RADIO_BRANDS,RADIO_PROFILES,radioById,protocolOverlap,estimateRadioCapacity} from '../../modules/link-planner/public/radio-profiles.mjs';
 
@@ -46,6 +46,16 @@ test('map projection round-trip preserves longitude in both hemispheres',()=>{
    assert.ok(Math.abs(recovered.longitude-point.longitude)<1e-7,JSON.stringify({point,recovered,zoom}));
   }
  }
+});
+
+test('terrain elevation summary shows sampled net difference, range and highest point without filling gaps',()=>{
+ const samples=[{groundM:100,distanceKm:0},{groundM:160,distanceKm:1},{groundM:130,distanceKm:2},{groundM:145,distanceKm:3}];
+ assert.deepEqual(terrainElevationSummary(samples),{
+  startM:100,endM:145,deltaM:45,minM:100,maxM:160,reliefM:60,
+  ascentM:75,descentM:30,highestAtKm:1,sampleCount:4
+ });
+ assert.equal(terrainElevationSummary([{groundM:100,distanceKm:0},{groundM:null,distanceKm:1}]),null);
+ assert.equal(terrainElevationSummary([]),null);
 });
 
 test('budget formula FSPL, EIRP, RX and margin are mathematical estimates not throughput',()=>{
