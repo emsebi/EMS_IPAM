@@ -1,0 +1,54 @@
+name: EMS-IPAM VM Light Theme Read-only Diagnostic
+
+on:
+  push:
+    branches:
+      - work/light-theme-contrast-20261121
+    paths:
+      - .github/light-theme-probe-trigger.txt
+
+permissions:
+  contents: read
+
+jobs:
+  check-live:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - name: Read-only health and stylesheet verification
+        shell: bash
+        run: |
+          set -u
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          APP=ems-ipam-app-1
+          for c in ems-ipam-app-1 ems-ipam-db-1 ems-ipam-radius_ops-1; do
+            echo "CHECK_CONTAINER_$c=$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null || echo absent)"
+          done
+          curl -sS --max-time 8 -o /tmp/ems-theme-probe-health.json -w 'CHECK_HEALTH_HTTP=%{http_code}\n' http://127.0.0.1:8888/health || true
+          python3 -c '
+          import json
+          try:
+              d=json.load(open("/tmp/ems-theme-probe-health.json"))
+              print("CHECK_HEALTH_STATUS="+str(d.get("status")))
+              print("CHECK_HEALTH_DATABASE="+str(d.get("database")))
+              print("CHECK_HEALTH_MODULES="+",".join(str(x if isinstance(x,str) else x.get("id")) for x in d.get("modules",[])))
+          except Exception as exc: print("CHECK_HEALTH_PARSE_ERROR="+str(type(exc).__name__))
+          '
+          for path in /app/public/styles.css /app/public/index.html /app/server/main.mjs; do
+            docker exec "$APP" test -f "$path" && echo "CHECK_CONTAINER_FILE_$path=YES" || echo "CHECK_CONTAINER_FILE_$path=NO"
+          done
+          for needle in '--ipam-compact-row:34px' '--muted:#46566d' '--line:#8e9eb3'; do
+            if docker exec "$APP" grep -q -- "$needle" /app/public/styles.css; then echo "CHECK_CONTAINER_CSS_$needle=YES"; else echo "CHECK_CONTAINER_CSS_$needle=NO"; fi
+            if grep -q -- "$needle" "$DEPLOY/docker-app/public/styles.css"; then echo "CHECK_HOST_CSS_$needle=YES"; else echo "CHECK_HOST_CSS_$needle=NO"; fi
+          done
+          for needle in 'styles.css?v=1.7.2-dense1' 'styles.css?v=1.7.2-light-contrast1'; do
+            if docker exec "$APP" grep -q -- "$needle" /app/public/index.html; then echo "CHECK_CONTAINER_HTML_$needle=YES"; else echo "CHECK_CONTAINER_HTML_$needle=NO"; fi
+          done
+          for needle in 'device-types-grid' 'access-records .inventory-table th'; do
+            file="$DEPLOY/modules/ipam/public/index.mjs"
+            case "$needle" in access*) file="$DEPLOY/modules/network-access/public/style.css";; esac
+            if grep -q -- "$needle" "$file"; then echo "CHECK_MODULE_$needle=YES"; else echo "CHECK_MODULE_$needle=NO"; fi
+          done
+          curl -sS --max-time 8 -o /tmp/ems-theme-probe-css -w 'CHECK_CSS_HTTP=%{http_code}\n' http://127.0.0.1:8888/styles.css || true
+          grep -q -- '--ipam-compact-row:34px' /tmp/ems-theme-probe-css && echo 'CHECK_CSS_DELIVERED_DENSE=YES' || echo 'CHECK_CSS_DELIVERED_DENSE=NO'
+          echo "CHECK_VM_PROBE_COMPLETE=YES"
