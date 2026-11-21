@@ -130,3 +130,44 @@
  .radio-doc-compact .radio-doc-controls{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:400px){.radio-geo-panel #radioGeoFrame{height:370px;min-height:320px}.radio-map-coordinates{grid-template-columns:minmax(0,1fr)}}
+
+
+/* Radio UI polish: compact device cells, consistent AP/Station colors, roomy map.
+   This section is intentionally scoped: it does not change the IPAM grid or Core. */
+.radio-geo-panel{padding:clamp(10px,1.5vw,20px)}
+.radio-geo-layout{grid-template-columns:minmax(0,1fr) clamp(260px,25vw,340px);gap:12px}
+.radio-map-main{padding:8px}
+.radio-geo-panel #radioGeoFrame{height:clamp(500px,65vh,780px);min-height:500px}
+.radio-map-aside{padding:11px}
+.radio-map-selection{gap:5px;max-height:410px}
+.radio-map-ap-group{padding:6px 8px;border-inline-start:3px solid #2581ed;background:var(--panel,#fff)}
+.radio-map-ap-row{min-height:34px;gap:6px}
+.radio-map-open-ap{padding:2px 3px}
+.radio-map-open-ap strong{font-size:.83rem;line-height:1.3}
+.radio-map-open-ap small{font-size:.72rem;margin-top:1px}
+.radio-map-stations{gap:3px;margin-top:5px;padding-top:5px;max-height:180px}
+.radio-map-st-row{min-height:28px;padding:2px 4px;border-inline-start:2px solid #279967;border-radius:4px;font-size:.77rem}
+.radio-map-check input,.radio-map-st-row input{width:16px;height:16px;accent-color:#2581ed}
+.radio-map-st-row input{accent-color:#279967}
+.radio-map-ap-group:has(.radio-map-choose-ap:checked){background:color-mix(in srgb,var(--panel,#fff) 94%,#2581ed)}
+.radio-map-st-row:has(input:checked){background:color-mix(in srgb,var(--panel,#fff) 94%,#279967)}
+.radio-map-open-ap:focus-visible,.radio-map-st-row:focus-within,.radio-map-check:focus-within{outline:2px solid #2581ed;outline-offset:2px}
+.radio-geo-distance-item{padding:4px 8px;font-size:.76rem;border-radius:8px}
+.radio-doc-compact{padding:9px;margin-bottom:12px}
+.radio-doc-compact-chain{gap:5px}
+.radio-doc-compact-node{padding:7px 9px;gap:3px;min-height:74px}
+.radio-doc-compact-node>strong{font-size:.82rem}
+.radio-doc-compact-node>span,.radio-doc-compact-node>small{font-size:.73rem}
+.radio-doc-compact-ap{border-color:#2581ed;border-inline-start:3px solid #2581ed}
+.radio-doc-station{border-inline-start:3px solid #279967}
+.radio-doc-stations{grid-template-columns:repeat(auto-fit,minmax(min(100%,165px),1fr));gap:8px}
+.radio-ap-list{padding:7px;gap:5px}
+.radio-ap-choice{padding:9px 11px;gap:4px}
+.radio-detail{padding:12px}
+.radio-station-row{padding:8px 0;gap:8px}
+.radio-doc-table td,.radio-doc-table th{padding:7px 5px}
+@media(min-width:1500px){.radio-geo-layout{grid-template-columns:minmax(0,1fr) 340px}.radio-geo-panel #radioGeoFrame{height:min(75vh,850px)}}
+@media(max-width:1130px){.radio-geo-layout{grid-template-columns:minmax(0,1fr)}.radio-geo-panel #radioGeoFrame{height:520px;min-height:420px}.radio-map-aside{padding:12px}}
+@media(max-width:740px){.radio-geo-panel #radioGeoFrame{height:430px;min-height:350px}.radio-map-selection{max-height:240px}.radio-map-aside{display:block}}
+@media(max-width:400px){.radio-geo-panel #radioGeoFrame{height:340px;min-height:300px}}
+@media(prefers-reduced-motion:reduce){.radio-map-open-ap,.radio-map-st-row{scroll-behavior:auto}}
