@@ -269,6 +269,20 @@ try {
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
+  // A Portable Export JSON must be importable from the visible IPAM screens,
+  // independently from the Excel/CSV bulk host import.
+  await ipamPreview.locator('#sheetPortableImport').click();
+  await ipamPreview.locator('#importDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#importSpace').inputValue(),'test-space');
+  assert.ok((await ipamPreview.locator('#importFile').getAttribute('accept')).includes('.json'));
+  await ipamPreview.locator('#importDialog [data-close]').first().click();
+  await ipamPreview.locator('#overviewBack').click();
+  await ipamPreview.locator('#ipamPortableImport').click();
+  await ipamPreview.locator('#importDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#importSpace').inputValue(),'test-space');
+  await ipamPreview.locator('#importDialog [data-close]').first().click();
+  check('Portable JSON import visible on IPAM overview and sheet, with the current Space preselected');
+
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
