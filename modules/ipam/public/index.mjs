@@ -7,7 +7,7 @@ export function createUi(ctx) {
     state.view='device-types';state.currentSpaceId=null;state.data=null;
     navActive('deviceTypes');setRoute('/device-types');
     page.innerHTML=`<div class="headline"><div><div class="crumb">IP Manager / Device Types</div><h2>انواع تجهیزات</h2><div class="subtitle">این فهرست در فرم اطلاعات IP و فیلتر دستگاه‌ها استفاده می‌شود.</div></div></div>
-    <section class="panel types-panel"><form id="deviceTypeForm" class="type-editor"><input id="deviceTypeId" type="hidden"><label class="field">نام نوع تجهیز<input id="deviceTypeName" required maxlength="100" placeholder="Switch / Laptop / Printer"></label><label class="field">رنگ<input id="deviceTypeColor" type="color" value="#3157d5"></label><div class="row-actions"><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></div><p id="deviceTypeError" class="form-error" role="alert"></p></form><div id="deviceTypesList" class="table-list"></div></section>`;
+    <section class="panel types-panel"><form id="deviceTypeForm" class="type-editor"><input id="deviceTypeId" type="hidden"><label class="field">نام نوع تجهیز<input id="deviceTypeName" required maxlength="100" placeholder="Switch / Laptop / Printer"></label><label class="field">رنگ<input id="deviceTypeColor" type="color" value="#3157d5"></label><div class="row-actions"><button class="btn primary" type="submit">ذخیره نوع</button><button id="cancelDeviceTypeEdit" class="btn hidden" type="button">انصراف</button></div><p id="deviceTypeError" class="form-error" role="alert"></p></form><div id="deviceTypesList" class="table-list device-types-grid" aria-label="فهرست انواع تجهیزات"></div></section>`;
     renderList();
     $('deviceTypeForm').addEventListener('submit',async(event)=>{
       event.preventDefault();const form=event.currentTarget;const button=form.querySelector('[type=submit]');button.disabled=true;$('deviceTypeError').textContent='';
@@ -22,7 +22,12 @@ export function createUi(ctx) {
   }
   function renderList(){
     const list=$('deviceTypesList');
-    list.innerHTML=state.deviceTypes.map((item)=>`<div class="user-row"><div><b>${escapeHtml(item.name)}</b><small><i class="swatch" style="background:${escapeHtml(item.color)}"></i> ${formatNumber(state.inventory.filter((h)=>h.type===item.name).length)} دستگاه</small></div><div class="row-actions"><button class="btn sm edit-device-type" data-id="${escapeHtml(item.id)}">ویرایش</button><button class="btn sm danger delete-device-type" data-id="${escapeHtml(item.id)}">حذف</button></div></div>`).join('')||'<div class="empty-state">نوع تجهیزی ثبت نشده است.</div>';
+    const typeCounts=new Map();
+    for(const host of state.inventory||[])typeCounts.set(host.type,(typeCounts.get(host.type)||0)+1);
+    list.innerHTML=state.deviceTypes.map((item)=>`<div class="user-row device-type-item">
+      <div class="device-type-info"><i class="swatch" style="background:${escapeHtml(item.color)}"></i><b title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</b><small>${formatNumber(typeCounts.get(item.name)||0)} دستگاه</small></div>
+      <div class="row-actions device-type-actions"><button type="button" class="btn sm edit-device-type" data-id="${escapeHtml(item.id)}">ویرایش</button><button type="button" class="btn sm danger delete-device-type" data-id="${escapeHtml(item.id)}">حذف</button></div>
+    </div>`).join('')||'<div class="empty-state">نوع تجهیزی ثبت نشده است.</div>';
     list.querySelectorAll('.edit-device-type').forEach((button)=>button.addEventListener('click',()=>{const item=state.deviceTypes.find((i)=>i.id===button.dataset.id);$('deviceTypeId').value=item.id;$('deviceTypeName').value=item.name;$('deviceTypeColor').value=item.color||'#3157d5';$('cancelDeviceTypeEdit').classList.remove('hidden');$('deviceTypeName').focus();}));
     list.querySelectorAll('.delete-device-type').forEach((button)=>button.addEventListener('click',async()=>{if(!confirm('این نوع تجهیز حذف شود؟'))return;button.disabled=true;try{await request(`/api/device-types/${encodeURIComponent(button.dataset.id)}`,{method:'DELETE'});await openDeviceTypesPage();toast('نوع تجهیز حذف شد.');}catch(error){$('deviceTypeError').textContent=error.message;button.disabled=false;}}));
   }
