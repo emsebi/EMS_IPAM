@@ -1,5 +1,5 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,terrainElevationSummary,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
-import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.1-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,terrainElevationSummary,requiredOppositeTower} from './model.mjs?v=0.2.2-lab.1';
+import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.2-lab.1';
 
 const INITIAL=()=>({
  a:{latitude:'',longitude:''},b:{latitude:'',longitude:''},
@@ -364,7 +364,7 @@ export function createUi(ctx){
      E('div',{},E('span',{class:'lp-eyebrow',text:'EMS_IPAM / NETWORK PLANNING'}),
        E('h1',{text:L('Link Planner','طراحی لینک رادیویی')}),
        text(L('Two-site path analysis · no connection to your radio devices','بررسی مسیر بین دو سایت · بدون اتصال به تجهیزات رادیویی'),'lp-muted')),
-     E('span',{class:'lp-version',text:'MVP 0.2.0'})));
+     E('span',{class:'lp-version',text:'MVP 0.2.2'})));
    const main=E('div',{class:'lp-main'});
    const left=E('section',{class:'lp-map-card'},
      row(E('h2',{text:L('Path location','موقعیت مسیر')}),
