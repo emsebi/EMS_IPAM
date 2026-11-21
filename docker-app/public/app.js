@@ -355,6 +355,15 @@ function mostSpecific(address) {
     .sort((a, b) => b.info.prefix - a.info.prefix)[0]?.item || null;
 }
 
+function effectiveSubnetColor(cidr) {
+  const range=parseCidr(cidr);
+  if(!range)return '#eef2f7';
+  const matches=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
+    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''));
+  matches.sort((a,b)=>b.info.prefix-a.info.prefix);
+  return matches[0]?.item.color||state.data?.space?.color||'#eef2f7';
+}
+
 function existingPrefixAt(address) {
   return mostSpecific(address);
 }
@@ -782,14 +791,14 @@ function renderRootVerticalTable(root, hosts) {
     const start = root.start + row * 256;
     const cidr = `${intToIpv4(start)}/24`;
     const exact = exactPrefixes.get(cidr);
-    html += `<tr><td class="root-network-cell"><div class="range-cell-wrap"><button class="root-row-open" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><span class="root-octet">${(start >>> 8) & 255}</span><span><b class="mono ltr">${cidr}</b><small>${escapeHtml(exact?.name || "بدون نام")} — ${formatNumber(hostCounts.get(row) || 0)} IP</small></span></button>${canWrite() ? `<button class="range-label-action" data-cidr="${cidr}" data-prefix-id="${escapeHtml(exact?.id || "")}" style="--label-color:${escapeHtml(exact?.color || "#94a3b8")}" title="نام‌گذاری و رنگ‌کردن همین /24">■</button>` : ""}</div></td>`;
+    html += `<tr><td class="root-network-cell"><div class="range-cell-wrap"><button class="root-row-open" data-cidr="${cidr}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><span class="root-octet">${(start >>> 8) & 255}</span><span><b class="mono ltr">${cidr}</b><small>${escapeHtml(exact?.name || "بدون نام")} — ${formatNumber(hostCounts.get(row) || 0)} IP</small></span></button>${canWrite() ? `<button class="range-label-action" data-cidr="${cidr}" data-prefix-id="${escapeHtml(exact?.id || "")}" style="--label-color:${escapeHtml(effectiveSubnetColor(cidr))}" title="نام‌گذاری و رنگ‌کردن همین /24">■</button>` : ""}</div></td>`;
     for (const prefix of levels) {
       const span = 2 ** (24 - prefix);
       if (row % span !== 0) continue;
       const info = networkAt(start, prefix);
       const item = exactPrefixes.get(info.cidr);
       const isRoot = info.cidr === root.cidr;
-      const color = item?.color || (isRoot ? space.color : "#eef2f7");
+      const color = effectiveSubnetColor(info.cidr);
       const label = item?.name || (isRoot ? space.name : "آزاد");
       const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
       const first = (start >>> 8) & 255;
@@ -878,7 +887,7 @@ function renderOverview() {
         const value = ipv4ToInt(ip); return value >= start && value <= start + 255;
       }).length;
       const exact = state.data.prefixes.find((item) => item.cidr === cidr);
-      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(exact?.color || "#eef2f7")};--stripe:${escapeHtml(exact?.color || "#eef2f7")}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
+      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
     }
     grid += `</div>`;
   }
@@ -988,7 +997,7 @@ function renderVerticalTable(sheet) {
       const cidr = `${intToIpv4(sheet.start + last)}/${prefix}`;
       const item = exactPrefixes.get(cidr);
       const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
-      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><div class="range-cell-wrap detail-range-wrap"><button class="table-prefix focus-detail-prefix ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml([item?.name, detail, cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(cidr)}</b><span>${last}–${last + size - 1}</span><strong>${escapeHtml(item?.name || "آزاد")}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button>${canWrite() ? `<button class="detail-range-label" data-cidr="${cidr}" data-prefix-id="${escapeHtml(item?.id || "")}" style="--label-color:${escapeHtml(item?.color || "#94a3b8")}" title="نام‌گذاری و رنگ‌کردن همین رنج">■</button>` : ""}</div></td>`;
+      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><div class="range-cell-wrap detail-range-wrap"><button class="table-prefix focus-detail-prefix ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml([item?.name, detail, cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(cidr)}</b><span>${last}–${last + size - 1}</span><strong>${escapeHtml(item?.name || "آزاد")}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button>${canWrite() ? `<button class="detail-range-label" data-cidr="${cidr}" data-prefix-id="${escapeHtml(item?.id || "")}" style="--label-color:${escapeHtml(effectiveSubnetColor(cidr))}" title="نام‌گذاری و رنگ‌کردن همین رنج">■</button>` : ""}</div></td>`;
     }
     html += `</tr>`;
   }
@@ -1003,7 +1012,7 @@ function renderSubnetSelector(selected) {
     const cidr = `${intToIpv4(start)}/24`;
     const exact = state.data.prefixes.find((item) => item.cidr === cidr);
     const hostCount = [...hosts.keys()].filter((ip) => { const value = ipv4ToInt(ip); return value >= start && value <= start + 255; }).length;
-    return `<button class="drill-tile open-drill-tile" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${cidr}</b>${exact?.name ? `<span>${escapeHtml(exact.name)}</span>` : `<span>بدون نام</span>`}<small>${formatNumber(hostCount)} IP ثبت‌شده</small></button>`;
+    return `<button class="drill-tile open-drill-tile" data-cidr="${cidr}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><b class="mono ltr">${cidr}</b>${exact?.name ? `<span>${escapeHtml(exact.name)}</span>` : `<span>بدون نام</span>`}<small>${formatNumber(hostCount)} IP ثبت‌شده</small></button>`;
   }).join("");
   return `<div class="subnet-selector">${tiles}</div>`;
 }
@@ -1012,7 +1021,7 @@ function treeBranch(info, remaining) {
   const exact = state.data.prefixes.find((item) => item.cidr === info.cidr);
   const isHost = info.prefix === 32;
   const name = isHost ? hostMap().get(intToIpv4(info.start))?.name : exact?.name;
-  let html = `<li><div class="tree-node-wrap"><button class="tree-node ${isHost ? "host-node" : ""}" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 31 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
+  let html = `<li><div class="tree-node-wrap"><button class="tree-node ${isHost ? "host-node" : ""}" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 31 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
   if (remaining > 0 && info.prefix < 32) {
     const childPrefix = info.prefix + 1;
     const half = info.size / 2;
