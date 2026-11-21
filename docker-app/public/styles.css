@@ -262,52 +262,55 @@ html[data-content-direction="rtl"] .sidebar .navbtn,html[data-content-direction=
 /* IPAM dense tables 1.7.2+:
    /16 overview and each /24 detail use the same compact rhythm.
    Keep real text, borders, controls and row-span annotations legible. */
-:root{--ipam-compact-row:34px;--ipam-compact-grid:43px}
-.root-range-table td{height:var(--ipam-compact-row)!important}
-.root-range-table th{height:32px!important}
-.root-prefix-open{min-height:30px!important}
-.root-row-open{min-height:30px}
-.vertical-subnet-table th{height:34px;padding:5px 4px;font-size:10px;line-height:1.25}
-.vertical-subnet-table td{height:var(--ipam-compact-row);font-size:11px;line-height:1.25}
-.vertical-subnet-table .ip-line.map-ip-cell{height:100%;min-height:0;min-width:0;
+html[data-theme="light"] {--ipam-compact-row:34px;--ipam-compact-grid:43px}
+html[data-theme="light"] .root-range-table td{height:var(--ipam-compact-row)!important}
+html[data-theme="light"] .root-range-table th{height:32px!important}
+html[data-theme="light"] .root-prefix-open{min-height:30px!important}
+html[data-theme="light"] .root-row-open{min-height:30px}
+html[data-theme="light"] .vertical-subnet-table th{height:34px;padding:5px 4px;font-size:10px;line-height:1.25}
+html[data-theme="light"] .vertical-subnet-table td{height:var(--ipam-compact-row);font-size:11px;line-height:1.25}
+html[data-theme="light"] .vertical-subnet-table .ip-line.map-ip-cell{height:100%;min-height:0;min-width:0;
   padding:3px 7px;gap:6px;font-size:11px;line-height:1.25}
-.vertical-subnet-table .ip-line b{font-size:11px;line-height:1.25;min-width:0}
-.vertical-subnet-table .table-status{gap:5px;padding:0 6px;line-height:1.25}
-.vertical-subnet-table .table-status i{flex:0 0 8px}
-.vertical-subnet-table .table-connect{padding:2px!important}
-.vertical-subnet-table .table-connect-button{min-height:26px;padding:3px 4px;font-size:10px;line-height:1.2}
-.vertical-subnet-table .subnet-span{padding:2px!important}
-.vertical-subnet-table .table-prefix{min-height:28px;gap:1px;padding:2px 3px}
-.vertical-subnet-table .table-prefix b,.vertical-subnet-table .table-prefix strong,
-.vertical-subnet-table .table-prefix span,.vertical-subnet-table .table-prefix small{
+html[data-theme="light"] .vertical-subnet-table .ip-line b{font-size:11px;line-height:1.25;min-width:0}
+html[data-theme="light"] .vertical-subnet-table .table-status{gap:5px;padding:0 6px;line-height:1.25}
+html[data-theme="light"] .vertical-subnet-table .table-status i{flex:0 0 8px}
+html[data-theme="light"] .vertical-subnet-table .table-connect{padding:2px!important}
+html[data-theme="light"] .vertical-subnet-table .table-connect-button{min-height:26px;padding:3px 4px;font-size:10px;line-height:1.2}
+html[data-theme="light"] .vertical-subnet-table .subnet-span{padding:2px!important}
+html[data-theme="light"] .vertical-subnet-table .table-prefix{min-height:28px;gap:1px;padding:2px 3px}
+html[data-theme="light"] .vertical-subnet-table .table-prefix b,
+html[data-theme="light"] .vertical-subnet-table .table-prefix strong,
+html[data-theme="light"] .vertical-subnet-table .table-prefix span,
+html[data-theme="light"] .vertical-subnet-table .table-prefix small{
   line-height:1.2;overflow-wrap:anywhere}
-.vertical-subnet-table .detail-range-wrap>.table-prefix{padding-left:26px!important}
-.vertical-subnet-table .detail-range-label{top:3px;left:3px;width:18px;height:18px}
+html[data-theme="light"] .vertical-subnet-table .detail-range-wrap>.table-prefix{padding-left:26px!important}
+html[data-theme="light"] .vertical-subnet-table .detail-range-label{top:3px;left:3px;width:18px;height:18px}
 /* /24 visual cells: two readable lines (IP octet + optional host label). */
-.visual-map .visual-row{gap:3px;margin-bottom:4px}
-.visual-map .axis{height:22px;line-height:1.2}
-.visual-map .row-axis{height:var(--ipam-compact-grid);padding:3px;font-size:10px}
-.visual-map .subnet-tile{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
-.visual-map .subnet-tile .octet{font-size:13px;line-height:1.2}
-.visual-map .subnet-tile .cidr{margin-top:1px;line-height:1.15}
-.visual-map .subnet-tile .count{bottom:3px;font-size:9px}
-.visual-map.ip-map .ip-cell{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
-.visual-map.ip-map .ip-cell .last{font-size:13px;line-height:1.2}
-.visual-map.ip-map .ip-cell .host-name{font-size:10px;line-height:1.2;margin-top:2px;
+html[data-theme="light"] .visual-map .visual-row{gap:3px;margin-bottom:4px}
+html[data-theme="light"] .visual-map .axis{height:22px;line-height:1.2}
+html[data-theme="light"] .visual-map .row-axis{height:var(--ipam-compact-grid);padding:3px;font-size:10px}
+html[data-theme="light"] .visual-map .subnet-tile{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
+html[data-theme="light"] .visual-map .subnet-tile .octet{font-size:13px;line-height:1.2}
+html[data-theme="light"] .visual-map .subnet-tile .cidr{margin-top:1px;line-height:1.15}
+html[data-theme="light"] .visual-map .subnet-tile .count{bottom:3px;font-size:9px}
+html[data-theme="light"] .visual-map.ip-map .ip-cell{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
+html[data-theme="light"] .visual-map.ip-map .ip-cell .last{font-size:13px;line-height:1.2}
+html[data-theme="light"] .visual-map.ip-map .ip-cell .host-name{font-size:10px;line-height:1.2;margin-top:2px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.visual-map.ip-map .ping-dot{top:-4px;right:-4px}
+html[data-theme="light"] .visual-map.ip-map .ping-dot{top:-4px;right:-4px}
 /* /23 or larger: compact /24 subnet pickers without cutting off 3 lines. */
-.subnet-selector{gap:6px}
-.subnet-selector .drill-tile{min-height:60px;padding:7px 9px;gap:3px;line-height:1.25}
-.subnet-selector .drill-tile small{font-size:10px}
+html[data-theme="light"] .subnet-selector{gap:6px}
+html[data-theme="light"] .subnet-selector .drill-tile{min-height:60px;padding:7px 9px;gap:3px;line-height:1.25}
+html[data-theme="light"] .subnet-selector .drill-tile small{font-size:10px}
 /* Other IPAM record tables and management rows, not forms or modals. */
-.inventory-table th{padding:8px 9px;line-height:1.3}
-.inventory-table td{padding:7px 9px;line-height:1.3}
-.inventory-name small{margin-top:2px}
-.range-list .range-row{padding:7px 10px;gap:7px;line-height:1.3}
-.table-list>.user-row:not(.device-type-item){padding:8px 10px;gap:7px}
-.table-load-more{padding:10px 12px}
-.bulk-preview-scroll td,.bulk-preview-scroll th{padding:4px 6px}
+html[data-theme="light"] .inventory-table th{padding:8px 9px;line-height:1.3}
+html[data-theme="light"] .inventory-table td{padding:7px 9px;line-height:1.3}
+html[data-theme="light"] .inventory-name small{margin-top:2px}
+html[data-theme="light"] .range-list .range-row{padding:7px 10px;gap:7px;line-height:1.3}
+html[data-theme="light"] .table-list>.user-row:not(.device-type-item){padding:8px 10px;gap:7px}
+html[data-theme="light"] .table-load-more{padding:10px 12px}
+html[data-theme="light"] .bulk-preview-scroll td,
+html[data-theme="light"] .bulk-preview-scroll th{padding:4px 6px}
 
 
 /* Light theme readability / contrast. Scoped: does not modify the dark palette.
