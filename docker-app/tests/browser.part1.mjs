@@ -283,7 +283,10 @@ try {
   await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
   await ipamPreview.locator('#bulkIpamCommit:not([disabled])').waitFor();
   assert.ok((await ipamPreview.locator('#bulkIpamPreview').innerText()).includes('Portable JSON'));
+  // Selecting an import file marks the form dirty; confirm cancellation and verify that the modal closes.
+  ipamPreview.once('dialog', dialog => dialog.accept());
   await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'hidden'});
   await ipamPreview.locator('#overviewBack').click();
   await ipamPreview.locator('#ipamExcelImport').click();
   await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
