@@ -1,4 +1,4 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,terrainElevationSummary,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
 import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.1-lab.1';
 
 const INITIAL=()=>({
@@ -145,6 +145,7 @@ export function createUi(ctx){
      return box;
    }
    const p=analysis.samples,bounds=profileBounds(p);
+   const elevation=terrainElevationSummary(p);
    const x=i=>52+i/(p.length-1)*850;
    const y=m=>285-(m-bounds.min)/(bounds.max-bounds.min)*238;
    const svg=E('svg',{viewBox:'0 0 960 320',role:'img','aria-label':L('Terrain, line of sight and Fresnel clearance profile','پروفایل ارتفاع زمین، دید مستقیم و فرنل')});
@@ -162,10 +163,41 @@ export function createUi(ctx){
    add('path',{d:pathValues('lineM'),fill:'none',stroke:'#2469bb','stroke-width':2.5,'data-line':'los'});
    add('text',{x:50,y:312,fill:'var(--lp-muted,#677b8e)','font-size':12,text:'0 km'});
    add('text',{x:838,y:312,fill:'var(--lp-muted,#677b8e)','font-size':12,text:number(p.at(-1).distanceKm,2)+' km'});
-   box.append(svg,E('div',{class:'lp-chart-legend'},
+   // Hover/focus reads the nearest SRTM sample; no interpolated obstacles are invented.
+   const detail=E('div',{class:'lp-terrain-probe',role:'status','aria-live':'off',text:L('Move over the graph to inspect sampled elevation and clearance.','برای دیدن ارتفاع و وضعیت دید در نقاط نمونه‌برداری‌شده، نشانگر را روی نمودار ببرید.')});
+   const probeAt=index=>{
+     const point=p[Math.max(0,Math.min(p.length-1,index))];
+     detail.textContent=L('Distance ','فاصله ')+number(point.distanceKm,2)+' km · '+L('Ground ','ارتفاع زمین ')+number(point.groundM,1)+' m · LOS '+number(point.lineM,1)+' m · '+L('Clearance ','فاصله آزاد ')+number(point.clearanceM,1)+' m';
+   };
+   svg.addEventListener('pointermove',event=>{
+     const rect=svg.getBoundingClientRect();
+     const coord=(event.clientX-rect.left)*960/Math.max(rect.width,1);
+     probeAt(Math.round((coord-52)/850*(p.length-1)));
+   });
+   svg.setAttribute('tabindex','0');
+   let focused=0;
+   svg.addEventListener('focus',()=>probeAt(focused));
+   svg.addEventListener('keydown',event=>{
+     if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+     event.preventDefault();
+     focused=Math.max(0,Math.min(p.length-1,focused+(event.key==='ArrowRight'?1:-1)));
+     probeAt(focused);
+   });
+   box.append(E('div',{class:'lp-terrain-profile-header'},
+     E('h4',{text:L('Terrain elevation profile — A to B','پروفایل ارتفاع زمین — از A تا B')}),
+     E('small',{text:L('SRTM90 sampled ground elevations · meters above sea level','ارتفاع زمین از نمونه‌های SRTM90 · متر از سطح دریا')})),
+     E('div',{class:'lp-terrain-metrics'},
+       metric(L('Site A ground','ارتفاع زمین A'),number(elevation.startM,1)+' m'),
+       metric(L('Site B ground','ارتفاع زمین B'),number(elevation.endM,1)+' m'),
+       metric(L('B − A ground','اختلاف ارتفاع B و A'),(elevation.deltaM>0?'+':'')+number(elevation.deltaM,1)+' m'),
+       metric(L('Terrain low / high','کمترین / بیشترین ارتفاع'),number(elevation.minM,1)+' / '+number(elevation.maxM,1)+' m'),
+       metric(L('Terrain relief','دامنه تغییر ارتفاع'),number(elevation.reliefM,1)+' m'),
+       metric(L('Highest point at','بلندترین نقطه در'),number(elevation.highestAtKm,2)+' km')),
+     svg,detail,E('div',{class:'lp-chart-legend'},
      E('span',{},E('b',{class:'lp-dot terrain'}),L('Ground','زمین')),
      E('span',{},E('b',{class:'lp-dot los'}),'LOS'),
-     E('span',{},E('b',{class:'lp-dot fresnel'}),L('Terrain + curvature + Fresnel clearance','زمین + انحنای زمین + فرنل'))));
+     E('span',{},E('b',{class:'lp-dot fresnel'}),L('Terrain + curvature + Fresnel clearance','زمین + انحنای زمین + فرنل'))),
+     text(L('Sampled DEM only: ridges between samples, buildings and trees may be missing.','فقط نمونه‌های مدل ارتفاعی: پستی‌وبلندی بین نقاط، ساختمان‌ها و درختان ممکن است ثبت نشده باشند.'),'lp-muted')));
    return box;
  }
  function results(){
