@@ -1,0 +1,1 @@
+Guarded VM UI-only deploy to hide Ctrl+K hint while typing in topbar global search, with backup and RADIUS integrity gate.
