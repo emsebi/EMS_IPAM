@@ -75,3 +75,82 @@
 .lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{margin:10px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:650px){.lp-capacity-reference .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-height-solver .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:395px){.lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Link Planner dark theme only: preserve the light palette and layout unchanged. */
+html[data-theme="dark"] .lp-shell{
+  --panel:#182338;
+  --text:#e7edf7;
+  --link:#8fc7ff;
+  --lp-grid:#35425a;
+  --lp-muted:#b2c1d6;
+  --soft:#101827;
+  color:#e7edf7;
+  color-scheme:dark;
+}
+html[data-theme="dark"] .lp-shell .lp-map-card,
+html[data-theme="dark"] .lp-shell .lp-card,
+html[data-theme="dark"] .lp-shell .lp-summary{
+  background:#182338;
+  border-color:#35425a;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-site,
+html[data-theme="dark"] .lp-shell .lp-fieldset,
+html[data-theme="dark"] .lp-shell .lp-device-group,
+html[data-theme="dark"] .lp-shell .lp-metric,
+html[data-theme="dark"] .lp-shell .lp-capacity-reference,
+html[data-theme="dark"] .lp-shell .lp-height-solver{
+  background:#101827;
+  border-color:#35425a;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell h1,
+html[data-theme="dark"] .lp-shell h2,
+html[data-theme="dark"] .lp-shell h3,
+html[data-theme="dark"] .lp-shell h4,
+html[data-theme="dark"] .lp-shell .lp-field span,
+html[data-theme="dark"] .lp-shell .lp-fieldset legend,
+html[data-theme="dark"] .lp-shell .lp-muted,
+html[data-theme="dark"] .lp-shell .lp-source{
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-field input,
+html[data-theme="dark"] .lp-shell .lp-card input,
+html[data-theme="dark"] .lp-shell .lp-card select{
+  background:#182338;
+  border-color:#536784;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-field input::placeholder,
+html[data-theme="dark"] .lp-shell .lp-card input::placeholder{
+  color:#b2c1d6;
+}
+html[data-theme="dark"] .lp-shell .lp-map-card .lp-pick:not(.selected){
+  background:#243550;
+  border-color:#536784;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-state.unknown,
+html[data-theme="dark"] .lp-shell .lp-state.unavailable{
+  background:#243550;
+  border-color:#536784;
+  color:#d6e2f3;
+}
+html[data-theme="dark"] .lp-shell .lp-chart{
+  background:#101827;
+  border-color:#35425a;
+}
+html[data-theme="dark"] .lp-shell .lp-profile-info a{
+  color:#8fc7ff;
+}
+
+/* Elevation panel uses existing theme tokens; no change to global light/dark palettes. */
+.lp-terrain-profile-header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:5px 12px;margin-bottom:10px}
+.lp-terrain-profile-header h4{margin:0;font-size:1rem}
+.lp-terrain-profile-header small{font-size:.75rem;color:var(--lp-muted)}
+.lp-terrain-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 12px}
+.lp-terrain-metrics .lp-metric{padding:8px 10px}
+.lp-terrain-metrics .lp-metric strong{font-size:1rem;line-height:1.5}
+.lp-terrain-probe{padding:8px 10px;margin:5px 0 11px;border-radius:8px;border:1px solid var(--lp-grid);background:var(--soft,#f5f8fb);color:inherit;font-size:.8rem;line-height:1.5;font-variant-numeric:tabular-nums}
+.lp-chart svg:focus-visible{outline:2px solid #6b9ee7;outline-offset:2px}
+@media(max-width:670px){.lp-terrain-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

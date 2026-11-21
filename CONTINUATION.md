@@ -1,3 +1,15 @@
+# Integrate Device Types readiness fix with current search/theme work — 2026-11-21 UTC
+
+PR #78 original head `b5bed9e28e7dbedeefa3ac1021ff2858cc6a9b0f` passed both [PR CI 44906660455](https://github.com/emsebi/EMS_IPAM/actions/runs/44906660455) and [push CI 44906652687](https://github.com/emsebi/EMS_IPAM/actions/runs/44906652687). Browser job 136853605742 passed 43 real HTTP/browser scenarios at 13:01:36 UTC, including the held real Device Types refresh and desktop/mobile layout assertions. Test, Docker and native PostgreSQL gates succeeded. This does not retroactively turn merge CI 44901729931 into success.
+
+Fresh main `7cc2f5a23c8b96871c41d5c8f435ad89e2d2b7dd` includes merged Link Planner #79/#80, global live-search #81 and module dark-theme #82 plus generated screenshots. Those PRs are closed; only #78 and inactive draft #12 remain open. Bring main into #78 without replacing any application/module/workflow/screenshot bytes. The browser test merges cleanly, retaining the new global-search/Ctrl+K assertions and the Device Types atomic layout snapshot. Resolve only the SHA256SUMS conflict by using the current main manifest and recomputing the changed test/checkpoint hashes.
+
+Local checks: Node syntax, listed-source checksums and whitespace against fresh main. New integration CI IDs/status are recorded in #78. Next: require all gates on the integrated head, especially both the global-search/Ctrl+K case and delayed Device Types desktop/mobile case (44 browser/API scenarios expected). Re-read both refs before expected-SHA merge; preserve intervening main changes. Older candidate success is not evidence for this new integrated tree. If pending, follow the recorded run IDs next turn rather than waiting indefinitely.
+
+After P0 integration, resume the recorded Company hierarchy/access-grant cleanup preflight and preservation tests before an installed-loopback XLSX runner. No VM write/deployment, application/schema change, device discovery or router push. Radio operator acceptance, installed XLSX acceptance and real MikroTik Full/Read login remain open.
+
+---
+
 # P0 browser readiness repair after PR #65 merge — 2026-11-21 UTC
 
 PR #65 merged with expected head at `1ac9fc9fee1a55bdb3409198b9d3df8033e16a6e`, after both candidate CIs passed all four gates and native PostgreSQL job 136825476390 passed all 28 HTTP tests with no failures/skips. Its merge CI [44901729931](https://github.com/emsebi/EMS_IPAM/actions/runs/44901729931) subsequently **failed** in browser job 136838868126 at 12:00:58 UTC: Device Types desktop measured one column and every row at x/y/height zero. Ordinary tests, Docker and PostgreSQL succeeded. Do not describe that merge run as successful.

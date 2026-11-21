@@ -85,6 +85,16 @@ try {
   await page.locator('#loginForm [type=submit]').click();
   await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
   check('real login and application bootstrap');
+  // The header search is live, not a submit form. Ctrl+K disappears while typing.
+  await page.locator('#searchInput').fill('192.0.2.50');
+  await page.locator('#searchResults').waitFor({state:'visible'});
+  await page.waitForFunction(()=>!document.querySelector('#searchResults')?.textContent?.includes('در حال جست‌وجو'));
+  assert.equal(await page.locator('.searchbox kbd').isVisible(),false,'Ctrl+K must hide on nonempty global search');
+  assert.equal(await page.locator('.searchbox button[type="submit"]').count(),0,'Global live search needs no submit button');
+  await page.locator('#searchInput').fill('');
+  assert.equal(await page.locator('.searchbox kbd').isVisible(),true,'Ctrl+K hint returns after clearing search');
+  check('global header live search and non-overlapping Ctrl+K hint');
+
 
   // Light theme must render dark text and visible lines; dark mode must retain its palette.
   const readPalette=()=>page.evaluate(()=>{

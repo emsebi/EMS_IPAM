@@ -1,0 +1,3 @@
+Guarded VM deployment of sampled terrain elevation chart Link Planner 0.2.2-lab.1; module-only backup & rollback, preserve database/RADIUS and light/dark themes.
+Rerun for 0.2.2-lab.2: terrain elevation ribbon beside A-B route, inspect sample offsets, retain full terrain graph and themes.
+Deploy parsed / syntax-validated UI after fixing extra parenthesis in elevation view; require health and RADIUS checks.

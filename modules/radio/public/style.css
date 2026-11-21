@@ -171,3 +171,48 @@
 @media(max-width:740px){.radio-geo-panel #radioGeoFrame{height:430px;min-height:350px}.radio-map-selection{max-height:240px}.radio-map-aside{display:block}}
 @media(max-width:400px){.radio-geo-panel #radioGeoFrame{height:340px;min-height:300px}}
 @media(prefers-reduced-motion:reduce){.radio-map-open-ap,.radio-map-st-row{scroll-behavior:auto}}
+
+
+/* Restore the established dark palette. This block never changes Light Mode. */
+html[data-theme="dark"] .radio-doc-grid,
+html[data-theme="dark"] .radio-geo-panel,
+html[data-theme="dark"] .radio-master-detail,
+html[data-theme="dark"] .radio-register-panel{
+  --panel:#182338;--soft:#101827;--line:#35425a;--muted:#b5c5dc;--text:#e7edf7;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .radio-doc-main,
+html[data-theme="dark"] .radio-doc-side,
+html[data-theme="dark"] .radio-doc-node,
+html[data-theme="dark"] .radio-doc-compact-node,
+html[data-theme="dark"] .radio-map-aside,
+html[data-theme="dark"] .radio-map-ap-group,
+html[data-theme="dark"] .radio-ap-choice{
+  background:#182338;color:#e7edf7;border-color:#35425a;
+}
+html[data-theme="dark"] .radio-doc-canvas,
+html[data-theme="dark"] .radio-doc-compact,
+html[data-theme="dark"] .radio-doc-metrics>div,
+html[data-theme="dark"] .radio-map-main,
+html[data-theme="dark"] .radio-geo-distance-item{
+  background:#101827;color:#e7edf7;border-color:#35425a;
+}
+html[data-theme="dark"] .radio-doc-node-link,
+html[data-theme="dark"] .radio-map-open-ap,
+html[data-theme="dark"] .radio-station-row .link-btn,
+html[data-theme="dark"] .radio-map-st-row{color:#e7edf7}
+html[data-theme="dark"] .radio-doc-controls input,
+html[data-theme="dark"] .radio-doc-controls select,
+html[data-theme="dark"] .radio-geo-controls input,
+html[data-theme="dark"] .radio-geo-controls select,
+html[data-theme="dark"] .radio-map-location-editor input,
+html[data-theme="dark"] .radio-map-location-editor select{
+  background:#101827;color:#e7edf7;border-color:#536784;
+}
+html[data-theme="dark"] .radio-map-ap-group:has(.radio-map-choose-ap:checked){background:#1a314b}
+html[data-theme="dark"] .radio-map-st-row:has(input:checked){background:#18382f}
+html[data-theme="dark"] .radio-doc-node-title small,
+html[data-theme="dark"] .radio-doc-heading small,
+html[data-theme="dark"] .radio-doc-meta span,
+html[data-theme="dark"] .radio-map-open-ap small,
+html[data-theme="dark"] .radio-geo-note{color:#b5c5dc}

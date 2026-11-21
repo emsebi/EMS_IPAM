@@ -4,3 +4,36 @@
 @media(max-width:1200px){.nm-map-grid{grid-template-columns:minmax(0,1fr) 310px}.nm-map-tools{gap:6px}.nm-canvas{height:500px}.nm-capabilities{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.nm-map-grid{grid-template-columns:1fr}.nm-form-grid{grid-template-columns:repeat(2,1fr)}.nm-stats{grid-template-columns:repeat(4,1fr)}.nm-time{grid-column:1/-1}.nm-header{padding:18px}.nm-header h2{font-size:22px}.nm-search{flex-wrap:wrap}.nm-search input{flex-basis:70%}.nm-detail-placeholder{padding:25px}.nm-port-grid{grid-template-columns:repeat(12,1fr)}}
 @media(max-width:540px){.nm-header{align-items:start;flex-direction:column}.nm-header select{width:100%;max-width:none}.nm-stats{gap:6px}.nm-stats article{padding:10px;flex-direction:column;gap:5px}.nm-stats b{font-size:21px}.nm-stats span{font-size:10px}.nm-tabs{gap:5px}.nm-tabs .btn{font-size:11px;padding:8px}.nm-form-grid{grid-template-columns:1fr}.nm-canvas{height:360px}.nm-port-grid{grid-template-columns:repeat(6,1fr)}.nm-search .btn{font-size:11px}.nm-app .panel{padding:14px}}
+
+
+/* Dark Mode only: do not let Light Mode's white --surface fallback leak into cards. */
+html[data-theme="dark"] .nm-app{
+ --surface:#182338;--text:#e7edf7;--nm-ink:#e7edf7;--nm-line:#35425a;
+ color:#e7edf7;
+}
+html[data-theme="dark"] .nm-app .panel,
+html[data-theme="dark"] .nm-stats article,
+html[data-theme="dark"] .nm-search{
+ background:#182338;color:#e7edf7;border-color:#35425a;
+}
+html[data-theme="dark"] .nm-app input:not([type="checkbox"]),
+html[data-theme="dark"] .nm-app textarea,
+html[data-theme="dark"] .nm-app select{
+ background:#101827;color:#e7edf7;border-color:#536784;
+}
+html[data-theme="dark"] .nm-app input::placeholder,
+html[data-theme="dark"] .nm-app textarea::placeholder{color:#b5c5dc}
+html[data-theme="dark"] .nm-stats span,
+html[data-theme="dark"] .nm-muted,
+html[data-theme="dark"] .nm-field,
+html[data-theme="dark"] .nm-app .nm-settings h3{color:#b5c5dc}
+html[data-theme="dark"] .nm-stats b,
+html[data-theme="dark"] .nm-app h3{color:#e7edf7}
+html[data-theme="dark"] .nm-capabilities article,
+html[data-theme="dark"] .nm-observation,
+html[data-theme="dark"] .nm-impact:not(:empty){background:#101827;color:#e7edf7;border-color:#35425a}
+html[data-theme="dark"] .nm-facts>div,
+html[data-theme="dark"] .nm-archive article{border-color:#35425a}
+html[data-theme="dark"] .nm-facts dt,
+html[data-theme="dark"] .nm-capabilities span{color:#b5c5dc}
+html[data-theme="dark"] .nm-dialog{background:#182338;color:#e7edf7;border-color:#35425a}

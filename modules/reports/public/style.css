@@ -3,3 +3,11 @@
 .report-metric strong{font-size:1.7rem}.report-metric span{font-size:.9rem;opacity:.76}
 @media(max-width:820px){.reports-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.reports-metrics{grid-template-columns:1fr}}
+
+
+/* Preserve the original dark Reports tiles; Light Mode keeps its current palette. */
+html[data-theme="dark"] .reports-metrics .report-metric{
+ background:#182338;border-color:#35425a;color:#e7edf7;
+}
+html[data-theme="dark"] .reports-metrics .report-metric strong{color:#e7edf7}
+html[data-theme="dark"] .reports-metrics .report-metric span{color:#b5c5dc;opacity:1}
