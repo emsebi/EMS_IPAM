@@ -145,6 +145,21 @@ export function requiredOppositeTower(input,elevations,fixedSide='a') {
     endpointAbsoluteM:groundTarget+target.building+requiredTowerM+target.mount,
     note:'Minimum opposite tower relative to SRTM terrain, sampled curvature and selected Fresnel clearance; not a construction recommendation.'};
 }
+// Summarize only sampled SRTM ground heights. Nulls are unknown, not zero.
+export function terrainElevationSummary(samples){
+  if(!Array.isArray(samples)||samples.length<2||samples.some(s=>!Number.isFinite(s?.groundM)||!Number.isFinite(s?.distanceKm)))return null;
+  const heights=samples.map(s=>s.groundM);
+  let ascentM=0,descentM=0;
+  for(let i=1;i<heights.length;i++){
+    const delta=heights[i]-heights[i-1];
+    if(delta>0)ascentM+=delta;else descentM-=delta;
+  }
+  const minM=Math.min(...heights),maxM=Math.max(...heights);
+  const highestIndex=heights.indexOf(maxM);
+  return {startM:heights[0],endM:heights.at(-1),deltaM:heights.at(-1)-heights[0],minM,maxM,
+    reliefM:maxM-minM,ascentM,descentM,highestAtKm:samples[highestIndex].distanceKm,sampleCount:heights.length};
+}
+
 export function profileBounds(points){
   if(!points?.length)return {min:0,max:1};
   const vals=points.flatMap(s=>[s.groundM,s.lineM,s.requiredM]).filter(finite);

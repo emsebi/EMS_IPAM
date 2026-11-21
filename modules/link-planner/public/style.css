@@ -143,3 +143,14 @@ html[data-theme="dark"] .lp-shell .lp-chart{
 html[data-theme="dark"] .lp-shell .lp-profile-info a{
   color:#8fc7ff;
 }
+
+/* Elevation panel uses existing theme tokens; no change to global light/dark palettes. */
+.lp-terrain-profile-header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:5px 12px;margin-bottom:10px}
+.lp-terrain-profile-header h4{margin:0;font-size:1rem}
+.lp-terrain-profile-header small{font-size:.75rem;color:var(--lp-muted)}
+.lp-terrain-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 12px}
+.lp-terrain-metrics .lp-metric{padding:8px 10px}
+.lp-terrain-metrics .lp-metric strong{font-size:1rem;line-height:1.5}
+.lp-terrain-probe{padding:8px 10px;margin:5px 0 11px;border-radius:8px;border:1px solid var(--lp-grid);background:var(--soft,#f5f8fb);color:inherit;font-size:.8rem;line-height:1.5;font-variant-numeric:tabular-nums}
+.lp-chart svg:focus-visible{outline:2px solid #6b9ee7;outline-offset:2px}
+@media(max-width:670px){.lp-terrain-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

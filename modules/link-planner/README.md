@@ -52,3 +52,13 @@ The map no longer automatically fits/refocuses after a geographic click or manua
 - **Modulation/PHY reference:** Wi-Fi shows peak standard short-GI PHY ceiling (per confirmed chains/width) with a maximum modulation label. Microwave can show a selected QAM's ideal uncoded symbol-rate upper bound. Supported proprietary families show only *both-model documented brochure ceilings* if present. These numbers are **not predicted end-to-end TCP throughput**, actual adaptive MCS, interoperability guarantees or rain Availability. Firmware, regulatory EIRP, noise/interference, FEC, antennas, licences and real device sensitivity curves must be checked. Mixed proprietary models are marked unverified instead of implying they interoperate.
 - All manually entered TX power, receive sensitivity, gains and loss figures remain explicit and editable. Verified integrated MikroTik antenna gains can prefill the matching site when selected; connectorized/microwave antennas require manual gain.
 - Data remains in the existing module-owned scenario JSON column, no migration changes. Test fixtures cover the two-direction tower inversion, realistic model selection and non-invention of actual throughput.
+
+## 0.2.2-lab.1 — Terrain elevation profile
+- After selecting valid A/B coordinates and clicking **Load SRTM90 terrain**, the existing chart explicitly shows ground elevation along the sampled path in meters above sea level, as well as LOS and Fresnel requirement.
+- Summary cards show ground elevation at A and B, signed B−A ground difference, sampled minimum/maximum, terrain relief and distance to the highest sample. Hovering or focusing the chart allows inspection of sampled ground elevation, LOS and clearance at a distance.
+- Uses the same 81 SRTM90 values already fetched; no automatic external calls, new database fields or changes to Radio Management/RADIUS.
+- All elevations are estimates from a ~90 m DEM; obstacles (trees/buildings) and ridges between samples are not represented. Invalid/missing samples never silently become zero or a claim of a clear link.
+- Preserves the current dark and light themes; no global CSS changes.
+
+## 0.2.2-lab.2 — Elevation ribbon beside the route on the map
+Once terrain is loaded, the map draws a green sampled terrain ribbon adjacent to the A–B route. This is a schematic, vertically exaggerated two-dimensional offset of SRTM90 elevations, **not** a perspective/3D survey or an exact vertical scale. The full metric graph remains below. Moving a site removes a stale ribbon until terrain is loaded again. The profile uses the same sampled terrain response and makes no extra map or terrain requests.
