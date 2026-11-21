@@ -164,8 +164,33 @@ try {
   const ipamPreview = await context.newPage();
   await ipamPreview.goto('/#/ipam/test-space/192.0.2.0%2F24');
   await ipamPreview.locator('#sheetSelect').waitFor();
+  await ipamPreview.locator('.display-mode[data-mode="table"]').click();
+  await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
+  const tableSize=await ipamPreview.locator('.vertical-subnet-table').first().evaluate(table=>{
+    const tr=table.tBodies[0].rows[8],td=tr.cells[0],button=td.querySelector('.map-ip-cell');
+    const row=tr.getBoundingClientRect(),content=button.getBoundingClientRect();
+    const th=table.tHead.rows[0].cells[0].getBoundingClientRect();
+    return {rowH:row.height,cellH:content.height,headH:th.height,
+      buttonContained:content.top>=row.top-1&&content.bottom<=row.bottom+1};
+  });
+  assert.ok(tableSize.rowH>=30&&tableSize.rowH<=38,'/24 vertical IP rows must be compact: '+JSON.stringify(tableSize));
+  assert.ok(tableSize.headH>=28&&tableSize.headH<=38,'/24 header must be compact: '+JSON.stringify(tableSize));
+  assert.ok(tableSize.buttonContained,'/24 IP and device label must stay within the table row');
+  await ipamPreview.screenshot({path:path.join(outputDir,'ipam-24-compact-table.png'),fullPage:true});
+  await ipamPreview.locator('.display-mode[data-mode="classic"]').click();
+  await ipamPreview.locator('.ip-map .ip-cell').first().waitFor();
+  const gridSize=await ipamPreview.locator('.ip-map .ip-cell').first().evaluate(cell=>{
+    const r=cell.getBoundingClientRect(),label=cell.querySelector('.host-name');
+    return {height:r.height,labelContained:!label||label.getBoundingClientRect().bottom<=r.bottom+1};
+  });
+  assert.ok(gridSize.height>=39&&gridSize.height<=47,'/24 graphical cells should fit two lines tightly: '+JSON.stringify(gridSize));
+  assert.ok(gridSize.labelContained,'/24 graphical cell must not crop its host label');
+  await ipamPreview.screenshot({path:path.join(outputDir,'ipam-24-compact-grid.png'),fullPage:true});
+  await ipamPreview.locator('.display-mode[data-mode="table"]').click();
+  await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
   await ipamPreview.close();
+  check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
 
   await page.locator('#deviceTypesButton').click();
