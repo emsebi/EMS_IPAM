@@ -1,0 +1,1 @@
+IPAM UI-only lab deployment trigger: live search, inherited subnet colors, save-and-next. Source checksum, guarded backup and rollback required. No database or RADIUS migrations.
