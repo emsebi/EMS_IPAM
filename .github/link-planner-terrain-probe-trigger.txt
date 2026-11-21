@@ -1,0 +1,1 @@
+One read-only 5-sample SRTM90 provider call from the app container. No device scan or configuration change.

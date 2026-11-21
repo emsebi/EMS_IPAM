@@ -1,0 +1,1 @@
+Radio 2.3.1 GPS map selection stability trial. All four CI jobs SUCCESS (run 44704760343). Update only modules/radio on EMS VM with prior-version backup, rollback and RADIUS integrity guard. Preserve all GPS records and PostgreSQL tables.

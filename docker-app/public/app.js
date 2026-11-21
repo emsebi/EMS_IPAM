@@ -355,6 +355,15 @@ function mostSpecific(address) {
     .sort((a, b) => b.info.prefix - a.info.prefix)[0]?.item || null;
 }
 
+function effectiveSubnetColor(cidr) {
+  const range=parseCidr(cidr);
+  if(!range)return '#eef2f7';
+  const matches=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
+    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''));
+  matches.sort((a,b)=>b.info.prefix-a.info.prefix);
+  return matches[0]?.item.color||state.data?.space?.color||'#eef2f7';
+}
+
 function existingPrefixAt(address) {
   return mostSpecific(address);
 }
@@ -782,14 +791,14 @@ function renderRootVerticalTable(root, hosts) {
     const start = root.start + row * 256;
     const cidr = `${intToIpv4(start)}/24`;
     const exact = exactPrefixes.get(cidr);
-    html += `<tr><td class="root-network-cell"><div class="range-cell-wrap"><button class="root-row-open" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><span class="root-octet">${(start >>> 8) & 255}</span><span><b class="mono ltr">${cidr}</b><small>${escapeHtml(exact?.name || "بدون نام")} — ${formatNumber(hostCounts.get(row) || 0)} IP</small></span></button>${canWrite() ? `<button class="range-label-action" data-cidr="${cidr}" data-prefix-id="${escapeHtml(exact?.id || "")}" style="--label-color:${escapeHtml(exact?.color || "#94a3b8")}" title="نام‌گذاری و رنگ‌کردن همین /24">■</button>` : ""}</div></td>`;
+    html += `<tr><td class="root-network-cell"><div class="range-cell-wrap"><button class="root-row-open" data-cidr="${cidr}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><span class="root-octet">${(start >>> 8) & 255}</span><span><b class="mono ltr">${cidr}</b><small>${escapeHtml(exact?.name || "بدون نام")} — ${formatNumber(hostCounts.get(row) || 0)} IP</small></span></button>${canWrite() ? `<button class="range-label-action" data-cidr="${cidr}" data-prefix-id="${escapeHtml(exact?.id || "")}" style="--label-color:${escapeHtml(effectiveSubnetColor(cidr))}" title="نام‌گذاری و رنگ‌کردن همین /24">■</button>` : ""}</div></td>`;
     for (const prefix of levels) {
       const span = 2 ** (24 - prefix);
       if (row % span !== 0) continue;
       const info = networkAt(start, prefix);
       const item = exactPrefixes.get(info.cidr);
       const isRoot = info.cidr === root.cidr;
-      const color = item?.color || (isRoot ? space.color : "#eef2f7");
+      const color = effectiveSubnetColor(info.cidr);
       const label = item?.name || (isRoot ? space.name : "آزاد");
       const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
       const first = (start >>> 8) & 255;
@@ -878,7 +887,7 @@ function renderOverview() {
         const value = ipv4ToInt(ip); return value >= start && value <= start + 255;
       }).length;
       const exact = state.data.prefixes.find((item) => item.cidr === cidr);
-      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(exact?.color || "#eef2f7")};--stripe:${escapeHtml(exact?.color || "#eef2f7")}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
+      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
     }
     grid += `</div>`;
   }
@@ -988,7 +997,7 @@ function renderVerticalTable(sheet) {
       const cidr = `${intToIpv4(sheet.start + last)}/${prefix}`;
       const item = exactPrefixes.get(cidr);
       const detail = [item?.role, item?.description].filter(Boolean).join(" — ");
-      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(item?.color || "#eef2f7")}"><div class="range-cell-wrap detail-range-wrap"><button class="table-prefix focus-detail-prefix ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml([item?.name, detail, cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(cidr)}</b><span>${last}–${last + size - 1}</span><strong>${escapeHtml(item?.name || "آزاد")}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button>${canWrite() ? `<button class="detail-range-label" data-cidr="${cidr}" data-prefix-id="${escapeHtml(item?.id || "")}" style="--label-color:${escapeHtml(item?.color || "#94a3b8")}" title="نام‌گذاری و رنگ‌کردن همین رنج">■</button>` : ""}</div></td>`;
+      html += `<td rowspan="${size}" class="subnet-span prefix-${prefix}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><div class="range-cell-wrap detail-range-wrap"><button class="table-prefix focus-detail-prefix ${item ? "named" : ""}" data-cidr="${cidr}" title="${escapeHtml([item?.name, detail, cidr].filter(Boolean).join(" — "))}"><b class="mono ltr">${escapeHtml(cidr)}</b><span>${last}–${last + size - 1}</span><strong>${escapeHtml(item?.name || "آزاد")}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</button>${canWrite() ? `<button class="detail-range-label" data-cidr="${cidr}" data-prefix-id="${escapeHtml(item?.id || "")}" style="--label-color:${escapeHtml(effectiveSubnetColor(cidr))}" title="نام‌گذاری و رنگ‌کردن همین رنج">■</button>` : ""}</div></td>`;
     }
     html += `</tr>`;
   }
@@ -1003,7 +1012,7 @@ function renderSubnetSelector(selected) {
     const cidr = `${intToIpv4(start)}/24`;
     const exact = state.data.prefixes.find((item) => item.cidr === cidr);
     const hostCount = [...hosts.keys()].filter((ip) => { const value = ipv4ToInt(ip); return value >= start && value <= start + 255; }).length;
-    return `<button class="drill-tile open-drill-tile" data-cidr="${cidr}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${cidr}</b>${exact?.name ? `<span>${escapeHtml(exact.name)}</span>` : `<span>بدون نام</span>`}<small>${formatNumber(hostCount)} IP ثبت‌شده</small></button>`;
+    return `<button class="drill-tile open-drill-tile" data-cidr="${cidr}" style="--range-color:${escapeHtml(effectiveSubnetColor(cidr))}"><b class="mono ltr">${cidr}</b>${exact?.name ? `<span>${escapeHtml(exact.name)}</span>` : `<span>بدون نام</span>`}<small>${formatNumber(hostCount)} IP ثبت‌شده</small></button>`;
   }).join("");
   return `<div class="subnet-selector">${tiles}</div>`;
 }
@@ -1012,7 +1021,7 @@ function treeBranch(info, remaining) {
   const exact = state.data.prefixes.find((item) => item.cidr === info.cidr);
   const isHost = info.prefix === 32;
   const name = isHost ? hostMap().get(intToIpv4(info.start))?.name : exact?.name;
-  let html = `<li><div class="tree-node-wrap"><button class="tree-node ${isHost ? "host-node" : ""}" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(exact?.color || "#eef2f7")}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 31 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
+  let html = `<li><div class="tree-node-wrap"><button class="tree-node ${isHost ? "host-node" : ""}" data-cidr="${escapeHtml(info.cidr)}" style="--range-color:${escapeHtml(effectiveSubnetColor(info.cidr))}"><b class="mono ltr">${escapeHtml(info.cidr)}</b><small>${escapeHtml(name || (isHost ? "IP آزاد" : "رنج بدون نام"))}</small></button>${canWrite() && info.prefix <= 31 ? `<button class="tree-edit-prefix" data-cidr="${escapeHtml(info.cidr)}" title="ثبت یا ویرایش">✎</button>` : ""}</div>`;
   if (remaining > 0 && info.prefix < 32) {
     const childPrefix = info.prefix + 1;
     const half = info.size / 2;
@@ -1030,6 +1039,35 @@ function renderTreeView(selected) {
   const trail = [];
   for (let prefix = selected.prefix; prefix <= safeFocus.prefix; prefix += 1) trail.push(networkAt(safeFocus.start, prefix).cidr);
   return `<div class="tree-toolbar"><div class="tree-current"><span>مسیر انتخاب</span><span class="tree-breadcrumbs">${trail.map((cidr, index) => `<button class="tree-jump" data-cidr="${escapeHtml(cidr)}">${index ? "← " : ""}${escapeHtml(cidr)}</button>`).join("")}</span><small>نمایش فعلی تا /${endPrefix}</small></div><div>${safeFocus.prefix > selected.prefix ? `<button class="btn sm tree-up" data-cidr="${escapeHtml(networkAt(safeFocus.start, safeFocus.prefix - 1).cidr)}">یک سطح بالاتر</button>` : ""}${canWrite() && safeFocus.prefix <= 31 ? `<button class="btn sm primary tree-edit-prefix" data-cidr="${escapeHtml(safeFocus.cidr)}">ثبت مشخصات این رنج</button>` : ""}</div></div><div class="tree-scroll" tabindex="0"><ul class="subnet-tree">${treeBranch(safeFocus, depth)}</ul></div><p class="mode-note tree-note">برای رسیدن به /30 و /32 روی شاخهٔ موردنظر کلیک کنید. کادر درخت در هر دو جهت اسکرول می‌شود و کلیک روی /32 فرم همان IP را باز می‌کند.</p>`;
+}
+
+function applySheetLiveSearch(query, jump=false) {
+  const search=document.getElementById('sheetLiveSearch');
+  const status=document.getElementById('sheetSearchCount');
+  if(!search||!status)return;
+  const term=String(query||'').trim().toLocaleLowerCase();
+  const selected=parseCidr(state.sheetCidr);
+  const ip=/^(\\d{1,3}\\.){3}\\d{1,3}$/.test(term)?ipv4ToInt(term):null;
+  if(jump&&ip!==null&&selected&&contains(selected,ip)&&state.displayMode==='table') {
+    const required=Math.floor((ip-selected.start)/256)+1;
+    if(required>state.tableVisibleBlocks){
+      state.tableVisibleBlocks=required;
+      renderSheet();
+      const restored=document.getElementById('sheetLiveSearch');
+      if(restored){restored.value=query;applySheetLiveSearch(query,true);restored.focus();}
+      return;
+    }
+  }
+  const rows=[...page.querySelectorAll('.detail-block .vertical-subnet-table tbody tr')];
+  let hits=0,first=null;
+  for(const row of rows){
+    const match=!term||row.textContent.toLocaleLowerCase().includes(term);
+    row.hidden=Boolean(term)&&!match;
+    row.classList.toggle('sheet-search-hit',Boolean(term)&&match);
+    if(term&&match){hits++;first ||= row;}
+  }
+  status.textContent=!term?'برای جست‌وجو تایپ کنید':hits?`${hits} ردیف یافت شد`:'در جدول‌های نمایش‌داده‌شده نتیجه‌ای نیست';
+  if(jump&&first)first.scrollIntoView({block:'center'});
 }
 
 function renderSheet() {
@@ -1083,8 +1121,10 @@ function renderSheet() {
   const usable = blockCount * 254;
   page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div><div class="sheet-context"><i></i><div><span>${contextIsExact ? "مشخصات همین رنج" : `رنج ثبت‌شدهٔ والد /${contextInfo.prefix}`}</span><b>${escapeHtml(contextTitle)}</b><small class="mono ltr">${escapeHtml(contextInfo.cidr)}</small><em>${escapeHtml(contextDescription)}</em></div></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
     <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span></div></section>
+    <div class="sheet-search-bar"><label for="sheetLiveSearch">جست‌وجو در جدول</label><input type="search" id="sheetLiveSearch" autocomplete="off" placeholder="IP، Hostname، نام Subnet…" aria-describedby="sheetSearchCount"><small id="sheetSearchCount" aria-live="polite">برای جست‌وجو تایپ کنید</small></div>
     <div class="detail-stack">${blocks}</div>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
+  $("sheetLiveSearch")?.addEventListener("input", (event) => applySheetLiveSearch(event.target.value,true));
   $("overviewBack").addEventListener("click", () => { state.view = "overview"; state.paint = false; renderOverview(); });
   $("prevSheet").addEventListener("click", () => { if (selectionIndex > 0) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex - 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
@@ -1272,6 +1312,7 @@ function openPrefixDialog(cidr, id = null) {
   $("exportPrefixButton").classList.toggle("hidden", !item);
   setFormWritable($("prefixForm"), canWrite());
   markFormClean($("prefixForm"));
+  $("prefixSaveNext")?.classList.toggle("hidden", !canWrite());
   $("prefixDialog").showModal();
 }
 
@@ -2218,9 +2259,22 @@ $("spaceForm").addEventListener("submit", async (event) => {
 
 $("deleteSpaceButton").addEventListener("click", () => deleteSpace($("spaceId").value));
 
-$("prefixForm").addEventListener("submit", async (event) => {
+let prefixSaveAndNext=false;
+$("prefixSaveNext")?.addEventListener("click",()=>{prefixSaveAndNext=true;$("prefixForm").requestSubmit();});
+$("prefixForm").addEventListener("submit",async event=>{
   event.preventDefault();
-  try { await request("/api/prefixes", { method: "POST", body: { id: $("prefixId").value || undefined, spaceId: state.currentSpaceId, cidr: $("prefixCidr").value, name: $("prefixName").value, status: $("prefixStatus").value, role: $("prefixRole").value, vlan: $("prefixVlan").value, gateway: $("prefixGateway").value, color: $("prefixColor").value, description: $("prefixDescription").value } }); $("prefixDialog").close(); state.data = await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`); state.selectedCidr = null; renderCurrent(); toast("رنج ذخیره شد."); } catch (error) { toast(error.message); }
+  const move=prefixSaveAndNext;prefixSaveAndNext=false;
+  const current=parseCidr($("prefixCidr").value),root=parseCidr(state.data?.space?.cidr);
+  const next=current&&root&&current.end<root.end?networkAt(current.end+1,current.prefix):null;
+  const oldScroll=window.scrollY;
+  try {
+    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,description:$("prefixDescription").value}});
+    $("prefixDialog").close();
+    state.data=await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
+    state.selectedCidr=null;renderCurrent();window.scrollTo(0,oldScroll);
+    if(move&&next&&contains(root,next))openPrefixDialog(next.cidr);
+    toast("رنج ذخیره شد.");
+  }catch(error){toast(error.message);}
 });
 
 $("deletePrefixButton").addEventListener("click", async () => {

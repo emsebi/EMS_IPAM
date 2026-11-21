@@ -1,0 +1,1 @@
+Deploy Radio compact styling only on the dedicated lab VM, after source checksum verification, backup and rollback controls.

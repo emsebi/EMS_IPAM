@@ -1,4 +1,4 @@
-import {distanceMeters,formatDistance,validGeoPoint} from './geo-math.mjs?v=2.3.0';
+import {distanceMeters,formatDistance,validGeoPoint} from './geo-math.mjs?v=2.3.1-lab.1';
 
 // Radio documentation only: the requests below read existing IPAM/PostgreSQL records.
 // Never SSH/SNMP/poll any radio. AP visibility and the selected AP for editing are separate.
@@ -73,6 +73,7 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onOpenAp}) 
        '<div class="radio-map-coordinates"><label>Latitude<input id="radioGeoLatitude" class="ltr mono" type="number" min="-90" max="90" step="0.000001" value="'+esc(position?.latitude??'')+'" placeholder="35.689200"></label>'+
        '<label>Longitude<input id="radioGeoLongitude" class="ltr mono" type="number" min="-180" max="180" step="0.000001" value="'+esc(position?.longitude??'')+'" placeholder="51.389000"></label></div>'+
        '<div class="radio-map-location-actions">'+(canWrite()?'<button class="btn primary sm" type="button" id="radioGeoSave">'+esc(L('Save location','ذخیره موقعیت'))+'</button><button class="btn sm" type="button" id="radioGeoClear">'+esc(L('Clear','پاک کردن'))+'</button>':'')+
+       '<button type="button" class="btn sm" id="radioGeoFocus">'+esc(L('Focus selected','نمایش موقعیت انتخاب‌شده'))+'</button>'+
        '<a class="btn sm" id="radioGeoExternal" target="_blank" rel="noopener noreferrer" href="https://www.openstreetmap.org/">'+esc(L('Open in OSM','نمایش در نقشه'))+'</a></div></div></aside>'+
      '</div></section>';
  }
@@ -130,12 +131,13 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onOpenAp}) 
      if(count)count.textContent=shownAps.size+' AP · '+markers.filter(m=>m.role==='station').length+' ST';
      externalUrl();updateDistances();
    }
-   liveRefresh=()=>{if(state.view==='radios'&&state.selectedRadioApId===ap.id&&document.getElementById('radioGeoFrame')===frame)sendMap();};
+   liveRefresh=()=>{if(state.view==='radios'&&state.selectedRadioApId===ap.id&&document.getElementById('radioGeoFrame')===frame)sendMap(true);};
    function selectTarget(id){
      if(!targets.some(t=>t.id===id))return;
      currentTarget=id;sel.value=id;
      const point=record();lat.value=point?.latitude??'';lon.value=point?.longitude??'';
-     sendMap(true);
+     // Selecting a pin must not recenter the map; use the explicit Focus button instead.
+    sendMap(false);
    }
    function updateChecks(){
      document.querySelectorAll('.radio-map-choose-ap').forEach(input=>{
@@ -173,6 +175,13 @@ export function createGeoUi({request,escapeHtml,canWrite,toast,state,onOpenAp}) 
    lat.addEventListener('input',()=>sendMap());
    lon.addEventListener('input',()=>sendMap());
    frame.addEventListener('load',()=>sendMap());
+   document.getElementById('radioGeoFocus')?.addEventListener('click',()=>{
+     if(!validInput()&&!record())return toast(L('Enter coordinates or save a position first.','ابتدا مختصات را وارد یا موقعیت را ذخیره کنید.'));
+     const device=selectedDevice(),owner=getOwner(device);
+     if(owner&&!shownAps.has(owner)){shownAps.add(owner);load(owner);updateChecks();}
+     sendMap();
+     frame.contentWindow?.postMessage({type:'ems:radio:geo:focus',id:currentTarget},location.origin);
+   });
    window.radioGeoMessageHandler=(event)=>{
      if(state.view!=='radios'||state.selectedRadioApId!==ap.id||event.origin!==location.origin||event.source!==frame.contentWindow)return;
      const message=event.data||{};

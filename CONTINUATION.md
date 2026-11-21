@@ -1,3 +1,19 @@
+# PR #65 integrated with current IPAM/Radio main — 2026-11-21 UTC
+
+Fresh main is `e7f877281e8361ad20225255a58f257cb30927eb`, preserving the IPAM live-search/inherited-color and Radio compact-UI merges (#75/#74), Link Planner, all generated screenshots and their workflows. PR #12 remains draft/inactive. Only the fixture helper/tests, this checkpoint and source manifest differ from that main; no active UI/module files are edited or deployed.
+
+PR #65's original head `e57efd2f61794e99c78f7ead678db4be5fb1668f` passed PR CI 44470371702 and push CI 44470328084. PostgreSQL job 135378073721 confirms the external-Radio-child case and all 28 HTTP tests passed with zero skips/failures at 2026-11-19T06:12:10Z. Those results predate the latest main and do not substitute for this integration candidate's CI. The real merge conflicts were only CONTINUATION.md and SHA256SUMS: keep both histories and rebuild the manifest from current main plus the two fixture files.
+
+The HTTP regression now also explicitly archives the blocked synthetic company and retries journal recovery. It must refuse the purge, send no DELETE, leave both full host rows and journal bytes unchanged, and retain the company in trash. This covers recovery when a cross-branch Radio reference exists after archive, not only the active-company path. The test then restores the original synthetic link and cleans up through the guarded recovery path.
+
+Local combined journal/preflight/HTTP validation: 26 passed, 0 failed, 4 native-PostgreSQL-only skips (30 including the HTTP parent); all 313 listed checksums and the diff against fresh main pass. This does not execute the extended native-only case locally.
+
+Next: inspect candidate push/PR CI IDs recorded in #65; require the extended Radio case and all 28 native PostgreSQL HTTP tests with zero skips plus every ordinary/browser/Docker gate. Re-read main and PR head before expected-SHA merge; preserve any intervening changes. Then cover remaining incoming references and private preservation comparisons before an installed-loopback runner. The optional SELECT-only Radio guard is still narrow and is not an atomic lock against concurrent writes. No installed XLSX acceptance is claimed.
+
+Latest observed Actions include successful IPAM UI deployment 44895861291 and Radio compact UI deployment 44895981971, with successful main CI 44896140211. These are observed workflow conclusions, not a new deployment or operator acceptance in this run; do not treat the older single-source installed checkpoint below as the complete current module state. Radio functional acceptance and actual MikroTik Full/Read login remain open. No VM write, device discovery, router push, schema change or credential access.
+
+---
+
 # Radio relationship preflight for disposable XLSX cleanup (2026-11-19 UTC)
 
 PR #64 merged with expected head at `c3977cd96289539dd888fa0904804641b6caade3`. Candidate CI 44456081052 and 44456075220 passed; PostgreSQL job 135331300575 passed all 27 HTTP tests without failures/skips at 04:07:41 UTC. Merge CI [44469937411](https://github.com/emsebi/EMS_IPAM/actions/runs/44469937411) succeeded. Fresh main `ecc0cdfbf5b67566866a891d60e1cdb382bbfe1b` adds only the generated Radio screenshot. PR #12 remains inactive/draft.
@@ -7,6 +23,20 @@ Small next step: a SELECT-only fixture preflight counts outside-company hosts re
 Local validation and candidate CI IDs are in the PR body. Next: verify the new native HTTP case and all 28 HTTP tests with zero skips, plus ordinary/browser/Docker gates, before merging with fresh refs and expected head. Then cover other incoming references (company hierarchy, grants and module foreign keys) and private before/after preservation evidence before an installed-loopback runner. This narrow guard covers hosts.radio_parent_host_id only; it is optional for isolated tests, not a complete installed cleanup policy or an atomic concurrency lock. Keep a single fixture owner; do not infer safety against concurrent application writes.
 
 No application/schema change, VM redeployment, device scan or router push. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` (Lab Deploy 44376757411). Installed XLSX, Radio operator acceptance and real MikroTik login remain open. Unresolved create replies still need evidence reconciliation, never guessed IDs.
+
+
+---
+
+# EMS_IPAM module publication checkpoint — 2026-11-20
+
+**Status: code merged into main; VM modules installed and reachable; operator functional acceptance remains open.**
+
+- [Radio map stability PR #68](https://github.com/emsebi/EMS_IPAM/pull/68) merged via `4ad6d83a0f4e61d15aed45fb6c9050f4556605e7`. Radio 2.3.1 keeps viewport fixed while picking GPS coordinates, adds explicit Focus/zoom, preserves simultaneous AP groups, AP→Station links, per-station distances and persisted PostgreSQL positions. [Module-only VM deployment 44706521989](https://github.com/emsebi/EMS_IPAM/actions/runs/44706521989) successful.
+- [Link Planner PR #67](https://github.com/emsebi/EMS_IPAM/pull/67) merged via `9e618050591473499e3cea2958eba563c6b60b4d`. Link Planner 0.2.0 is a **separate** admin-only module: two selectable locations, authenticated on-demand SRTM90 profile, LOS/Fresnel + curvature, inverse tower-height computation (fixed A → required B or reverse), explicit RF budget inputs, curated MikroTik/Mimosa/Ericsson/Huawei/RACOM model/protocol references, saved plans and JSON results. **Theoretical reference PHY or brochure ceiling is not measured throughput.** Vendor-specific MCS/SNR, firmware/licence, weather/rain availability and PDF-grade reports remain open under [Issue #66](https://github.com/emsebi/EMS_IPAM/issues/66).
+- Combined branch CI [44765258831](https://github.com/emsebi/EMS_IPAM/actions/runs/44765258831) passed all four gates and Link Planner browser [44765258601](https://github.com/emsebi/EMS_IPAM/actions/runs/44765258601) passed after synchronising Radio 2.3.1 and resolving `SHA256SUMS` discrepancies. The original Link Planner-only installation on VM [44707008922](https://github.com/emsebi/EMS_IPAM/actions/runs/44707008922) passed, including DB backup and RADIUS integrity check.
+- Live connectivity and runtime audit [44764568381](https://github.com/emsebi/EMS_IPAM/actions/runs/44764568381) passed from the authorized self-hosted runner to `http://10.1.1.5:8888/health`: HTTP 200, 9 registered modules including `radio` and `link-planner`, app/database/radius_ops containers running, unauthenticated map endpoints return expected 401.
+- No reinstallation on VM was required when merging: the user-facing module-only code was already deployed and verified. **User still needs to visually accept the interface and verify a known RF path; real RouterOS RADIUS login Full/Read remains unverified.**
+- New host installation: `install.sh` from `main` includes both modules. Take separate backups and distinguish migration, test success and production validation. Project Core version remains 1.7.1; Radio is 2.3.1; Link Planner is an experimental 0.2.0.
 
 ---
 

@@ -60,11 +60,73 @@ try {
   await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
   check('real login and application bootstrap');
 
+  // Light theme must render dark text and visible lines; dark mode must retain its palette.
+  const readPalette=()=>page.evaluate(()=>{
+    const root=getComputedStyle(document.documentElement);
+    return ['--ink','--muted','--line','--soft'].reduce((out,key)=>{
+      out[key]=root.getPropertyValue(key).trim();return out;
+    },{});
+  });
+  const contrast=(foreground,background)=>{
+    const rgb=v=>v.replace('#','').match(/.{2}/g).map(c=>parseInt(c,16)/255)
+      .map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);
+    const lum=rgb=>rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    const a=lum(rgb(foreground)),b=lum(rgb(background));
+    return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+  };
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+  const light=await readPalette();
+  assert.ok(contrast(light['--ink'],'#ffffff')>=7,'Light mode primary text needs high contrast');
+  assert.ok(contrast(light['--muted'],'#ffffff')>=4.5,'Light mode secondary labels need readable contrast');
+  assert.ok(contrast(light['--line'],'#ffffff')>=2.5,'Light mode table borders should be visible');
+  await page.locator('#themeButton').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  const dark=await readPalette();
+  assert.equal(dark['--ink'],'#edf6ff','Dark mode main text color must remain unchanged');
+  assert.equal(dark['--line'],'#29415d','Dark mode borders must remain unchanged');
+  await page.locator('#themeButton').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+  check('Light theme primary/secondary text and table-line contrast; dark palette preserved');
+
   await page.locator('#deviceTypesButton').click();
   await page.locator('#deviceTypeName').fill('Test Device');
   await page.locator('#deviceTypeForm [type=submit]').click();
   await page.locator('#deviceTypesList').getByText('Test Device', { exact: true }).waitFor();
   check('standalone Device Types creation');
+  // Screenshot/user-feedback regression: compact Device Type rows must be inline,
+  // desktop list multi-column, mobile single-column, with all actions on the same line.
+  const demoTypeIds=[];
+  for(let n=1;n<=5;n++){
+    const created=await api('/api/device-types','POST',{name:'Layout Preview '+n,color:'#3157d5'},201);
+    demoTypeIds.push(created.id);
+  }
+  await page.locator('#deviceTypesButton').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#deviceTypesList .device-type-item').length>=6);
+  const desktopLayout=await page.locator('#deviceTypesList').evaluate(grid=>{
+    const rows=[...grid.querySelectorAll('.device-type-item')],columns=getComputedStyle(grid).gridTemplateColumns.split(' ').length;
+    const positions=rows.map(item=>({x:Math.round(item.getBoundingClientRect().x),y:Math.round(item.getBoundingClientRect().y)}));
+    const first=rows[0],name=first.querySelector('.device-type-info b').getBoundingClientRect(),actions=first.querySelector('.device-type-actions').getBoundingClientRect();
+    return {columns,positions,firstRowCenterDelta:Math.abs((name.top+name.bottom)/2-(actions.top+actions.bottom)/2),
+      actionsWrap:getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
+      firstHeight:first.getBoundingClientRect().height};
+  });
+  assert.ok(desktopLayout.columns>=2,'Device Types desktop must have multiple columns: '+JSON.stringify(desktopLayout));
+  assert.ok(new Set(desktopLayout.positions.map(p=>p.x)).size>=2,'Cards should occupy multiple horizontal columns');
+  assert.ok(desktopLayout.firstRowCenterDelta<15,'Name and Edit/Delete must appear on the same line');
+  assert.equal(desktopLayout.actionsWrap,'nowrap');
+  assert.ok(desktopLayout.firstHeight<=64,'Device Type rows should be compact: '+desktopLayout.firstHeight);
+  await page.screenshot({path:path.join(outputDir,'device-types-compact-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  const mobileLayout=await page.locator('#deviceTypesList').evaluate(grid=>({
+    columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    cards:[...grid.querySelectorAll('.device-type-item')].map(el=>({width:el.getBoundingClientRect().width,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}))
+  }));
+  assert.equal(mobileLayout.columns,1,'Device Types mobile should be a single column');
+  assert.ok(mobileLayout.cards.every(c=>c.scrollWidth<=c.clientWidth+2),'Device Type action buttons must not overflow mobile cards');
+  await page.screenshot({path:path.join(outputDir,'device-types-compact-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:980});
+  for(const id of demoTypeIds)await api('/api/device-types/'+encodeURIComponent(id),'DELETE');
+  check('Device Types compact desktop grid, single-row actions and mobile responsiveness');
   await page.locator('#inventoryButton').click();
   await page.locator('#newInventoryDevice').click();
   await page.locator('#inventoryCreateSpace').selectOption('test-space');
@@ -130,8 +192,33 @@ try {
   const ipamPreview = await context.newPage();
   await ipamPreview.goto('/#/ipam/test-space/192.0.2.0%2F24');
   await ipamPreview.locator('#sheetSelect').waitFor();
+  await ipamPreview.locator('.display-mode[data-mode="table"]').click();
+  await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
+  const tableSize=await ipamPreview.locator('.vertical-subnet-table').first().evaluate(table=>{
+    const tr=table.tBodies[0].rows[8],td=tr.cells[0],button=td.querySelector('.map-ip-cell');
+    const row=tr.getBoundingClientRect(),content=button.getBoundingClientRect();
+    const th=table.tHead.rows[0].cells[0].getBoundingClientRect();
+    return {rowH:row.height,cellH:content.height,headH:th.height,
+      buttonContained:content.top>=row.top-1&&content.bottom<=row.bottom+1};
+  });
+  assert.ok(tableSize.rowH>=30&&tableSize.rowH<=38,'/24 vertical IP rows must be compact: '+JSON.stringify(tableSize));
+  assert.ok(tableSize.headH>=28&&tableSize.headH<=38,'/24 header must be compact: '+JSON.stringify(tableSize));
+  assert.ok(tableSize.buttonContained,'/24 IP and device label must stay within the table row');
+  await ipamPreview.screenshot({path:path.join(outputDir,'ipam-24-compact-table.png'),fullPage:true});
+  await ipamPreview.locator('.display-mode[data-mode="classic"]').click();
+  await ipamPreview.locator('.ip-map .ip-cell').first().waitFor();
+  const gridSize=await ipamPreview.locator('.ip-map .ip-cell').first().evaluate(cell=>{
+    const r=cell.getBoundingClientRect(),label=cell.querySelector('.host-name');
+    return {height:r.height,labelContained:!label||label.getBoundingClientRect().bottom<=r.bottom+1};
+  });
+  assert.ok(gridSize.height>=39&&gridSize.height<=47,'/24 graphical cells should fit two lines tightly: '+JSON.stringify(gridSize));
+  assert.ok(gridSize.labelContained,'/24 graphical cell must not crop its host label');
+  await ipamPreview.screenshot({path:path.join(outputDir,'ipam-24-compact-grid.png'),fullPage:true});
+  await ipamPreview.locator('.display-mode[data-mode="table"]').click();
+  await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
   await ipamPreview.close();
+  check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
 
   await page.locator('#deviceTypesButton').click();
@@ -195,6 +282,18 @@ try {
   assert.equal(await multiFrame.locator('line.radio-link').count(),2);
   assert.equal(await multiFrame.locator('.radio-pin.ap').count(),2);
   assert.equal(await multiFrame.locator('.radio-pin.station').count(),2);
+  // Regression: selecting a coordinate MUST NOT change the map zoom or center.
+  const radioTiles=()=>multiFrame.locator('#radioTiles img').evaluateAll(images=>images.map(img=>[img.src,img.style.left,img.style.top]));
+  const tilesBeforeRadioPick=await radioTiles();
+  const longitudeBeforePick=await page.locator('#radioGeoLongitude').inputValue();
+  await multiFrame.locator('#radioMap').click({position:{x:200,y:185}});
+  await page.waitForFunction(old=>document.getElementById('radioGeoLongitude')?.value!==old,longitudeBeforePick);
+  await page.waitForTimeout(80);
+  assert.deepEqual(await radioTiles(),tilesBeforeRadioPick,'Selecting a radio position must not jump to another area.');
+  await page.locator('#radioGeoFocus').click();
+  await multiFrame.locator('#fitRadio').click();
+  await multiFrame.locator('line.radio-link[data-station-id="st2"][data-ap-id="ap2"]').waitFor({state:'attached'});
+
   assert.equal(await page.locator('.radio-doc-grid').count(),0);
   assert.equal(await page.locator('.radio-doc-compact').count(),1);
   assert.ok((await page.locator('#radioGeoFrame').evaluate(el=>el.getBoundingClientRect().height))>=540);
@@ -233,6 +332,34 @@ try {
 
   await page.locator('#networkAccessButton').click();
   await page.locator('.access-records').getByText('Workstation Edited', { exact: true }).waitFor();
+  // Screenshot regression: the MAC / IP / Device headings must start at the same
+  // inline edge as their corresponding cells, including English and Persian direction.
+  const alignment=await page.locator('.access-records .inventory-table').evaluate(table=>{
+    const initialDir=table.getAttribute('dir'),outputs={};
+    const inset=(el)=>{
+      const cell=el.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(el);
+      const glyph=range.getBoundingClientRect(),direction=getComputedStyle(el).direction;
+      return direction==='rtl'?cell.right-glyph.right:glyph.left-cell.left;
+    };
+    for(const direction of ['ltr','rtl']){
+      table.setAttribute('dir',direction);
+      outputs[direction]=[1,2,3].map(i=>{
+        const heading=table.querySelector('thead th:nth-child('+i+')');
+        const data=table.querySelector('tbody tr:first-child td:nth-child('+i+')');
+        return {column:i,heading:inset(heading),data:inset(data),
+          headingAlign:getComputedStyle(heading).textAlign,dataAlign:getComputedStyle(data).textAlign};
+      });
+    }
+    if(initialDir===null)table.removeAttribute('dir');else table.setAttribute('dir',initialDir);
+    return outputs;
+  });
+  for(const [mode,columns] of Object.entries(alignment)){
+    for(const cell of columns){
+      assert.ok(Math.abs(cell.heading-cell.data)<=5,
+        'Network Access '+mode+' heading '+cell.column+' offset from data: '+JSON.stringify(cell));
+    }
+  }
+  check('MAC / IP / Device table headings aligned with values in LTR and RTL');
   await page.locator('#personnelTab').click();
   await page.locator('#managePersonnel').click();
   await page.locator('#personnelName').fill('Test Person');

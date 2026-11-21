@@ -4,7 +4,7 @@
 
 پنل یکپارچهٔ مدیریت و مستندسازی شبکه برای مدیران شبکه؛ با رابط فارسی/انگلیسی و اجرای Docker. هدف پروژه این است که اطلاعات IP، تجهیزات، شعب، دسترسی‌ها و نقشه‌ها در یک محیط قابل پیگیری باشند.
 
-**نسخهٔ فعلی: 1.7.1** · **Radio: 2.3** · **Windows Client: 0.8.0**  
+**نسخهٔ هسته: 1.7.1** · **Radio: 2.3.1** · **Link Planner: 0.2.0 (آزمایشی)** · **Windows Client: 0.8.0**  
 [نصب سریع](#install) · [تصاویر واقعی](#screenshots) · [قابلیت‌ها](#features) · [محدودیت‌ها](#status) · [مستندات](#docs) · [Support](#support)
 
 ---
@@ -55,7 +55,8 @@ sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get in
 | ماژول | قابلیت قابل استفاده | وضعیت |
 |---|---|---|
 | **IP Manager / Inventory** | ثبت و جست‌وجوی رنج، IP، تجهیزات، Device Types، شعب و اطلاعات مرتبط | موجود |
-| **Radio Management 2.3** | نقشهٔ چند AP، ارتباط AP→Station، مختصات PostgreSQL، فاصلهٔ GPS و Ping دستی | موجود؛ مستندسازی |
+| **Radio Management 2.3.1** | نقشهٔ چند AP، ارتباط AP→Station، مختصات PostgreSQL، فاصلهٔ GPS، انتخاب موقعیت بدون پرش نقشه و Ping دستی | موجود؛ مستندسازی |
+| **Link Planner 0.2.0** | انتخاب دو سایت، پروفایل SRTM90، LOS/فرنل، محاسبه حداقل دکل طرف مقابل، Link Budget، مدل‌های مرجع MikroTik/Mimosa/Ericsson/Huawei/RACOM، ذخیره سناریو | آزمایشی؛ بدون ادعای پیش‌بینی توان عملیاتی واقعی |
 | **RADIUS Device Access** | NAS، NAS Collections، پروفایل، کاربران، گزارش و مدیریت Secret؛ بدون نیاز به Company در بخش RADIUS | موجود؛ پذیرش روی روتر واقعی باز |
 | **Operations Overview** | نماهای تجمیعی IPAM، سایت‌ها، Radio، RADIUS و آخرین Snapshot شبکه | آزمایشی |
 | **Smart Network Map** | نقشهٔ دستی، Snapshot و پردازش آفلاین LLDP/CDP | تکمیل جزئی |
@@ -83,6 +84,7 @@ sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get in
 - کشف کاملاً خودکار توپولوژی، MAC Trace و اعمال 802.1X/NAC هنوز تکمیل نشده‌اند.
 - ورود واقعی RADIUS به RouterOS و تفاوت سطوح **Full / Read** باید روی دستگاه عملی بررسی شود.
 - خطوط Radio فاصلهٔ مستقیم موقعیت‌های ثبت‌شده را نشان می‌دهند، نه کیفیت یا مانیتورینگ زندهٔ لینک. کاشی‌های OpenStreetMap برای نمایش آنلاین به اینترنت نیاز دارند.
+- **Link Planner** به داده‌های ارتفاعی SRTM90 متکی است (تفکیک تقریبی ۹۰ متر) و اطلاعات درختان/ساختمان‌های ثبت‌نشده را نمی‌داند. نرخ PHY استاندارد یا حد بالای کاتالوگی **Throughput واقعی** نیست؛ مدولاسیون تطبیقی، تداخل، Availability باران و محدودیت‌های قانونی بدون دیتاشیت و داده معتبر قابل تأیید نیستند.
 - Snapshot شبکه و آخرین Ping ثبت‌شده نباید با وضعیت زندهٔ شبکه اشتباه گرفته شوند. هیچ ارتباط یا Push خودکاری به تجهیزات نباید بدون درخواست و مجوز اجرا شود.
 - نصب موفق در CI، جایگزین بکاپ، استقرار روی VM و آزمون عملی اپراتور نیست.
 
@@ -100,6 +102,7 @@ sudo bash -c 'set -e; command -v curl >/dev/null || { apt-get update; apt-get in
 | [معیار حفظ امکانات](docs/FEATURE-ACCEPTANCE-FA.md) | جلوگیری از حذف قابلیت‌های پذیرفته‌شده |
 | [نقطهٔ ادامهٔ توسعه](CONTINUATION.md) | وضعیت فنی و گام‌های بعد |
 | [Radio Management](modules/radio/README.md) | جزئیات و محدودیت‌های نقشهٔ رادیویی |
+| [Link Planner](modules/link-planner/README.md) | برنامه‌ریزی لینک، SRTM/فرنل، محاسبه ارتفاع و محدودیت‌های PHY |
 
 <a id="support"></a>
 ## ❤️ حمایت از توسعه

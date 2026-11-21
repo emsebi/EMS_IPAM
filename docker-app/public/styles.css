@@ -257,3 +257,172 @@ html[data-content-direction="rtl"] .sidebar .navbtn,html[data-content-direction=
   .app.sidebar-collapsed .nav-submenu .navbtn{font-size:13px;min-width:0;justify-content:start;padding:6px}
   .app.sidebar-collapsed .nav-submenu .navbtn>span:last-child{display:inline}
 }
+
+
+/* IPAM dense tables 1.7.2+:
+   /16 overview and each /24 detail use the same compact rhythm.
+   Keep real text, borders, controls and row-span annotations legible. */
+:root{--ipam-compact-row:34px;--ipam-compact-grid:43px}
+.root-range-table td{height:var(--ipam-compact-row)!important}
+.root-range-table th{height:32px!important}
+.root-prefix-open{min-height:30px!important}
+.root-row-open{min-height:30px}
+.vertical-subnet-table th{height:34px;padding:5px 4px;font-size:10px;line-height:1.25}
+.vertical-subnet-table td{height:var(--ipam-compact-row);font-size:11px;line-height:1.25}
+.vertical-subnet-table .ip-line.map-ip-cell{height:100%;min-height:0;min-width:0;
+  padding:3px 7px;gap:6px;font-size:11px;line-height:1.25}
+.vertical-subnet-table .ip-line b{font-size:11px;line-height:1.25;min-width:0}
+.vertical-subnet-table .table-status{gap:5px;padding:0 6px;line-height:1.25}
+.vertical-subnet-table .table-status i{flex:0 0 8px}
+.vertical-subnet-table .table-connect{padding:2px!important}
+.vertical-subnet-table .table-connect-button{min-height:26px;padding:3px 4px;font-size:10px;line-height:1.2}
+.vertical-subnet-table .subnet-span{padding:2px!important}
+.vertical-subnet-table .table-prefix{min-height:28px;gap:1px;padding:2px 3px}
+.vertical-subnet-table .table-prefix b,.vertical-subnet-table .table-prefix strong,
+.vertical-subnet-table .table-prefix span,.vertical-subnet-table .table-prefix small{
+  line-height:1.2;overflow-wrap:anywhere}
+.vertical-subnet-table .detail-range-wrap>.table-prefix{padding-left:26px!important}
+.vertical-subnet-table .detail-range-label{top:3px;left:3px;width:18px;height:18px}
+/* /24 visual cells: two readable lines (IP octet + optional host label). */
+.visual-map .visual-row{gap:3px;margin-bottom:4px}
+.visual-map .axis{height:22px;line-height:1.2}
+.visual-map .row-axis{height:var(--ipam-compact-grid);padding:3px;font-size:10px}
+.visual-map .subnet-tile{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
+.visual-map .subnet-tile .octet{font-size:13px;line-height:1.2}
+.visual-map .subnet-tile .cidr{margin-top:1px;line-height:1.15}
+.visual-map .subnet-tile .count{bottom:3px;font-size:9px}
+.visual-map.ip-map .ip-cell{height:var(--ipam-compact-grid);padding:4px 5px;border-radius:5px}
+.visual-map.ip-map .ip-cell .last{font-size:13px;line-height:1.2}
+.visual-map.ip-map .ip-cell .host-name{font-size:10px;line-height:1.2;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visual-map.ip-map .ping-dot{top:-4px;right:-4px}
+/* /23 or larger: compact /24 subnet pickers without cutting off 3 lines. */
+.subnet-selector{gap:6px}
+.subnet-selector .drill-tile{min-height:60px;padding:7px 9px;gap:3px;line-height:1.25}
+.subnet-selector .drill-tile small{font-size:10px}
+/* Other IPAM record tables and management rows, not forms or modals. */
+.inventory-table th{padding:8px 9px;line-height:1.3}
+.inventory-table td{padding:7px 9px;line-height:1.3}
+.inventory-name small{margin-top:2px}
+.range-list .range-row{padding:7px 10px;gap:7px;line-height:1.3}
+.table-list>.user-row:not(.device-type-item){padding:8px 10px;gap:7px}
+.table-load-more{padding:10px 12px}
+.bulk-preview-scroll td,.bulk-preview-scroll th{padding:4px 6px}
+
+
+/* Light theme readability / contrast. Scoped: does not modify the dark palette.
+   Text is dark navy, secondary labels slate; borders are visible on white backgrounds.
+   Preserve semantic colors (online/offline/warnings) and white text on dark headers. */
+html[data-theme="light"]{
+  --ink:#13243b;
+  --text:#13243b;
+  --muted:#46566d;
+  --line:#8e9eb3;
+  --soft:#eff3f8;
+  --card:#ffffff;
+  --panel:#ffffff;
+  color-scheme:light;
+}
+html[data-theme="light"] .page,
+html[data-theme="light"] .panel,
+html[data-theme="light"] .stat,
+html[data-theme="light"] .sheet-banner,
+html[data-theme="light"] .inventory-table-wrap,
+html[data-theme="light"] .types-panel,
+html[data-theme="light"] .search-results,
+html[data-theme="light"] .user-row,
+html[data-theme="light"] .form-section{
+  color:var(--ink);
+}
+html[data-theme="light"] .crumb,
+html[data-theme="light"] .subtitle,
+html[data-theme="light"] .stat .label,
+html[data-theme="light"] .stat .foot,
+html[data-theme="light"] .inventory-name small,
+html[data-theme="light"] .device-type-info>small,
+html[data-theme="light"] .sheet-title p,
+html[data-theme="light"] .sheet-context small,
+html[data-theme="light"] .sheet-context em,
+html[data-theme="light"] .root-row-open small,
+html[data-theme="light"] .field small,
+html[data-theme="light"] .field label,
+html[data-theme="light"] .field>span,
+html[data-theme="light"] .visual-map .axis{
+  color:var(--muted);
+}
+html[data-theme="light"] .root-range-table td,
+html[data-theme="light"] .vertical-subnet-table td,
+html[data-theme="light"] .inventory-table td{
+  color:var(--ink);
+  border-color:#98a7bc;
+}
+html[data-theme="light"] .root-range-table td,
+html[data-theme="light"] .vertical-subnet-table td{
+  border-right-color:#8e9eb3;
+  border-bottom-color:#9ba9bb;
+}
+html[data-theme="light"] .vertical-subnet-table td:first-child{
+  border-right-color:#7c8da5;
+}
+html[data-theme="light"] .vertical-subnet-wrap,
+html[data-theme="light"] .root-vertical-wrap,
+html[data-theme="light"] .inventory-table-wrap,
+html[data-theme="light"] .sheet-context,
+html[data-theme="light"] .stat,
+html[data-theme="light"] .panel,
+html[data-theme="light"] .types-panel .device-type-item,
+html[data-theme="light"] .user-row{
+  border-color:var(--line);
+}
+html[data-theme="light"] .ip-line,
+html[data-theme="light"] .ip-line b,
+html[data-theme="light"] .table-status,
+html[data-theme="light"] .root-prefix-open,
+html[data-theme="light"] .table-prefix:not(.named),
+html[data-theme="light"] .root-row-open,
+html[data-theme="light"] .ip-cell,
+html[data-theme="light"] .subnet-tile{
+  color:var(--ink);
+}
+html[data-theme="light"] .ip-cell,
+html[data-theme="light"] .subnet-tile{
+  border-color:#8d9eb5;
+}
+html[data-theme="light"] .ip-cell .host-name,
+html[data-theme="light"] .ip-cell.system,
+html[data-theme="light"] .subnet-tile .cidr,
+html[data-theme="light"] .subnet-tile .count{
+  color:#40526b;
+}
+html[data-theme="light"] .root-octet{color:#23499e}
+html[data-theme="light"] .row-axis{color:#3c4f6a;background:#e4eaf3}
+html[data-theme="light"] .monitor-pill:not(.online):not(.warning):not(.offline){
+  color:#354762;background:#e4eaf3;border:1px solid #a4b1c2;
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder{
+  color:#516178;opacity:1;
+}
+html[data-theme="light"] .field input,
+html[data-theme="light"] .field select,
+html[data-theme="light"] .field textarea,
+html[data-theme="light"] .inventory-filters input,
+html[data-theme="light"] .inventory-filters select,
+html[data-theme="light"] .quick-ip input,
+html[data-theme="light"] .map-select,
+html[data-theme="light"] .searchbox input,
+html[data-theme="light"] .context-selectors select,
+html[data-theme="light"] #sheetSelect{
+  border-color:#899bb2;
+  color:var(--ink);
+}
+/* Keep the existing dark table headers and their white text unchanged. */
+
+/* Scoped inline IPAM search: no submit button, immediate filtering. */
+.sheet-search-bar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:12px 14px;background:var(--card,#fff);border:1px solid var(--line,#dce3ed);border-radius:12px;margin:12px 0}
+.sheet-search-bar label{font-size:.85rem;font-weight:700}
+.sheet-search-bar input{flex:1;min-width:190px;border:1px solid var(--line,#cbd5e1);border-radius:8px;padding:9px 11px;color:var(--ink,#14243c);background:var(--card,#fff)}
+.sheet-search-bar small{color:var(--muted,#66758b);font-size:.75rem}
+.vertical-subnet-table tr[hidden]{display:none!important}
+.vertical-subnet-table tr.sheet-search-hit>td:first-child{outline:2px solid #2b83ed;outline-offset:-2px}
+@media(max-width:630px){.sheet-search-bar{padding:9px}.sheet-search-bar input{min-width:100%}}

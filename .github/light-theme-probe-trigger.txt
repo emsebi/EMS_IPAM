@@ -1,0 +1,1 @@
+2026-11-21 read-only verification after initial light UI deployment aborted and rollback. Check live VM app/db/radius status, CSS, source and HTTP paths; do not mutate anything.

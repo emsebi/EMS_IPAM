@@ -953,6 +953,16 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       assert.deepEqual(deletes, []);
       const record = await admin('GET', '/api/companies/' + destination.companyId);
       assert.equal(record.company.id, destination.companyId);
+
+      // Rehearse recovery of an already archived fixture with the same external link.
+      await admin('DELETE', '/api/companies/' + destination.companyId);
+      linkedRows = await snapshot();
+      await assert.rejects(recoverXlsxHttpFixture(call, journalPath, { beforeCleanup }), blocked);
+      assert.deepEqual(await fs.readFile(journalPath), journalBefore);
+      assert.deepEqual(await snapshot(), linkedRows);
+      assert.deepEqual(deletes, []);
+      assert.ok((await admin('GET', '/api/trash')).items.some(item =>
+        item.kind === 'company' && item.id === destination.companyId));
     } finally {
       // Remove only this test's injected relationship in its disposable database.
       try {
