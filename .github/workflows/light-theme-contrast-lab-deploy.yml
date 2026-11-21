@@ -102,26 +102,38 @@ jobs:
             exit "$code"
           }
           trap rollback EXIT
-          UPDATED=1
+          echo "VERIFY GitHub checkout contains the reviewed CSS and HTML."
+          git -C "$SRC" rev-parse --verify HEAD
+          for needle in '--muted:#46566d' '--line:#8e9eb3'; do
+            if ! grep -q -- "$needle" "$SRC/docker-app/public/styles.css"; then
+              echo "::error::Checked-out stylesheet missing expected token $needle"
+              exit 1
+            fi
+          done
+          grep -q -- 'styles.css?v=1.7.2-light-contrast1' "$SRC/docker-app/public/index.html" || {
+            echo "::error::Checked-out HTML does not reference new stylesheet"; exit 1;
+          }
 
-          # Copy only CSS and HTML cache version; no backend or module files are altered.
-          install -m 0644 "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
-          install -m 0644 "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
-
-          echo "VERIFY updated host CSS / HTML copied exactly from the tested commit"
-          cmp "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
-          cmp "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
-          grep -q -- '--muted:#46566d' "$DEPLOY/docker-app/public/styles.css"
-          grep -q -- '--line:#8e9eb3' "$DEPLOY/docker-app/public/styles.css"
-          echo "Building staged image from the explicit verified docker-app directory."
-          docker build -t "$STAGED_TAG" "$DEPLOY/docker-app"
-          echo "VERIFY staged image files BEFORE replacing the running App."
+          echo "Preparing a staged build context from installed app code without touching live files."
+          STAGED_CONTEXT="$BACK/docker-app-stage"
+          cp -a "$DEPLOY/docker-app" "$STAGED_CONTEXT"
+          install -m 0644 "$SRC/docker-app/public/styles.css" "$STAGED_CONTEXT/public/styles.css"
+          install -m 0644 "$SRC/docker-app/public/index.html" "$STAGED_CONTEXT/public/index.html"
+          cmp "$SRC/docker-app/public/styles.css" "$STAGED_CONTEXT/public/styles.css"
+          cmp "$SRC/docker-app/public/index.html" "$STAGED_CONTEXT/public/index.html"
+          echo "Building isolated staged image from the verified temporary directory."
+          docker build -t "$STAGED_TAG" "$STAGED_CONTEXT"
+          echo "VERIFY staged Docker image contains both light theme tokens and cache-busted HTML."
           docker run --rm --network none --entrypoint sh "$STAGED_TAG" -c \
             'grep -q -- "--muted:#46566d" /app/public/styles.css && grep -q -- "--line:#8e9eb3" /app/public/styles.css && grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html' || {
-              echo "::error::Staged Docker image does not contain the new CSS/HTML. Live App was not replaced."
+              echo "::error::Staged image failed CSS verification. Running App and installed files were untouched."
               exit 1
             }
-          echo "Staged image contains verified high contrast files; switching only App image."
+
+          UPDATED=1
+          echo "Staged image verified; installing only public CSS/HTML and replacing App."
+          install -m 0644 "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
+          install -m 0644 "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
           docker image tag "$STAGED_TAG" "$IMAGE"
           APP_REPLACED=1
           docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
