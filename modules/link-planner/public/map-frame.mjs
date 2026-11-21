@@ -1,5 +1,5 @@
 // Minimal OSM raster map. Tiles have public attribution; no inventory credentials are sent.
-import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs?v=0.2.0-lab.1';
+import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs?v=0.2.1-lab.1';
 const get=id=>document.getElementById(id);
 const map=get('map'),tiles=get('tiles'),links=get('line'),pins=get('pins'),hint=get('hint');
 let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null,initialFit=false;
