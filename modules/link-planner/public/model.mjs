@@ -165,7 +165,7 @@ export function geoProject(latitude,longitude,zoom=0){
 }
 export function geoUnproject(x,y,zoom=0){
   const scale=256*2**zoom,n=Math.PI-2*Math.PI*y/scale;
-  return {latitude:Math.atan(Math.sinh(n))/rad,longitude:(((x/scale*360)%360)+540)%360-180};
+  return {latitude:Math.atan(Math.sinh(n))/rad,longitude:(((x/scale*360)%360)+360)%360-180};
 }
 export function fitGeoPoints(points,width,height,{padding=65,minZoom=2,maxZoom=18}={}){
   const selected=(points||[]).filter(validGeoPoint);
