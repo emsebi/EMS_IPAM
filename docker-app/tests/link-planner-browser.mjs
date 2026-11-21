@@ -80,6 +80,14 @@ try{
  await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
  const bPin=mapFrame.locator('.planner-pin.b');
  await bPin.waitFor({state:'visible'});
+ await page.waitForFunction(()=>{
+  const frame=document.getElementById('lpMap');
+  const map=frame?.contentDocument?.getElementById('map');
+  const pin=frame?.contentDocument?.querySelector('.planner-pin.b');
+  if(!map||!pin)return false;
+  const p=pin.getBoundingClientRect(),m=map.getBoundingClientRect();
+  return p.left+p.width/2>=m.left-20&&p.left+p.width/2<=m.right+20&&p.top+p.height/2>=m.top-20&&p.top+p.height/2<=m.bottom+20;
+ },null,{timeout:6000});
  const pinPosition=await bPin.evaluate(pin=>{
    const box=pin.getBoundingClientRect(),map=document.getElementById('map').getBoundingClientRect();
    return {x:box.left+box.width/2-map.left,y:box.top+box.height/2-map.top,width:map.width,height:map.height};
