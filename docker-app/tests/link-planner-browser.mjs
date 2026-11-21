@@ -144,6 +144,23 @@ try{
  await page.waitForTimeout(400);
  const overflow=await page.evaluate(()=>({document:document.documentElement.scrollWidth,view:innerWidth}));
  assert.ok(overflow.document<=overflow.view+2,'Planner mobile overflow: '+JSON.stringify(overflow));
+ // Light palette must remain unchanged; dark Link Planner cards and inputs must not stay white.
+ const themeColors=async()=>page.evaluate(()=>{
+   const card=document.querySelector('.lp-side .lp-card');
+   const site=document.querySelector('.lp-site');
+   const field=document.querySelector('.lp-site input');
+   const color=el=>getComputedStyle(el).backgroundColor;
+   return {card:color(card),site:color(site),field:color(field)};
+ });
+ const lightColors=await themeColors();
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ const darkColors=await themeColors();
+ assert.equal(darkColors.card,'rgb(24, 35, 56)');
+ assert.equal(darkColors.site,'rgb(16, 24, 39)');
+ assert.equal(darkColors.field,'rgb(24, 35, 56)');
+ assert.notDeepEqual(darkColors,lightColors);
+ await page.evaluate(()=>document.documentElement.dataset.theme='light');
+ assert.deepEqual(await themeColors(),lightColors,'Theme round-trip must preserve light colors');
  assert.deepEqual(errors,[]);
  console.log('PASS Link Planner visible; A/B map picker, FSPL, terrain chart, scenario PostgreSQL save/reload, mobile width');
 }finally{
