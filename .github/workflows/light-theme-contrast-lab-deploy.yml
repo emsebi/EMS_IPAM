@@ -120,19 +120,27 @@ jobs:
             sleep 2
           done
           test "$healthy" = 1 || { echo "::error::App did not become healthy"; exit 1; }
-          grep -q '"ipam"' "$BACK/health.json"
-          grep -q '"network-access"' "$BACK/health.json"
-
-          docker exec "$APP" node --check /app/server/main.mjs
-          docker exec "$APP" sh -c 'grep -q -- "--muted:#46566d" /app/public/styles.css'
-          docker exec "$APP" sh -c 'grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html'
-          test "$(curl -fsS --max-time 6 http://127.0.0.1:8888/styles.css | grep -c -- '--line:#8e9eb3')" -gt 0
-          grep -q "device-types-grid" "$DEPLOY/modules/ipam/public/index.mjs"
-          grep -q "access-records .inventory-table th" "$DEPLOY/modules/network-access/public/style.css"
+          echo "VERIFY app health includes both IPAM and NAC modules"
+          grep -q '"ipam"' "$BACK/health.json" || { echo "::error::IPAM absent in health"; exit 1; }
+          grep -q '"network-access"' "$BACK/health.json" || { echo "::error::NAC absent in health"; exit 1; }
+          echo "VERIFY container server JS parse"
+          docker exec "$APP" node --check /app/server/main.mjs || { echo "::error::Server syntax check failed"; exit 1; }
+          echo "VERIFY new light theme CSS physically in the app container"
+          docker exec "$APP" sh -c 'grep -q -- "--muted:#46566d" /app/public/styles.css' || { echo "::error::App container CSS missing dark secondary text"; exit 1; }
+          docker exec "$APP" sh -c 'grep -q -- "--line:#8e9eb3" /app/public/styles.css' || { echo "::error::App container CSS missing dark borders"; exit 1; }
+          echo "VERIFY browser cache-busting HTML"
+          docker exec "$APP" sh -c 'grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html' || { echo "::error::App HTML still references old CSS version"; exit 1; }
+          echo "VERIFY static HTTP is serving the new CSS"
+          curl -fsS --max-time 8 http://127.0.0.1:8888/styles.css -o "$BACK/live-styles.css"
+          grep -q -- '--line:#8e9eb3' "$BACK/live-styles.css" || { echo "::error::HTTP CSS missing new border token"; exit 1; }
+          echo "VERIFY preexisting Device Types / NAC UI retained"
+          grep -q "device-types-grid" "$DEPLOY/modules/ipam/public/index.mjs" || { echo "::error::Device Types grid missing"; exit 1; }
+          grep -q "access-records .inventory-table th" "$DEPLOY/modules/network-access/public/style.css" || { echo "::error::NAC column fix missing"; exit 1; }
+          echo "VERIFY all modules still installed and RADIUS unchanged"
           python3 "$DEPLOY/scripts/installed-modules-check.py"
           python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BACK/radius-before.json"
-          test "$(docker inspect --format '{{.Id}}' "$DB")" = "$OLD_DB_ID"
-          test "$(docker inspect --format '{{.Id}}' "$RADIUS")" = "$OLD_RADIUS_ID"
+          test "$(docker inspect --format '{{.Id}}' "$DB")" = "$OLD_DB_ID" || { echo "::error::DB container changed"; exit 1; }
+          test "$(docker inspect --format '{{.Id}}' "$RADIUS")" = "$OLD_RADIUS_ID" || { echo "::error::RADIUS container changed"; exit 1; }
           UPDATED=0
           echo "PASS LIGHT_CONTRAST_UI_DEPLOY commit=$GITHUB_SHA port=8888; Core data, DB and RADIUS preserved"
           echo "PASS light contrast tokens and borders; dark palette untouched; CSS cache-bust applied"
