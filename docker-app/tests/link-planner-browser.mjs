@@ -136,7 +136,8 @@ try{
  const select=page.locator('#lpScenarioSelect');
  await select.selectOption({label:'Fixture hill path'});
  await page.locator('.lp-card').last().getByRole('button',{name:/Load|بازکردن/}).click();
- await page.waitForFunction(()=>document.querySelector('input[data-path="a.latitude"]')?.value==='35.6');
+ await page.locator('input[data-path="a.latitude"]').waitFor({state:'visible'});
+ assert.ok(Math.abs(Number(await page.locator('input[data-path="a.latitude"]').inputValue())-35.6)<1e-6,'Saved site A latitude must survive round-trip');
  const state=await context.request.get('/api/link-planner/scenarios',{headers:{'X-EMS-CSRF':'1'}});
  assert.equal(state.status(),200);
  const result=await state.json();assert.equal(result.items.length,1);
