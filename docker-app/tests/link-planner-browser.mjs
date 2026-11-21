@@ -114,12 +114,35 @@ try{
  await page.route('**/api/link-planner/terrain?**',route=>route.fulfill({
    status:200,contentType:'application/json',
    body:JSON.stringify({ok:true,dataset:'srtm90m',sampleCount:81,missing:0,
-     source:'SRTM90m synthetic browser fixture',retrievedAt:'2026-01-01T00:00:00Z',elevations:Array(81).fill(100)})
+     source:'SRTM90m synthetic browser fixture',retrievedAt:'2026-01-01T00:00:00Z',
+     elevations:Array.from({length:81},(_,i)=>i>=28&&i<=52?100+Math.round(60*(1-Math.abs(i-40)/12)):100)})
  }));
  await page.locator('#lpTerrainButton').click();
  await page.locator('[data-line="los"]').waitFor({state:'attached'});
  await page.locator('[data-line="ground"]').waitFor({state:'attached'});
  await page.locator('[data-line="fresnel"]').waitFor({state:'attached'});
+
+ // Real interaction: with SRTM terrain loaded, map line displays green pass and red obstruction
+ // segments. Hover the highest terrain in the chart -> map probe at that identical route index.
+ await page.getByRole('button',{name:/Fit A \\+ B|نمایش هر دو نقطه/}).click();
+ await mapFrame.locator('line[data-route-segment="40"]').waitFor({state:'attached'});
+ assert.equal(await mapFrame.locator('line[data-route-segment]').count(),80,'Route should use 81 geodesic SRTM samples.');
+ assert.ok(await mapFrame.locator('line[data-obstructed="true"]').count()>0,'Raised ridge must be shown as red potentially obstructed path.');
+ assert.ok(await mapFrame.locator('line[data-obstructed="false"]').count()>0,'Path must also show clear sections.');
+ assert.ok((await page.locator('.lp-profile-overview').innerText()).includes('160.0'),'Elevation peak is visible.');
+ await page.locator('#lpProfileSvg [data-profile-hover-area]').hover();
+ await page.waitForFunction(()=>document.getElementById('lpInspectReadout')?.textContent.includes('160.0'));
+ assert.ok((await page.locator('#lpInspectReadout').innerText()).includes('Potential obstruction'));
+ await mapFrame.locator('#routeProbe[data-index="40"]').waitFor({state:'visible'});
+ // Move over the map near the actual middle segment: chart readout follows the map pointer.
+ const midpoint=await mapFrame.locator('line[data-route-segment="40"]').evaluate(line=>({
+    x:(Number(line.getAttribute('x1'))+Number(line.getAttribute('x2')))/2,
+    y:(Number(line.getAttribute('y1'))+Number(line.getAttribute('y2')))/2
+ }));
+ await mapFrame.locator('#map').hover({position:midpoint,force:true});
+ await page.waitForFunction(()=>document.getElementById('lpInspectReadout')?.textContent.includes('160.0'));
+ assert.ok((await mapFrame.locator('#routeProbe').getAttribute('class')).includes('obstructed'));
+
 
  // The engineer can fix a 20 m A tower and solve the minimum B tower.
  await page.locator('input[data-path="siteA.tower"]').fill('20');
