@@ -2,3 +2,5 @@
 Retry after verified healthy rollback (read-only probe 44883901065). Add explicit checks for container CSS, HTTP response, browser version and RADIUS; preserves prior DB/backups.
 
 Third attempt: stage a Docker image from explicit verified docker-app source, inspect CSS and HTML inside it before changing app, preserve rollback image and RADIUS checkpoint. Previous attempt rolled back before release.
+
+Fourth attempt: Build image from temporary copy of installed application source and reviewed CSS/HTML; verify staged image before editing any live source. No changes to backend/modules; preserve prior image rollback.
