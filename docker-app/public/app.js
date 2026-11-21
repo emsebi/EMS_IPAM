@@ -1316,7 +1316,7 @@ function openPrefixDialog(cidr, id = null) {
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
   $("prefixCidrTitle").textContent = value.cidr;
   for (const [key, field] of [["id", "prefixId"], ["cidr", "prefixCidr"], ["name", "prefixName"], ["status", "prefixStatus"], ["role", "prefixRole"], ["vlan", "prefixVlan"], ["gateway", "prefixGateway"], ["color", "prefixColor"], ["description", "prefixDescription"]]) $(field).value = value[key] || "";
-  $("prefixInheritColorToChildren").checked = value.inheritColorToChildren !== false;
+  $("prefixInheritColorToChildren").checked = item ? value.inheritColorToChildren !== false : false;
   $("deletePrefixButton").classList.toggle("hidden", !item || !canWrite());
   $("exportPrefixButton").classList.toggle("hidden", !item);
   setFormWritable($("prefixForm"), canWrite());
