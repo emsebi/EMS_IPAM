@@ -227,6 +227,15 @@ try {
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
+  // Inherited colors can be disabled and restored without deleting prefix records.
+  await ipamPreview.locator('.ipam-inheritance-display').uncheck();
+  assert.equal(await ipamPreview.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')),'false');
+  await ipamPreview.reload();
+  assert.equal(await ipamPreview.locator('.ipam-inheritance-display').isChecked(),false);
+  await ipamPreview.locator('.ipam-inheritance-display').check();
+  assert.equal(await ipamPreview.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')),'true');
+  check('IPAM child subnet inherited-color display switch preserves saved settings');
+
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
