@@ -1,5 +1,5 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.0-lab.1';
-import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.0-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
+import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.1-lab.1';
 
 const INITIAL=()=>({
  a:{latitude:'',longitude:''},b:{latitude:'',longitude:''},
