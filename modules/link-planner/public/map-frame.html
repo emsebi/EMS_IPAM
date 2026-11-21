@@ -11,6 +11,15 @@
 .tile{position:absolute;width:256px;height:256px;max-width:none}
 #line{width:100%;height:100%;overflow:hidden;z-index:2}
 #pins{z-index:3}
+#routeProbe{position:absolute;z-index:4;display:none;transform:translate(-50%,-100%);pointer-events:none;
+ border:2px solid white;border-radius:50%;width:15px;height:15px;background:#137c58;box-shadow:0 0 0 2px #14547e,0 2px 6px #112d3b80}
+#routeProbe.obstructed{background:#d83a40;box-shadow:0 0 0 2px #8d2027,0 2px 7px #112d3b80}
+#routeProbeLabel{position:absolute;z-index:4;display:none;pointer-events:none;padding:6px 9px;max-width:260px;
+ border-radius:8px;background:#172d42f1;color:white;font:600 12px/1.4 system-ui,sans-serif;box-shadow:0 3px 12px #172d4270}
+#routeProbeLabel.obstructed{background:#982d38f2}
+#routeProbeLabel small{font-weight:400}
+#map.dragging{cursor:grabbing}
+
 .planner-pin{position:absolute;transform:translate(-50%,-100%);padding:5px 9px;border-radius:9px;border:2px solid #fff;color:#fff;font-weight:700;box-shadow:0 2px 6px #20303c88;min-width:37px;text-align:center;pointer-events:auto;cursor:pointer}
 .planner-pin.a{background:#1970cf}.planner-pin.b{background:#e07027}
 #hint{position:absolute;top:10px;left:10px;background:#ffffffea;border:1px solid #ddd;border-radius:8px;padding:7px 10px;font-size:12px;max-width:70%;z-index:5}
@@ -28,7 +37,9 @@
   <div id="tiles"></div>
   <svg id="line" aria-hidden="true"></svg>
   <div id="pins"></div>
-  <div id="hint">Select endpoint A or B, then click the map</div>
+  <div id="routeProbe" aria-hidden="true"></div>
+  <div id="routeProbeLabel" aria-hidden="true"></div>
+  <div id="hint">Choose A or B, click to place; drag to pan; hover over the link to inspect terrain</div>
   <div id="controls"><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button><button id="fit" aria-label="Fit both endpoints" title="Fit endpoints">⌖</button></div>
   <div id="legend"><b class="a">A</b> Site A &nbsp; <b class="b">B</b> Site B</div>
   <div id="credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></div>
