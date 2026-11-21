@@ -1,3 +1,32 @@
+# PR #65 integrated with current IPAM/Radio main — 2026-11-21 UTC
+
+Fresh main is `e7f877281e8361ad20225255a58f257cb30927eb`, preserving the IPAM live-search/inherited-color and Radio compact-UI merges (#75/#74), Link Planner, all generated screenshots and their workflows. PR #12 remains draft/inactive. Only the fixture helper/tests, this checkpoint and source manifest differ from that main; no active UI/module files are edited or deployed.
+
+PR #65's original head `e57efd2f61794e99c78f7ead678db4be5fb1668f` passed PR CI 44470371702 and push CI 44470328084. PostgreSQL job 135378073721 confirms the external-Radio-child case and all 28 HTTP tests passed with zero skips/failures at 2026-11-19T06:12:10Z. Those results predate the latest main and do not substitute for this integration candidate's CI. The real merge conflicts were only CONTINUATION.md and SHA256SUMS: keep both histories and rebuild the manifest from current main plus the two fixture files.
+
+The HTTP regression now also explicitly archives the blocked synthetic company and retries journal recovery. It must refuse the purge, send no DELETE, leave both full host rows and journal bytes unchanged, and retain the company in trash. This covers recovery when a cross-branch Radio reference exists after archive, not only the active-company path. The test then restores the original synthetic link and cleans up through the guarded recovery path.
+
+Local combined journal/preflight/HTTP validation: 26 passed, 0 failed, 4 native-PostgreSQL-only skips (30 including the HTTP parent); all 313 listed checksums and the diff against fresh main pass. This does not execute the extended native-only case locally.
+
+Next: inspect candidate push/PR CI IDs recorded in #65; require the extended Radio case and all 28 native PostgreSQL HTTP tests with zero skips plus every ordinary/browser/Docker gate. Re-read main and PR head before expected-SHA merge; preserve any intervening changes. Then cover remaining incoming references and private preservation comparisons before an installed-loopback runner. The optional SELECT-only Radio guard is still narrow and is not an atomic lock against concurrent writes. No installed XLSX acceptance is claimed.
+
+Latest observed Actions include successful IPAM UI deployment 44895861291 and Radio compact UI deployment 44895981971, with successful main CI 44896140211. These are observed workflow conclusions, not a new deployment or operator acceptance in this run; do not treat the older single-source installed checkpoint below as the complete current module state. Radio functional acceptance and actual MikroTik Full/Read login remain open. No VM write, device discovery, router push, schema change or credential access.
+
+---
+
+# Radio relationship preflight for disposable XLSX cleanup (2026-11-19 UTC)
+
+PR #64 merged with expected head at `c3977cd96289539dd888fa0904804641b6caade3`. Candidate CI 44456081052 and 44456075220 passed; PostgreSQL job 135331300575 passed all 27 HTTP tests without failures/skips at 04:07:41 UTC. Merge CI [44469937411](https://github.com/emsebi/EMS_IPAM/actions/runs/44469937411) succeeded. Fresh main `ecc0cdfbf5b67566866a891d60e1cdb382bbfe1b` adds only the generated Radio screenshot. PR #12 remains inactive/draft.
+
+Small next step: a SELECT-only fixture preflight counts outside-company hosts referencing a fixture Radio parent, including archived records. An optional beforeCleanup hook runs after ownership validation and before archive/purge in normal cleanup and journal recovery. A detected reference refuses deletion; the native PostgreSQL HTTP test verifies both linked rows, the active fixture company and pending journal survive, no DELETE is sent for that company, and recovery can finish after removing only the synthetic relationship. The PGlite test checks unchanged full host rows and executes the preflight in a read-only transaction for active and archived children.
+
+Local validation and candidate CI IDs are in the PR body. Next: verify the new native HTTP case and all 28 HTTP tests with zero skips, plus ordinary/browser/Docker gates, before merging with fresh refs and expected head. Then cover other incoming references (company hierarchy, grants and module foreign keys) and private before/after preservation evidence before an installed-loopback runner. This narrow guard covers hosts.radio_parent_host_id only; it is optional for isolated tests, not a complete installed cleanup policy or an atomic concurrency lock. Keep a single fixture owner; do not infer safety against concurrent application writes.
+
+No application/schema change, VM redeployment, device scan or router push. Installed source remains `71d9b35b73270b1e595e36cea20d77753d30f55c` (Lab Deploy 44376757411). Installed XLSX, Radio operator acceptance and real MikroTik login remain open. Unresolved create replies still need evidence reconciliation, never guessed IDs.
+
+
+---
+
 # EMS_IPAM module publication checkpoint — 2026-11-20
 
 **Status: code merged into main; VM modules installed and reachable; operator functional acceptance remains open.**

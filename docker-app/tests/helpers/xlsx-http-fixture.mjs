@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFixtureJournal, openFixtureJournal } from './fixture-journal.mjs';
 
-export async function withXlsxHttpFixture(call, exercise, { journalPath } = {}) {
+export async function withXlsxHttpFixture(call, exercise, { journalPath, beforeCleanup } = {}) {
   const runId = randomUUID();
   const marker = 'EMS XLSX fixture ' + runId;
   const owned = [];
@@ -35,14 +35,14 @@ export async function withXlsxHttpFixture(call, exercise, { journalPath } = {}) 
   } catch (error) {
     errors.push(error);
   } finally {
-    try { errors.push(...await cleanupRecorded(call, owned, journal)); }
+    try { errors.push(...await cleanupRecorded(call, owned, journal, beforeCleanup)); }
     finally { journal?.close(); }
   }
   if (errors.length) throw new AggregateError(errors, 'XLSX fixture run or cleanup failed');
   return result;
 }
 
-async function cleanupRecorded(call, owned, journal) {
+async function cleanupRecorded(call, owned, journal, beforeCleanup) {
   const errors = [];
   for (const company of [...owned].reverse()) {
     try {
@@ -53,6 +53,7 @@ async function cleanupRecorded(call, owned, journal) {
       if (active) {
         assert.equal(active.name, company.name, 'fixture ownership changed; refusing cleanup');
         assert.ok(!company.purging, 'fixture restored after purge intent; refusing cleanup');
+        await beforeCleanup?.(company.id);
         await call('DELETE', '/api/companies/' + encodeURIComponent(company.id));
       }
       const trash = await call('GET', '/api/trash');
@@ -60,6 +61,7 @@ async function cleanupRecorded(call, owned, journal) {
       const archived = trash.items.find(item => item.kind === 'company' && item.id === company.id);
       if (archived) {
         assert.equal(archived.label, company.name, 'archived fixture ownership changed; refusing cleanup');
+        await beforeCleanup?.(company.id);
         if (!company.purging) {
           journal?.record({ kind: 'purging', id: company.id });
           company.purging = true;
@@ -74,11 +76,11 @@ async function cleanupRecorded(call, owned, journal) {
   return errors;
 }
 
-export async function recoverXlsxHttpFixture(call, journalPath) {
+export async function recoverXlsxHttpFixture(call, journalPath, { beforeCleanup } = {}) {
   const journal = openFixtureJournal(journalPath);
   try {
     assert.equal(journal.unresolved.length, 0, 'unresolved create response; manual reconciliation required');
-    const errors = await cleanupRecorded(call, journal.owned, journal);
+    const errors = await cleanupRecorded(call, journal.owned, journal, beforeCleanup);
     if (errors.length) throw new AggregateError(errors, 'XLSX fixture recovery failed');
   } finally { journal.close(); }
 }
