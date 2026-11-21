@@ -358,10 +358,16 @@ function mostSpecific(address) {
 function effectiveSubnetColor(cidr) {
   const range=parseCidr(cidr);
   if(!range)return '#eef2f7';
-  const matches=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
-    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''));
-  matches.sort((a,b)=>b.info.prefix-a.info.prefix);
-  return matches[0]?.item.color||state.data?.space?.color||'#eef2f7';
+  const parents=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
+    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''))
+    .sort((a,b)=>b.info.prefix-a.info.prefix);
+  // An exact explicit color always wins, including white. A parent with the
+  // propagation box disabled is a boundary: never fall through to grandparents.
+  const nearest=parents[0];
+  if(nearest?.info.cidr===range.cidr)return nearest.item.color;
+  if(nearest)return nearest.item.inheritColor===false
+    ? '#eef2f7' : nearest.item.color;
+  return state.data?.space?.color||'#eef2f7';
 }
 
 function existingPrefixAt(address) {
@@ -1308,6 +1314,7 @@ function openPrefixDialog(cidr, id = null) {
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
   $("prefixCidrTitle").textContent = value.cidr;
   for (const [key, field] of [["id", "prefixId"], ["cidr", "prefixCidr"], ["name", "prefixName"], ["status", "prefixStatus"], ["role", "prefixRole"], ["vlan", "prefixVlan"], ["gateway", "prefixGateway"], ["color", "prefixColor"], ["description", "prefixDescription"]]) $(field).value = value[key] || "";
+  $("prefixInheritColor").checked = item ? item.inheritColor !== false : false;
   $("deletePrefixButton").classList.toggle("hidden", !item || !canWrite());
   $("exportPrefixButton").classList.toggle("hidden", !item);
   setFormWritable($("prefixForm"), canWrite());
@@ -2268,7 +2275,7 @@ $("prefixForm").addEventListener("submit",async event=>{
   const next=current&&root&&current.end<root.end?networkAt(current.end+1,current.prefix):null;
   const oldScroll=window.scrollY;
   try {
-    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,description:$("prefixDescription").value}});
+    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,inheritColor:$("prefixInheritColor").checked,description:$("prefixDescription").value}});
     $("prefixDialog").close();
     state.data=await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
     state.selectedCidr=null;renderCurrent();window.scrollTo(0,oldScroll);
