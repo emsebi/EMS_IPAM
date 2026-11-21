@@ -75,6 +75,16 @@ try {
   prefData=await api('/api/spaces/'+colorSpace.id+'/data');
   assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,true);
   assert.equal(await page.locator('#prefixInheritColorToChildren').count(),1);
+  const unnamedWhite=await api('/api/prefixes','POST',{
+    spaceId:colorSpace.id,cidr:'198.18.52.160/27',name:'',color:'#ffffff',inheritColorToChildren:false
+  });
+  prefData=await api('/api/spaces/'+colorSpace.id+'/data');
+  const whiteChild=prefData.prefixes.find(p=>p.id===unnamedWhite.id);
+  assert.equal(whiteChild?.color,'#ffffff','White must remain a stored explicit child color');
+  assert.equal(whiteChild?.name,'198.18.52.160/27','Empty name saves as the CIDR fallback');
+  assert.equal(whiteChild?.inheritColorToChildren,false);
+  await api('/api/prefixes/'+unnamedWhite.id,'DELETE');
+
   await api('/api/prefixes/'+parentPref.id,'DELETE');
   await api('/api/spaces/'+colorSpace.id,'DELETE');
   check('per-subnet color inheritance persists and checkbox exists in subnet editor');
