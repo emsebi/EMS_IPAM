@@ -1057,7 +1057,7 @@ function sheetSearchMatches(query) {
   if([item.cidr,item.name,item.description,item.role].filter(Boolean).some(v=>String(v).toLocaleLowerCase().includes(term)))
    results.push({ip:intToIpv4(Math.max(info.start,selected.start)),label:item.name||item.cidr,detail:item.cidr});
  }
- if(/^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(term)&&term.split('.').every(v=>Number(v)<=255)){
+ if(/^(?:\d{1,3}\.){3}\d{1,3}$/.test(term)&&term.split('.').every(v=>Number(v)<=255)){
   const ip=ipv4ToInt(term);
   if(contains(selected,ip)&&!results.some(v=>v.ip===term))
    results.unshift({ip:term,label:term,detail:'موقعیت IP در جدول'});
