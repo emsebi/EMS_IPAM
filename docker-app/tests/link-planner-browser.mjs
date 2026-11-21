@@ -148,7 +148,9 @@ try{
  assert.equal(await strip.locator('input[type="range"]').getAttribute('max'),'80');
  assert.ok(await strip.locator('[data-strip-obstructed]').count()>0,'Red strips show possible obstructions');
  assert.ok((await strip.locator('.lp-strip-meta').innerText()).includes('160'));
- await page.locator('#lpElevationScrubber').fill('40');
+ await page.locator('#lpElevationScrubber').evaluate(input=>{
+   input.value='40';input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
  await page.waitForFunction(()=>document.getElementById('lpStripReadout')?.textContent.includes('160.0'));
  assert.ok((await strip.locator('#lpStripReadout').innerText()).includes('Potential obstruction'));
  await mapFrame.locator('#routeProbe[data-index="40"]').waitFor({state:'visible'});
