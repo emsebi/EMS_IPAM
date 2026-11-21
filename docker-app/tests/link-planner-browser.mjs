@@ -140,8 +140,21 @@ try{
     y:(Number(line.getAttribute('y1'))+Number(line.getAttribute('y2')))/2
  }));
  await mapFrame.locator('#map').hover({position:midpoint,force:true});
- await page.waitForFunction(()=>document.getElementById('lpInspectReadout')?.textContent.includes('160.0'));
+ await page.waitForFunction(()=>document.getElementById('lpInspectReadout')?.textContent.includes('Potential obstruction'));
  assert.ok((await mapFrame.locator('#routeProbe').getAttribute('class')).includes('obstructed'));
+ // Google Maps-style compact elevation bar always sits immediately below the map.
+ const strip=page.locator('#lpElevationStrip');
+ await strip.locator('#lpElevationStripSvg').waitFor({state:'visible'});
+ assert.equal(await strip.locator('input[type="range"]').getAttribute('max'),'80');
+ assert.ok(await strip.locator('[data-strip-obstructed]').count()>0,'Red strips show possible obstructions');
+ assert.ok((await strip.locator('.lp-strip-meta').innerText()).includes('160'));
+ await page.locator('#lpElevationScrubber').fill('40');
+ await page.waitForFunction(()=>document.getElementById('lpStripReadout')?.textContent.includes('160.0'));
+ assert.ok((await strip.locator('#lpStripReadout').innerText()).includes('Potential obstruction'));
+ await mapFrame.locator('#routeProbe[data-index="40"]').waitFor({state:'visible'});
+ assert.ok((await page.locator('#lpInspectReadout').innerText()).includes('160.0'));
+ // Make sure the strip is immediately after the OSM map in the visual hierarchy.
+ assert.equal(await strip.evaluate(el=>el.previousElementSibling?.id),'lpMap');
 
 
  // The engineer can fix a 20 m A tower and solve the minimum B tower.
