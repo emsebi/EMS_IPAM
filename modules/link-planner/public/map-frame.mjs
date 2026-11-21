@@ -2,7 +2,7 @@
 import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs?v=0.2.0-lab.1';
 const get=id=>document.getElementById(id);
 const map=get('map'),tiles=get('tiles'),links=get('line'),pins=get('pins'),hint=get('hint');
-let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null,initialFit=false;
+let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null;
 const size=256,ns='http://www.w3.org/2000/svg';
 const world=()=>size*2**zoom;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -16,6 +16,10 @@ function p2screen(point,centerPixel,rect){
 function refresh(){
  const rect=map.getBoundingClientRect();
  if(!rect.width||!rect.height)return;
+ // Plain attributes allow automated tests to detect unexpected viewport jumps.
+ map.dataset.viewCenterLatitude=center.latitude.toFixed(8);
+ map.dataset.viewCenterLongitude=center.longitude.toFixed(8);
+ map.dataset.viewZoom=String(zoom);
  const c=geoProject(center.latitude,center.longitude,zoom),left=c.x-rect.width/2,top=c.y-rect.height/2;
  const n=2**zoom,wanted=new Set();
  let count=0;
@@ -75,9 +79,9 @@ window.addEventListener('message',event=>{
  for(const key of ['a','b'])if(validGeoPoint(msg[key]))sites[key]={latitude:Number(msg[key].latitude),longitude:Number(msg[key].longitude)};
  active=msg.active==='b'?'b':'a';
  hint.textContent=(active==='a'?'A':'B')+' · click map to set '+(active==='a'?'Site A':'Site B');
- // Picking a point edits a marker, never the viewport. Only initial data or explicit Fit may pan/zoom.
- if(msg.fit){ initialFit=true;fit(); }
- else if(!initialFit){ initialFit=true; if(Object.values(sites).some(validGeoPoint))fit();else refresh(); }
+ // Changing A/B is a marker update only. Even the first click must never zoom/pan.
+ // Parent sends fit:true only at initial mount or through the explicit Fit A+B control.
+ if(msg.fit)fit();
  else refresh();
 });
 map.addEventListener('pointerdown',e=>{
@@ -90,7 +94,9 @@ map.addEventListener('pointermove',e=>{
  if(Math.hypot(e.clientX-pan.x,e.clientY-pan.y)>5)pan.drag=true;
  if(!pan.drag)return;
  const c=geoProject(pan.old.latitude,pan.old.longitude,zoom);
- center=geoUnproject(c.x+pan.x-e.clientX,c.y+pan.y-e.clientY,zoom);refresh();
+ // Drag the map by pixels; inverse projection uses the same longitude origin as geoProject.
+ center=geoUnproject(c.x+pan.x-e.clientX,c.y+pan.y-e.clientY,zoom);
+ refresh();
 });
 map.addEventListener('pointerup',e=>{
  if(!pan||e.pointerId!==pan.pointer)return;
