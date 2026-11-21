@@ -279,6 +279,34 @@ try {
 
   await page.locator('#networkAccessButton').click();
   await page.locator('.access-records').getByText('Workstation Edited', { exact: true }).waitFor();
+  // Screenshot regression: the MAC / IP / Device headings must start at the same
+  // inline edge as their corresponding cells, including English and Persian direction.
+  const alignment=await page.locator('.access-records .inventory-table').evaluate(table=>{
+    const initialDir=table.getAttribute('dir'),outputs={};
+    const inset=(el)=>{
+      const cell=el.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(el);
+      const glyph=range.getBoundingClientRect(),direction=getComputedStyle(el).direction;
+      return direction==='rtl'?cell.right-glyph.right:glyph.left-cell.left;
+    };
+    for(const direction of ['ltr','rtl']){
+      table.setAttribute('dir',direction);
+      outputs[direction]=[1,2,3].map(i=>{
+        const heading=table.querySelector('thead th:nth-child('+i+')');
+        const data=table.querySelector('tbody tr:first-child td:nth-child('+i+')');
+        return {column:i,heading:inset(heading),data:inset(data),
+          headingAlign:getComputedStyle(heading).textAlign,dataAlign:getComputedStyle(data).textAlign};
+      });
+    }
+    if(initialDir===null)table.removeAttribute('dir');else table.setAttribute('dir',initialDir);
+    return outputs;
+  });
+  for(const [mode,columns] of Object.entries(alignment)){
+    for(const cell of columns){
+      assert.ok(Math.abs(cell.heading-cell.data)<=5,
+        'Network Access '+mode+' heading '+cell.column+' offset from data: '+JSON.stringify(cell));
+    }
+  }
+  check('MAC / IP / Device table headings aligned with values in LTR and RTL');
   await page.locator('#personnelTab').click();
   await page.locator('#managePersonnel').click();
   await page.locator('#personnelName').fill('Test Person');
