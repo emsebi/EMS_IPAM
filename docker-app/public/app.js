@@ -734,6 +734,30 @@ function openBulkIpamDialog(spaceId = state.currentSpaceId) {
   if (selected) $("bulkIpamSpace").value = selected.id;
   $("bulkIpamDialog").showModal();
 }
+async function classifyIpamImportFile(file) {
+  if(!file)throw new Error("ابتدا فایل را انتخاب کنید.");
+  const name=String(file.name||"").toLowerCase();
+  const sample=await file.slice(0,512).text();
+  if(sample.replace(/^\uFEFF/,"").trimStart().startsWith("{") || /\.json$/i.test(name)){
+    let payload;
+    if(file.size>8*1024*1024)throw new Error("فایل Portable JSON باید کمتر از ۸ مگابایت باشد.");
+    try {payload=JSON.parse(await file.text());} catch {throw new Error("ساختار JSON فایل معتبر نیست.");}
+    if(payload?.format!=="EMS-IPAM-SUBNET" || Number(payload.formatVersion)!==1 || !Array.isArray(payload.prefixes) || !Array.isArray(payload.hosts)){
+      throw new Error("فایل JSON بسته Portable Export معتبر EMS_IPAM نیست.");
+    }
+    return {kind:"portable",payload};
+  }
+  if(/\.xlsx$/i.test(name))return {kind:"sheet"};
+  if(/\.csv$/i.test(name) || /^(?:IP|\uFEFFIP)\s*[,;]/i.test(sample))return {kind:"sheet"};
+  throw new Error("فایل Excel (.xlsx)، CSV (.csv) یا Portable JSON (.json) انتخاب کنید.");
+}
+function checkPortableImportDestination(payload,spaceId) {
+  const space=state.bootstrap.spaces.find(item=>item.id===spaceId);
+  const root=parseCidr(space?.cidr),scope=parseCidr(payload.source?.cidr);
+  if(!root||!scope||!contains(root,scope))throw new Error("Subnet بسته JSON داخل Space مقصد نیست. رنج مقصد مناسب را انتخاب کنید.");
+  return scope;
+}
+
 function readBulkIpamFile(file) {
   if (!file || !/\.(xlsx|csv)$/i.test(file.name) || file.size > 7 * 1024 * 1024) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
   return new Promise((resolve, reject) => {
@@ -2146,43 +2170,83 @@ $("importButton").addEventListener("click", () => openBulkIpamDialog());
 
 $("bulkIpamCompany").addEventListener("change", syncBulkIpamSpaces);
 $("bulkIpamSpace").addEventListener("change", resetBulkIpamPreview);
-$("bulkIpamFile").addEventListener("change", () => { state.bulkIpamFile = null; resetBulkIpamPreview(); });
-$("bulkIpamForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = event.currentTarget.querySelector('[type="submit"]');
-  button.disabled = true;
+$("bulkIpamFile").addEventListener("change", async () => {
+  state.bulkIpamFile=null;
+  resetBulkIpamPreview();
+  const file=$("bulkIpamFile").files?.[0];
+  if(!file)return;
   try {
-    const file = $("bulkIpamFile").files?.[0];
-    const base64 = await readBulkIpamFile(file);
-    const body = { destinationSpaceId: $("bulkIpamSpace").value, filename: file.name, base64 };
-    const response = await request("/api/imports/ipam/preview", { method: "POST", body });
-    state.bulkIpamFile = body;
-    state.bulkIpamPreview = response;
-    const s = response.summary;
-    const samples = response.sample.map((item) => '<tr><td>' + escapeHtml(item.ip) + '</td><td>' + escapeHtml(item.name) + '</td><td>' + escapeHtml(item.notes) + '</td></tr>').join('');
-    const errors = (response.errors || []).map((item) => '<li>سطر ' + item.row + ' — ' + escapeHtml(item.ip + ': ' + item.reason) + '</li>').join('');
-    $("bulkIpamPreview").innerHTML = '<b>کل ردیف‌ها: ' + formatNumber(s.total) + ' · معتبر: ' + formatNumber(s.valid) +
-      ' · جدید: ' + formatNumber(s.newRecords) + ' · موجود: ' + formatNumber(s.existing) + ' · خطا: ' + formatNumber(s.invalid) + '</b>' +
-      '<div class="bulk-preview-scroll"><table><thead><tr><th>IP</th><th>Name</th><th>Description</th></tr></thead><tbody>' + samples + '</tbody></table></div>' +
-      (errors ? '<p>خطاها (حداکثر ۳۰ مورد):</p><ul>' + errors + '</ul>' : '');
-    $("bulkIpamCommit").disabled = s.valid === 0;
-  } catch (error) { resetBulkIpamPreview(); $("bulkIpamPreview").textContent = error.message; toast(error.message); }
-  finally { button.disabled = false; }
+    const detected=await classifyIpamImportFile(file);
+    $("bulkIpamFileTypeHint").textContent=detected.kind==="portable"
+      ? "Portable JSON شناسایی شد؛ شامل Subnetها، IPها و مشخصات تجهیزات."
+      : "Excel/CSV شناسایی شد؛ ستون‌های A=IP، B=Name، C=Description.";
+    $("bulkIpamUpdateMode").textContent=detected.kind==="portable"
+      ? "جایگزینی موارد تکراری از بسته JSON"
+      : "به‌روزرسانی فقط نام و توضیحات (Excel/CSV)";
+  }catch(error){$("bulkIpamFileTypeHint").textContent=error.message;toast(error.message);}
 });
-$("bulkIpamCommit").addEventListener("click", async () => {
-  if (!state.bulkIpamFile || !state.bulkIpamPreview) return;
-  if (!confirm("آیا ثبت IPهای معتبر با رفتار انتخاب‌شده را تأیید می‌کنید؟")) return;
-  const button = $("bulkIpamCommit"); button.disabled = true;
+$("bulkIpamForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
   try {
-    const saved = await request("/api/imports/ipam/commit", { method: "POST", body: { ...state.bulkIpamFile, mode: $("bulkIpamMode").value } });
+    const file=$("bulkIpamFile").files?.[0];
+    const identified=await classifyIpamImportFile(file);
+    const destinationSpaceId=$("bulkIpamSpace").value;
+    if(identified.kind==="portable"){
+      const payload=identified.payload,scope=checkPortableImportDestination(payload,destinationSpaceId);
+      // Preview only; actual duplicate handling and permissions are revalidated by the server at commit.
+      const lines=payload.prefixes.slice(0,5).map(item=>"<li>Subnet: "+escapeHtml(item.cidr||"")+"</li>")
+        .concat(payload.hosts.slice(0,8).map(item=>"<li>"+escapeHtml(item.ip||"")+" — "+escapeHtml(item.name||"")+"</li>"));
+      $("bulkIpamPreview").innerHTML="<b>Portable JSON · محدوده "+escapeHtml(scope.cidr)+
+        " · "+formatNumber(payload.prefixes.length)+" زیرSubnet · "+formatNumber(payload.hosts.length)+
+        " تجهیز/IP</b><p>نمونه اطلاعات فایل:</p><ul>"+lines.join("")+
+        "</ul><p>تکراری‌ها هنگام ثبت مطابق گزینه انتخاب‌شده بررسی می‌شوند. رمزهای تجهیزات در بسته قابل انتقال نیستند.</p>";
+      state.bulkIpamFile={kind:"portable",destinationSpaceId,payload};
+      state.bulkIpamPreview={kind:"portable"};
+      $("bulkIpamCommit").disabled=!(payload.prefixes.length||payload.hosts.length);
+    }else{
+      const base64=await readBulkIpamFile(file);
+      const body={destinationSpaceId,filename:file.name,base64};
+      const response=await request("/api/imports/ipam/preview",{method:"POST",body});
+      state.bulkIpamFile={kind:"sheet",...body};
+      state.bulkIpamPreview=response;
+      const summary=response.summary;
+      const samples=response.sample.map(item=>'<tr><td>'+escapeHtml(item.ip)+'</td><td>'+escapeHtml(item.name)+'</td><td>'+escapeHtml(item.notes)+'</td></tr>').join("");
+      const errors=(response.errors||[]).map(item=>'<li>سطر '+item.row+' — '+escapeHtml(item.ip+': '+item.reason)+'</li>').join("");
+      $("bulkIpamPreview").innerHTML='<b>Excel/CSV · کل: '+formatNumber(summary.total)+' · معتبر: '+formatNumber(summary.valid)+
+        ' · جدید: '+formatNumber(summary.newRecords)+' · موجود: '+formatNumber(summary.existing)+
+        ' · خطا: '+formatNumber(summary.invalid)+'</b><div class="bulk-preview-scroll"><table><thead><tr><th>IP</th><th>Name</th><th>Description</th></tr></thead><tbody>'+samples+'</tbody></table></div>'+
+        (errors?'<p>خطاها:</p><ul>'+errors+'</ul>':'');
+      $("bulkIpamCommit").disabled=summary.valid===0;
+    }
+  }catch(error){resetBulkIpamPreview();$("bulkIpamPreview").textContent=error.message;toast(error.message);}
+  finally{button.disabled=false;}
+});
+$("bulkIpamCommit").addEventListener("click",async()=>{
+  const source=state.bulkIpamFile;
+  if(!source||!state.bulkIpamPreview)return;
+  if(!confirm("ورود اطلاعات با نحوه برخورد انتخاب‌شده تأیید می‌شود؟"))return;
+  const button=$("bulkIpamCommit");button.disabled=true;
+  try{
+    let result;
+    if(source.kind==="portable"){
+      const mode=$("bulkIpamMode").value==="update"?"replace":"skip";
+      const saved=await request("/api/imports/subnet",{method:"POST",body:{destinationSpaceId:source.destinationSpaceId,mode,package:source.payload}});
+      result=saved.result;
+      toast(formatNumber(result.prefixesCreated+result.prefixesUpdated)+" زیرSubnet و "+
+        formatNumber(result.hostsCreated+result.hostsUpdated)+" IP/تجهیز وارد شد.");
+    }else{
+      const saved=await request("/api/imports/ipam/commit",{method:"POST",body:{destinationSpaceId:source.destinationSpaceId,filename:source.filename,base64:source.base64,mode:$("bulkIpamMode").value}});
+      result=saved.result;
+      toast(formatNumber(result.created)+" جدید، "+formatNumber(result.updated)+" به‌روزرسانی، "+
+        formatNumber(result.skipped)+" تکراری، "+formatNumber(result.invalid)+" خطادار");
+    }
     $("bulkIpamDialog").close();
-    state.bootstrap = await request("/api/bootstrap");
-    await loadSpace(state.bulkIpamFile.destinationSpaceId);
-    const result = saved.result;
-    toast(formatNumber(result.created) + " جدید، " + formatNumber(result.updated) + " به‌روزرسانی، " + formatNumber(result.skipped) + " تکراری، " + formatNumber(result.invalid) + " خطادار");
-    state.bulkIpamFile = null; state.bulkIpamPreview = null;
-  } catch (error) { toast(error.message); }
-  finally { button.disabled = false; }
+    state.bootstrap=await request("/api/bootstrap");
+    await loadSpace(source.destinationSpaceId);
+    state.bulkIpamFile=null;state.bulkIpamPreview=null;
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
 });
 
 $("aboutButton").addEventListener("click", openAboutDialog);
