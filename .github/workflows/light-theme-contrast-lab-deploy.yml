@@ -30,7 +30,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          SRC="$GITHUB_WORKSPACE/ipam-dense-source"
+          SRC="$GITHUB_WORKSPACE/light-contrast-source-v2"
           DEPLOY="$HOME/ems-ipam-lab/current"
           ENV_FILE="$HOME/.ems-ipam-lab.env"
           BACK="$HOME/ems-ipam-lab/light-theme-backups/$GITHUB_SHA"
