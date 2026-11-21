@@ -66,7 +66,7 @@ c0fc56f68e5cef643ff70e1669a29c69d7edcda1f64e2d84d0d600c242344f1d  docker-app/tes
 73973a9cf9a80666abf0afd3df00f79e90dc10e1da77e74c92b09738cb23975c  docker-app/tests/inventory-translation-coverage.test.mjs
 47f9c3be7d2f57d2306c9392f64efa2f633bd831514b92fe12227d92e674a4d6  docker-app/tests/ip.test.mjs
 d11d6c2004556b4b8361d7d3eef191754de25ffbb7058ed4ad0df652c8705188  docker-app/tests/ipam-device-types-i18n.test.mjs
-fd6eae582ff1a89839f8bc80dd28db639574ccb5d4a70169693858f469ae8959  docker-app/tests/migrations-behavior.test.mjs
+600f2d657a443add28077846090e9fd47873da5d60fc8aa3f25d94af2b5f5b36  docker-app/tests/migrations-behavior.test.mjs
 1b87961e66c064f5a13cb6e7b285c51d54a5722c223691985d3ebad09d22c7ee  docker-app/tests/mikrotik.test.mjs
 88e3183d71e923e992fab048fcd3162b65e7c0b877e13bb4c0d51758b1fb1b05  docker-app/tests/module-migrations.test.mjs
 96063e2ccf5c13175ddf07f33004434a151a6a3daa0288bc12579fae65bdc2d4  docker-app/tests/module-navigation-i18n.test.mjs
@@ -101,7 +101,7 @@ b3bd12620222be6587ea23810b4af460132693bae42d83a6d27a5b808b819db3  docker-app/tes
 bf2be0680c5b33b93c5dc32e4ad5911f91ec0a25f43d093a49a99f48464963a8  docker-app/tests/radius-review-matrix.test.mjs
 78a3ba199522667364119506bd01ddee69b357d0a7a26081e93d5e6ed36a9243  docker-app/tests/radius-schema.test.mjs
 a22aab3ec99b0f35dfaddfdae6261cdeaaa2b02eed345aa5cad19bf5672d4fe7  docker-app/tests/reports-module.test.mjs
-d6234a4e3e0f07f46040eb8f7895f88ad0fb54641d68a98146c368adebf60c7c  docker-app/tests/routing-domain-upgrade.test.mjs
+ae70a9ffcb1a62311ba46902c470c266a93ae2c5c68599e2c85b70293b2180f6  docker-app/tests/routing-domain-upgrade.test.mjs
 714cf6a97ebaab483d92416811817767cc600995420e9b3bcdbb2e0bce42e228  docker-app/tests/schema-integration.test.mjs
 624dc639c431c7fa71126b3df64d2ddb1819c9d1164446d32ca0f7fe2d987fd5  docker-app/tests/secrets.test.mjs
 c06a2cae2b2611e0ec11dbb61089d5ebe352b13cb9a0c281b4ab324f44d80bf5  docker-app/tests/stage01-contract.test.mjs
