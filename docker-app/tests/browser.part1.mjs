@@ -269,20 +269,28 @@ try {
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
-  // A Portable Export JSON must be importable from the visible IPAM screens,
-  // independently from the Excel/CSV bulk host import.
+  // A single Import button accepts the same Portable JSON export as Excel/CSV.
   await ipamPreview.locator('#sheetPortableImport').click();
-  await ipamPreview.locator('#importDialog').waitFor({state:'visible'});
-  assert.equal(await ipamPreview.locator('#importSpace').inputValue(),'test-space');
-  assert.ok((await ipamPreview.locator('#importFile').getAttribute('accept')).includes('.json'));
-  await ipamPreview.locator('#importDialog [data-close]').first().click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
+  const accept=await ipamPreview.locator('#bulkIpamFile').getAttribute('accept');
+  for(const extension of ['.json','.xlsx','.csv'])assert.ok(accept.includes(extension));
+  await ipamPreview.locator('#bulkIpamFile').setInputFiles({
+    name:'export.emsipam.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify({format:'EMS-IPAM-SUBNET',formatVersion:1,
+      source:{cidr:'192.0.2.0/24'},prefixes:[],hosts:[{ip:'192.0.2.48',name:'Portable preview'}]}))
+  });
+  await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
+  await ipamPreview.locator('#bulkIpamCommit:not([disabled])').waitFor();
+  assert.ok((await ipamPreview.locator('#bulkIpamPreview').innerText()).includes('Portable JSON'));
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
   await ipamPreview.locator('#overviewBack').click();
-  await ipamPreview.locator('#ipamPortableImport').click();
-  await ipamPreview.locator('#importDialog').waitFor({state:'visible'});
-  assert.equal(await ipamPreview.locator('#importSpace').inputValue(),'test-space');
-  await ipamPreview.locator('#importDialog [data-close]').first().click();
-  check('Portable JSON import visible on IPAM overview and sheet, with the current Space preselected');
-
+  await ipamPreview.locator('#ipamExcelImport').click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
+  assert.equal(await ipamPreview.locator('#ipamPortableImport').count(),0);
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  check('Unified IPAM Import detects Portable JSON and accepts Excel/CSV in the same dialog');
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
