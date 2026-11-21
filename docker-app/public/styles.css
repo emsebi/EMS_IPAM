@@ -429,3 +429,12 @@ html[data-theme="light"] #sheetSelect{
 .vertical-subnet-table tr[hidden]{display:none!important}
 .vertical-subnet-table tr.sheet-search-hit>td:first-child{outline:2px solid #2b83ed;outline-offset:-2px}
 @media(max-width:630px){.sheet-search-bar{padding:9px}.sheet-search-bar input{min-width:100%}}
+
+/* IPAM live search: compact result picker, safe for merged CIDR table cells. */
+.sheet-search-bar{position:relative}
+.sheet-search-matches{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:5px;width:100%}
+.sheet-search-result{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:7px 10px;border:1px solid var(--line,#dce3ed);border-radius:8px;background:var(--card,#fff);color:var(--ink,#14243c);text-align:start;cursor:pointer}
+.sheet-search-result b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem}
+.sheet-search-result small{color:var(--muted,#66758b);font-size:.74rem;direction:ltr}
+.sheet-search-result:hover,.sheet-search-result:focus-visible{outline:2px solid #2b83ed;outline-offset:0}
+.vertical-subnet-table .sheet-search-hit,.ip-map .sheet-search-hit{outline:3px solid #2b83ed;outline-offset:-2px;background:color-mix(in srgb,var(--card,#fff) 75%,#2b83ed)}
