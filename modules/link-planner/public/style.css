@@ -87,3 +87,23 @@
 .lp-chart svg [data-profile-hover-area]{touch-action:none;cursor:crosshair}
 .lp-chart svg [data-obstruction-index]{pointer-events:none}
 .lp-dot.obstruction{background:#d83b44}
+
+/* Compact SRTM terrain strip immediately below the map, synchronized with the full profile. */
+.lp-elevation-strip{padding:11px 12px;margin-top:10px;border:1px solid var(--lp-grid,#dce6ee);
+ border-radius:11px;background:var(--soft,#f7fafc);min-width:0}
+.lp-strip-title,.lp-strip-meta{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+.lp-strip-title strong{font-size:.95rem}
+.lp-strip-source,.lp-strip-meta small{color:var(--lp-muted,#64748b);font-size:.76rem}
+.lp-strip-meta{margin:8px 0 3px;justify-content:flex-start}
+.lp-strip-meta .lp-path-alert{color:#b6313f;font-weight:700}
+.lp-strip-meta .lp-path-clear{color:#157b4e;font-weight:700}
+.lp-elevation-strip>svg{display:block;width:100%;height:auto;max-height:155px;margin-top:3px;
+ user-select:none;touch-action:none;cursor:crosshair}
+.lp-elevation-strip>input[type=range]{display:block;width:100%;margin:2px 0 6px;accent-color:#2474b4;cursor:ew-resize}
+.lp-strip-readout{margin:6px 0 0;padding:7px 9px;border-radius:8px;border:1px solid var(--lp-grid,#dce6ee);
+ min-height:37px;font-size:.8rem;line-height:1.6;overflow-wrap:anywhere;background:var(--panel,#fff)}
+.lp-strip-readout[data-obstructed=true]{background:#fff1f2;border-color:#e5a5ac;color:#aa2534;font-weight:650}
+.lp-strip-readout[data-obstructed=false]{background:#effaf3;border-color:#b3dcc4;color:#1c6a46}
+.lp-elevation-strip .lp-muted{margin:10px 0 4px}
+@media (max-width:610px){.lp-elevation-strip{padding:9px}.lp-strip-title{align-items:flex-start}
+.lp-strip-readout{font-size:.76rem}}
