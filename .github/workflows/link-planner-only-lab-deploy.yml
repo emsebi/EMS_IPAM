@@ -3,7 +3,7 @@ name: EMS-IPAM Link Planner Only VM Deployment
 on:
   push:
     branches:
-      - work/link-planner-mvp-20261120
+      - work/link-planner-click-no-recenter-20261121
     paths:
       - .github/link-planner-deploy-trigger.txt
 
