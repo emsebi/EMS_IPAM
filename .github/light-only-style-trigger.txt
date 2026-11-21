@@ -1,0 +1,1 @@
+Apply light-only dense IPAM CSS on test VM, preserve existing dark colors/sizing. Private DB backup, RADIUS integrity and automatic rollback required.
