@@ -127,6 +127,7 @@ try{
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('866.6'));
  assert.ok((await page.locator('.lp-capacity-reference').innerText()).includes('Actual throughput'));
 
+ const savedALatitude=Number(await page.locator('input[data-path="a.latitude"]').inputValue());
  await page.locator('#lpScenarioName').fill('Fixture hill path');
  const save=page.locator('.lp-card').last().getByRole('button',{name:/Save|ذخیره/}).first();
  await save.click();
@@ -137,7 +138,7 @@ try{
  await select.selectOption({label:'Fixture hill path'});
  await page.locator('.lp-card').last().getByRole('button',{name:/Load|بازکردن/}).click();
  await page.locator('input[data-path="a.latitude"]').waitFor({state:'visible'});
- assert.ok(Math.abs(Number(await page.locator('input[data-path="a.latitude"]').inputValue())-35.6)<1e-6,'Saved site A latitude must survive round-trip');
+ assert.ok(Math.abs(Number(await page.locator('input[data-path="a.latitude"]').inputValue())-savedALatitude)<1e-6,'Saved site A latitude must survive round-trip');
  const state=await context.request.get('/api/link-planner/scenarios',{headers:{'X-EMS-CSRF':'1'}});
  assert.equal(state.status(),200);
  const result=await state.json();assert.equal(result.items.length,1);
