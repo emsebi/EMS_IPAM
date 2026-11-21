@@ -55,3 +55,10 @@ The map no longer automatically fits/refocuses after a geographic click or manua
 
 ## 0.2.1-lab.1 — Fix real map pan / jump
 The previous inverse Web Mercator longitude function erroneously added **540** where the normalized offset must be **360**, producing a 180° jump as the map converts pixel coordinates back to longitude. Fixed the `geoProject`/`geoUnproject` roundtrip in `public/model.mjs`. Selecting Site A/B never triggers automatic fit, including the first click; only explicit Fit A+B or initial iframe mount may fit. Dragging the map pans smoothly while preserving saved A/B coordinates and zoom. Wheel/double-click zoom and deliberate Go to Site A/B remain. Regression tests cover coordinate roundtrips at zoom 2–17 and a real 100px mouse drag in Chromium, with no hemisphere jump. No RADIUS/Radio/Core changes.
+
+## 0.2.2-lab.1 — Link route/terrain synchronization
+- After selecting Site A, the next map click may select B. Their positions are rendered as distinct pins connected by an 81-point great-circle polyline without repositioning the map.
+- Without a terrain profile, the route appears as an amber dashed line. With valid SRTM90 samples, the line shows sampled clear sectors in green and potential LOS/Fresnel clearance conflicts in red. A red segment indicates at least one endpoint sample with negative clearance; it does **not** prove a complete obstacle survey.
+- Hover the **map route** or the **elevation profile** to highlight the corresponding path point on the other view, including: distance from A, SRTM terrain altitude (m above sea level), calculated LOS elevation, Fresnel clearance envelope and margin in meters.
+- Profile overview shows highest sampled terrain point and count of sampled clearance conflicts; separate green terrain, blue LOS, amber Fresnel envelope and red conflicts. Unknown terrain never becomes a green clearance claim.
+- Map panning remains separate from selection: dragging with mouse does not modify A/B or jump longitude by 180°; scrolling zooms under pointer. No new terrain requests on hover, no radio login and no Core/Radio/RADIUS changes.
