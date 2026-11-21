@@ -13,3 +13,12 @@
 .nac-output { white-space: pre-wrap; overflow-wrap: anywhere; font: 0.88rem/1.55 ui-monospace, monospace; direction: ltr; text-align: left; padding: 0.7rem; border: 1px solid var(--line, #b4bcc6); border-radius: 0.5rem; min-height: 5rem; overflow: auto; }
 .nac-rule { padding: 0.5rem 0; border-bottom: 1px solid var(--line, #ddd); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
 @media (max-width: 850px) { .nac-grid { grid-template-columns: minmax(0,1fr); } .nac-grid > section:last-child { grid-column: auto; } }
+
+
+/* Keep MAC/IP/Device table headings visually aligned with their own data cells. 
+   The shared inventory header was hardcoded text-align:right while cells inherited
+   LTR/RTL alignment, visibly shifting Device away from device names. */
+.access-records .inventory-table th,
+.access-records .inventory-table td{ text-align:start; }
+.access-records .inventory-table th:nth-child(-n+2),
+.access-records .inventory-table td:nth-child(-n+2){direction:ltr;text-align:left}
