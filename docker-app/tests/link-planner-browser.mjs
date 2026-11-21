@@ -67,6 +67,38 @@ try{
  await page.waitForTimeout(100);
  assert.notDeepEqual(await tileState(),tilesBeforePick,'Wheel must zoom at the cursor.');
 
+ // Dragging must move only the viewport by the requested pixels, without moving a site or
+ // shifting to the opposite hemisphere. This fails on the old +540 inverse longitude formula.
+ const view=()=>mapFrame.locator('#map').evaluate(el=>({
+   latitude:Number(el.dataset.viewCenterLatitude),
+   longitude:Number(el.dataset.viewCenterLongitude),
+   zoom:Number(el.dataset.viewZoom)
+ }));
+ const beforeDrag=await view();
+ assert.ok(Number.isFinite(beforeDrag.longitude)&&Number.isFinite(beforeDrag.zoom));
+ const bBeforeDrag=await page.locator('input[data-path="b.longitude"]').inputValue();
+ const rect=await mapFrame.locator('#map').boundingBox();
+ const x=rect.x+rect.width*.51,y=rect.y+rect.height*.48;
+ await page.mouse.move(x,y);
+ await page.mouse.down();
+ await page.mouse.move(x+100,y,{steps:10});
+ await page.mouse.up();
+ const afterDrag=await view();
+ const expectedLonShift=-100*360/(256*2**beforeDrag.zoom);
+ const circularDelta=(afterDrag.longitude-beforeDrag.longitude+540)%360-180;
+ assert.ok(Math.abs(circularDelta-expectedLonShift)<0.001,
+    'Panning longitude jumped: '+JSON.stringify({beforeDrag,afterDrag,expectedLonShift,circularDelta}));
+ assert.ok(Math.abs(afterDrag.latitude-beforeDrag.latitude)<0.001,'Horizontal pan should preserve latitude.');
+ assert.equal(afterDrag.zoom,beforeDrag.zoom,'Panning must not change zoom.');
+ assert.equal(await page.locator('input[data-path="b.longitude"]').inputValue(),bBeforeDrag,
+    'Dragging is not a point selection and cannot edit site coordinates.');
+ // Bare click after pan changes selected pin only: viewport remains exactly unchanged.
+ const beforeClick=await view();
+ await mapFrame.locator('#map').click({position:{x:300,y:220}});
+ await page.waitForTimeout(90);
+ assert.deepEqual(await view(),beforeClick,'Selecting a site must leave zoom and center untouched.');
+
+
  await page.locator('input[data-path="b.latitude"]').fill('35.650000');
  await page.locator('input[data-path="b.longitude"]').fill('51.350000');
  await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
