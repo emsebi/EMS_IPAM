@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { assertFixtureCompanyIsolation } from './helpers/fixture-company-isolation.mjs';
 
-test('Company cleanup preflight preserves hierarchy and grants, including archived/inactive records', async t => {
+test('Company cleanup preflight preserves hierarchy, grants and Personnel, including archived/inactive records', async t => {
   const db = new PGlite();
   t.after(() => db.close());
   await db.exec(await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8'));
@@ -15,10 +15,11 @@ test('Company cleanup preflight preserves hierarchy and grants, including archiv
     INSERT INTO users(id,username,password_hash,role,active) VALUES ('reader','reader','synthetic','viewer',false);
     INSERT INTO user_company_access VALUES ('reader','outside');
     INSERT INTO user_space_access VALUES ('reader','o');
+    INSERT INTO personnel(id,full_name,company_id,active) VALUES ('person','Synthetic person','outside',false);
   `);
   const snapshot = async () => {
     const rows = [];
-    for (const table of ['companies', 'address_spaces', 'users', 'user_company_access', 'user_space_access']) {
+    for (const table of ['companies', 'address_spaces', 'users', 'user_company_access', 'user_space_access', 'personnel']) {
       rows.push((await db.query('SELECT * FROM ' + table + ' ORDER BY 1,2')).rows);
     }
     return rows;
@@ -31,6 +32,7 @@ test('Company cleanup preflight preserves hierarchy and grants, including archiv
       ["UPDATE companies SET parent_company_id='fixture' WHERE id='outside'", "UPDATE companies SET parent_company_id=NULL WHERE id='outside'", /child companies/],
       ["INSERT INTO user_company_access VALUES ('reader','fixture')", "DELETE FROM user_company_access WHERE company_id='fixture'", /Company grants/],
       ["INSERT INTO user_space_access VALUES ('reader','f')", "DELETE FROM user_space_access WHERE space_id='f'", /Space grants/],
+      ["UPDATE personnel SET company_id='fixture' WHERE id='person'", "UPDATE personnel SET company_id='outside' WHERE id='person'", /Personnel/],
     ]) {
       await db.exec(add);
       const before = await snapshot();

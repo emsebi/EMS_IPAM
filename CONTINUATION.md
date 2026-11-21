@@ -1,3 +1,15 @@
+# Preserve Personnel during fixture cleanup — 2026-11-21 UTC
+
+[PR #86](https://github.com/emsebi/EMS_IPAM/pull/86) merged with expected head as `8f1c2d054c19394f784807ca327f5a95a2b4e87a`. Candidate CI 44927861295 and 44927857398 passed all four gates; native PostgreSQL job 136917806022 passed all 31 HTTP tests with no failures/skips and browser job 136917806041 passed 44 scenarios. [Merge CI 44933607196](https://github.com/emsebi/EMS_IPAM/actions/runs/44933607196) also succeeded, verified 18:07 UTC. Its tree equals the tested candidate. Fresh base is `8f1c2d054c19394f784807ca327f5a95a2b4e87a`; open #83/#84/#85 UI/browser work and draft #12 remain untouched.
+
+The next narrow preflight covers personnel.company_id: its ON DELETE SET NULL relationship would silently detach a person if the fixture company were purged. Fixture creation owns no Personnel, so any linked record blocks cleanup, including inactive Personnel. The production-schema read-only test compares complete Personnel rows alongside hierarchy/grants. A new native PostgreSQL HTTP case injects a synthetic existing person's link to active and already-archived fixtures, then requires normal cleanup/recovery refusal, no DELETE for the blocked fixture, identical rows/journal bytes and retained active/trash entries. Restoring only the injected link permits repeatable recovery, after which the complete original Personnel row must still match.
+
+Local combined journal/Radio/Company/HTTP validation: 27 passed, 0 failed, 8 native-only skips (35 including parent); all 315 listed source checksums, syntax and whitespace pass. The new native HTTP case is not executed by the local PGlite adapter. Candidate CI IDs/status are recorded in the PR; require all 32 native HTTP tests with zero skips/failures and every other gate before fresh-ref/expected-SHA merge.
+
+Next: inspect the candidate's Personnel case and all gates. Then inventory remaining incoming references from the actual migrated schema (old migration text alone is not the current RADIUS contract), cover module references and private preservation comparisons before any installed-loopback XLSX runner. This SELECT-only guard remains optional rehearsal tooling, not an atomic concurrency lock or a complete installed cleanup policy. No application/schema change, VM write/deployment, real-device scan or router push. Installed XLSX acceptance, practical Radio acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
 # Company hierarchy and grant preflight for XLSX fixture cleanup — 2026-11-21 UTC
 
 PR #78 merged as `6a8e598d4aab02bba87a100e9bcc2f2a4d2030ab`; [merge CI 44922365467](https://github.com/emsebi/EMS_IPAM/actions/runs/44922365467) completed successfully in all four gates. Fresh main `e158828c15c149822402742ce36235cd16f72053` only adds its generated Radio screenshot. The earlier failed merge run 44901729931 remains a failure. Open #83/#84/#85 overlap IPAM UI/browser/color work; this step does not edit those files. #12 remains draft pending practical Radio acceptance.
