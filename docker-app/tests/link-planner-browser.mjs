@@ -51,6 +51,16 @@ try{
  await page.waitForFunction(()=>document.querySelector('#lpResults')?.innerText.includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('FSPL'));
  assert.ok((await page.locator('#lpResults').innerText()).includes('EIRP'));
+ // Center-click on a known eastern longitude must remain east, never jump 180° west.
+ await page.getByRole('button',{name:/Go to site A|برو به سایت A/}).click();
+ await page.locator('.lp-pick[data-site="a"]').click();
+ const aMap=page.frameLocator('#lpMap').locator('#map');
+ const mapSize=await aMap.boundingBox();
+ await aMap.click({position:{x:Math.floor(mapSize.width/2)+35,y:Math.floor(mapSize.height/2)+35}});
+ const longitude=Number(await page.locator('input[data-path="a.longitude"]').inputValue());
+ assert.ok(Math.abs(longitude-51.3)<.005,'Map center click must preserve eastern longitude, got '+longitude);
+ await page.locator('input[data-path="a.latitude"]').fill('35.600000');
+ await page.locator('input[data-path="a.longitude"]').fill('51.300000');
  // Same-origin map click updates the *selected* site, no external geolocation permission.
  await page.locator('.lp-pick[data-site="b"]').click();
  const before=await page.locator('input[data-path="b.longitude"]').inputValue();
@@ -72,6 +82,14 @@ try{
  await page.getByRole('button',{name:/Go to site B|برو به سایت B/}).click();
  const bPin=mapFrame.locator('.planner-pin.b');
  await bPin.waitFor({state:'visible'});
+ await page.waitForFunction(()=>{
+  const frame=document.getElementById('lpMap');
+  const map=frame?.contentDocument?.getElementById('map');
+  const pin=frame?.contentDocument?.querySelector('.planner-pin.b');
+  if(!map||!pin)return false;
+  const p=pin.getBoundingClientRect(),m=map.getBoundingClientRect();
+  return p.left+p.width/2>=m.left-20&&p.left+p.width/2<=m.right+20&&p.top+p.height/2>=m.top-20&&p.top+p.height/2<=m.bottom+20;
+ },null,{timeout:6000});
  const pinPosition=await bPin.evaluate(pin=>{
    const box=pin.getBoundingClientRect(),map=document.getElementById('map').getBoundingClientRect();
    return {x:box.left+box.width/2-map.left,y:box.top+box.height/2-map.top,width:map.width,height:map.height};

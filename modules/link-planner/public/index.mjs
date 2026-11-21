@@ -1,5 +1,5 @@
-import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.0-lab.1';
-import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.0-lab.1';
+import {normalizeInput,radioBudget,assessTerrain,profileBounds,requiredOppositeTower} from './model.mjs?v=0.2.1-lab.1';
+import {RADIO_PROFILES,RADIO_BRANDS,radioById,protocolOverlap,modulationOptions,estimateRadioCapacity} from './radio-profiles.mjs?v=0.2.1-lab.1';
 
 const INITIAL=()=>({
  a:{latitude:'',longitude:''},b:{latitude:'',longitude:''},
@@ -345,8 +345,8 @@ export function createUi(ctx){
        button(L('Load SRTM90 terrain','دریافت ارتفاع زمین SRTM90'),terrain,'primary'),
        E('span',{id:'lpTerrainStatus',text:profile?.missing?L('Some elevation samples are missing','برخی نقاط ارتفاعی ناموجودند'):profile?L('Terrain profile loaded','پروفایل دریافت شد'):L('Terrain not loaded','پروفایل زمین دریافت نشده')})),
      E('small',{class:'lp-source',text:DEM_NOTE}));
-   left.querySelector('.lp-pick:first-of-type')?.setAttribute('data-site','a');
-   left.querySelector('.lp-pick:last-of-type')?.setAttribute('data-site','b');
+   left.querySelectorAll('.lp-pick')[0]?.setAttribute('data-site','a');
+   left.querySelectorAll('.lp-pick')[1]?.setAttribute('data-site','b');
    left.querySelector('.lp-terrain-controls button')?.setAttribute('id','lpTerrainButton');
    left.querySelector('iframe')?.addEventListener('load',()=>sendMap(true));
    const side=E('aside',{class:'lp-side'});

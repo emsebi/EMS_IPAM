@@ -1,0 +1,1 @@
+Guarded module-only test VM deploy for corrected Link Planner WebMercator longitude, fixes Pick A/B, cache-busted 0.2.1. Database/RADIUS preserve; automatic rollback on failure.
