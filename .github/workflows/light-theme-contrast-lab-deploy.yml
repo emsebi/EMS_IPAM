@@ -1,0 +1,180 @@
+name: EMS-IPAM Light Theme Contrast — Lab UI Deployment
+
+on:
+  push:
+    branches:
+      - work/light-theme-contrast-20261121
+    paths:
+      - .github/light-theme-deploy-trigger.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  app-ui-only:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout tested UI source into isolated runner directory
+        uses: actions/checkout@v4
+        with:
+          path: light-contrast-source-v2
+          ref: ${{ github.sha }}
+          clean: true
+      - name: UI-only app image deployment, with private backup and automatic rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          SRC="$GITHUB_WORKSPACE/ipam-dense-source"
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          BACK="$HOME/ems-ipam-lab/light-theme-backups/$GITHUB_SHA"
+          APP=ems-ipam-app-1
+          DB=ems-ipam-db-1
+          RADIUS=ems-ipam-radius_ops-1
+          IMAGE=ems-ipam-base:1.7.2
+          SAVE_TAG="ems-ipam-ui-rollback:$GITHUB_RUN_ID"
+          STAGED_TAG="ems-ipam-light-staged:$GITHUB_RUN_ID"
+          CHECKED_OUT_HEAD="$(git -C "$SRC" rev-parse --verify HEAD)"
+          test "$CHECKED_OUT_HEAD" = "$GITHUB_SHA" || {
+            echo "::error::Refusing stale checkout; expected $GITHUB_SHA got $CHECKED_OUT_HEAD"
+            exit 1
+          }
+          test -f "$SRC/docker-app/public/styles.css"
+          test -f "$SRC/docker-app/public/index.html"
+          test -f "$DEPLOY/compose.yml"
+          test -f "$DEPLOY/docker-app/Dockerfile"
+          test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
+          test -s "$ENV_FILE"
+          grep -qx 'EMS_HTTP_PORT=8888' "$ENV_FILE"
+          for c in "$APP" "$DB" "$RADIUS"; do
+            test "$(docker inspect --format '{{.State.Running}}' "$c")" = true
+          done
+          OLD_DB_ID="$(docker inspect --format '{{.Id}}' "$DB")"
+          OLD_RADIUS_ID="$(docker inspect --format '{{.Id}}' "$RADIUS")"
+          OLD_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$APP")"
+          mkdir -p "$BACK"
+          echo "Saving private DB backup and RADIUS checkpoint before changing UI only."
+          docker exec "$DB" sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$BACK/db-before.dump"
+          test -s "$BACK/db-before.dump"
+          docker exec -i "$DB" sh -c 'exec pg_restore --list' < "$BACK/db-before.dump" >/dev/null
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --snapshot "$BACK/radius-before.json"
+
+          cp -a "$DEPLOY/docker-app/public/styles.css" "$BACK/styles.css"
+          cp -a "$DEPLOY/docker-app/public/index.html" "$BACK/index.html"
+          if docker image inspect "$OLD_IMAGE_ID" >/dev/null 2>&1; then
+            # Exact old image still exists, tag that image as our rollback copy.
+            docker image tag "$OLD_IMAGE_ID" "$SAVE_TAG"
+          else
+            # The original immutable container image may have been pruned.
+            # Only rebuild an old rollback image if the installed source matches
+            # the actual live app's JS/static assets, before applying any patch.
+            echo "Original app image digest pruned; verifying installed source against live container."
+            for rel in package-lock.json public/app.js public/styles.css public/index.html server/main.mjs; do
+              source_hash="$(sha256sum "$DEPLOY/docker-app/$rel" | cut -d' ' -f1)"
+              installed_hash="$(docker exec "$APP" sha256sum "/app/$rel" | cut -d' ' -f1)"
+              test "$source_hash" = "$installed_hash" || {
+                echo "::error::Installed source and running app differ for $rel; cannot safely build rollback."
+                exit 1
+              }
+            done
+            echo "Building pre-update rollback image from verified installed source."
+            docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
+              -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
+              build app
+            docker image tag "$IMAGE" "$SAVE_TAG"
+          fi
+
+          UPDATED=0
+          APP_REPLACED=0
+          rollback() {
+            code=$?
+            if test "$code" -ne 0 && test "$UPDATED" = 1; then
+              echo "::warning::UI verification failed; restoring old CSS/modules/image and app container."
+              cp -a "$BACK/styles.css" "$DEPLOY/docker-app/public/styles.css"
+              cp -a "$BACK/index.html" "$DEPLOY/docker-app/public/index.html"
+              docker image tag "$SAVE_TAG" "$IMAGE"
+              if test "$APP_REPLACED" = 1; then
+                docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
+                  -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
+                  up -d --no-deps --force-recreate app || true
+              fi
+            fi
+            exit "$code"
+          }
+          trap rollback EXIT
+          echo "VERIFY GitHub checkout contains the reviewed CSS and HTML."
+          git -C "$SRC" rev-parse --verify HEAD
+          for needle in '--muted:#46566d' '--line:#8e9eb3'; do
+            if ! grep -q -- "$needle" "$SRC/docker-app/public/styles.css"; then
+              echo "::error::Checked-out stylesheet missing expected token $needle"
+              exit 1
+            fi
+          done
+          grep -q -- 'styles.css?v=1.7.2-light-contrast1' "$SRC/docker-app/public/index.html" || {
+            echo "::error::Checked-out HTML does not reference new stylesheet"; exit 1;
+          }
+
+          echo "Preparing a staged build context from installed app code without touching live files."
+          STAGED_CONTEXT="$BACK/docker-app-stage"
+          cp -a "$DEPLOY/docker-app" "$STAGED_CONTEXT"
+          install -m 0644 "$SRC/docker-app/public/styles.css" "$STAGED_CONTEXT/public/styles.css"
+          install -m 0644 "$SRC/docker-app/public/index.html" "$STAGED_CONTEXT/public/index.html"
+          cmp "$SRC/docker-app/public/styles.css" "$STAGED_CONTEXT/public/styles.css"
+          cmp "$SRC/docker-app/public/index.html" "$STAGED_CONTEXT/public/index.html"
+          echo "Building isolated staged image from the verified temporary directory."
+          docker build -t "$STAGED_TAG" "$STAGED_CONTEXT"
+          echo "VERIFY staged Docker image contains both light theme tokens and cache-busted HTML."
+          docker run --rm --network none --entrypoint sh "$STAGED_TAG" -c \
+            'grep -q -- "--muted:#46566d" /app/public/styles.css && grep -q -- "--line:#8e9eb3" /app/public/styles.css && grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html' || {
+              echo "::error::Staged image failed CSS verification. Running App and installed files were untouched."
+              exit 1
+            }
+
+          UPDATED=1
+          echo "Staged image verified; installing only public CSS/HTML and replacing App."
+          install -m 0644 "$SRC/docker-app/public/styles.css" "$DEPLOY/docker-app/public/styles.css"
+          install -m 0644 "$SRC/docker-app/public/index.html" "$DEPLOY/docker-app/public/index.html"
+          docker image tag "$STAGED_TAG" "$IMAGE"
+          APP_REPLACED=1
+          docker compose --project-name ems-ipam --env-file "$ENV_FILE" \
+            -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml" \
+            up -d --no-deps --force-recreate app
+
+          healthy=0
+          for i in $(seq 1 50); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8888/health > "$BACK/health.json"; then
+              healthy=1; break
+            fi
+            sleep 2
+          done
+          test "$healthy" = 1 || { echo "::error::App did not become healthy"; exit 1; }
+          echo "VERIFY app health includes both IPAM and NAC modules"
+          grep -q '"ipam"' "$BACK/health.json" || { echo "::error::IPAM absent in health"; exit 1; }
+          grep -q '"network-access"' "$BACK/health.json" || { echo "::error::NAC absent in health"; exit 1; }
+          echo "VERIFY container server JS parse"
+          docker exec "$APP" node --check /app/server/main.mjs || { echo "::error::Server syntax check failed"; exit 1; }
+          echo "VERIFY new light theme CSS physically in the app container"
+          docker exec "$APP" sh -c 'grep -q -- "--muted:#46566d" /app/public/styles.css' || { echo "::error::App container CSS missing dark secondary text"; exit 1; }
+          docker exec "$APP" sh -c 'grep -q -- "--line:#8e9eb3" /app/public/styles.css' || { echo "::error::App container CSS missing dark borders"; exit 1; }
+          echo "VERIFY browser cache-busting HTML"
+          docker exec "$APP" sh -c 'grep -q -- "styles.css?v=1.7.2-light-contrast1" /app/public/index.html' || { echo "::error::App HTML still references old CSS version"; exit 1; }
+          echo "VERIFY static HTTP is serving the new CSS"
+          curl -fsS --max-time 8 http://127.0.0.1:8888/styles.css -o "$BACK/live-styles.css"
+          grep -q -- '--line:#8e9eb3' "$BACK/live-styles.css" || { echo "::error::HTTP CSS missing new border token"; exit 1; }
+          echo "VERIFY preexisting Device Types / NAC UI retained"
+          grep -q "device-types-grid" "$DEPLOY/modules/ipam/public/index.mjs" || { echo "::error::Device Types grid missing"; exit 1; }
+          grep -q "access-records .inventory-table th" "$DEPLOY/modules/network-access/public/style.css" || { echo "::error::NAC column fix missing"; exit 1; }
+          echo "VERIFY all modules still installed and RADIUS unchanged"
+          python3 "$DEPLOY/scripts/installed-modules-check.py"
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BACK/radius-before.json"
+          test "$(docker inspect --format '{{.Id}}' "$DB")" = "$OLD_DB_ID" || { echo "::error::DB container changed"; exit 1; }
+          test "$(docker inspect --format '{{.Id}}' "$RADIUS")" = "$OLD_RADIUS_ID" || { echo "::error::RADIUS container changed"; exit 1; }
+          UPDATED=0
+          echo "PASS LIGHT_CONTRAST_UI_DEPLOY commit=$GITHUB_SHA port=8888; Core data, DB and RADIUS preserved"
+          echo "PASS light contrast tokens and borders; dark palette untouched; CSS cache-bust applied"

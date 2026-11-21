@@ -60,6 +60,34 @@ try {
   await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
   check('real login and application bootstrap');
 
+  // Light theme must render dark text and visible lines; dark mode must retain its palette.
+  const readPalette=()=>page.evaluate(()=>{
+    const root=getComputedStyle(document.documentElement);
+    return ['--ink','--muted','--line','--soft'].reduce((out,key)=>{
+      out[key]=root.getPropertyValue(key).trim();return out;
+    },{});
+  });
+  const contrast=(foreground,background)=>{
+    const rgb=v=>v.replace('#','').match(/.{2}/g).map(c=>parseInt(c,16)/255)
+      .map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);
+    const lum=rgb=>rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    const a=lum(rgb(foreground)),b=lum(rgb(background));
+    return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+  };
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+  const light=await readPalette();
+  assert.ok(contrast(light['--ink'],'#ffffff')>=7,'Light mode primary text needs high contrast');
+  assert.ok(contrast(light['--muted'],'#ffffff')>=4.5,'Light mode secondary labels need readable contrast');
+  assert.ok(contrast(light['--line'],'#ffffff')>=2.5,'Light mode table borders should be visible');
+  await page.locator('#themeButton').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  const dark=await readPalette();
+  assert.equal(dark['--ink'],'#edf6ff','Dark mode main text color must remain unchanged');
+  assert.equal(dark['--line'],'#29415d','Dark mode borders must remain unchanged');
+  await page.locator('#themeButton').click();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
+  check('Light theme primary/secondary text and table-line contrast; dark palette preserved');
+
   await page.locator('#deviceTypesButton').click();
   await page.locator('#deviceTypeName').fill('Test Device');
   await page.locator('#deviceTypeForm [type=submit]').click();

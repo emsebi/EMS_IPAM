@@ -1,0 +1,8 @@
+2026-11-21 user-authorized improvement: apply high-contrast light theme on EMS_IPAM lab VM. Four project CI jobs passed https://github.com/emsebi/EMS_IPAM/actions/runs/44883526889 on exact CSS / index / browser test. Deploy only two public files; verify full database backup, RADIUS unchanged, health and rollback. Do not touch network devices or credentials.
+Retry after verified healthy rollback (read-only probe 44883901065). Add explicit checks for container CSS, HTTP response, browser version and RADIUS; preserves prior DB/backups.
+
+Third attempt: stage a Docker image from explicit verified docker-app source, inspect CSS and HTML inside it before changing app, preserve rollback image and RADIUS checkpoint. Previous attempt rolled back before release.
+
+Fourth attempt: Build image from temporary copy of installed application source and reviewed CSS/HTML; verify staged image before editing any live source. No changes to backend/modules; preserve prior image rollback.
+
+Fifth attempt: use fresh checkout directory, ref exactly github.sha and assert checkout commit == GITHUB_SHA before staging, then build from installed-source copy and validate image before replacing App. Previous attempts demonstrated stale checkout e2be605 on runner; no unverified image kept.
