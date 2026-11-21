@@ -133,7 +133,7 @@ jobs:
 
           docker exec "$APP" node --check /app/server/main.mjs
           docker exec "$APP" node --check /app/public/app.js
-          docker exec "$APP" sh -c 'grep -q "html\\[data-theme=\\\"light\\\"\\] .root-range-table td" /app/public/styles.css'
+          docker exec "$APP" grep -Fq 'html[data-theme="light"] .root-range-table td' /app/public/styles.css
           docker exec "$APP" sh -c 'grep -q "function effectiveSubnetColor" /app/public/app.js'
           docker exec "$APP" sh -c 'grep -q "prefixSaveNext" /app/public/index.html'
           test "$(curl -fsS --max-time 6 http://127.0.0.1:8888/app.js | grep -c "function applySheetLiveSearch")" -gt 0
