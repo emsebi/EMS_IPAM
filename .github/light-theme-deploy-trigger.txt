@@ -4,3 +4,5 @@ Retry after verified healthy rollback (read-only probe 44883901065). Add explici
 Third attempt: stage a Docker image from explicit verified docker-app source, inspect CSS and HTML inside it before changing app, preserve rollback image and RADIUS checkpoint. Previous attempt rolled back before release.
 
 Fourth attempt: Build image from temporary copy of installed application source and reviewed CSS/HTML; verify staged image before editing any live source. No changes to backend/modules; preserve prior image rollback.
+
+Fifth attempt: use fresh checkout directory, ref exactly github.sha and assert checkout commit == GITHUB_SHA before staging, then build from installed-source copy and validate image before replacing App. Previous attempts demonstrated stale checkout e2be605 on runner; no unverified image kept.
