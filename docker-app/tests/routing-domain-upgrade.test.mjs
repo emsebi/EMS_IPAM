@@ -28,7 +28,7 @@ const seed = `
 async function legacyRows(db) {
   const snapshot = {};
   for (const table of ['companies', 'address_spaces', 'hosts', 'prefixes', 'users', 'user_space_access', 'user_company_access']) {
-    const result = await db.query(`SELECT to_jsonb(r) - 'routing_domain_id' AS legacy FROM ${table} r ORDER BY legacy`);
+    const result = await db.query(`SELECT to_jsonb(r) - 'routing_domain_id' - 'inherit_color_to_children' AS legacy FROM ${table} r ORDER BY legacy`);
     snapshot[table] = result.rows;
   }
   return snapshot;
