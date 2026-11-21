@@ -895,7 +895,7 @@ function renderOverview() {
         const value = ipv4ToInt(ip); return value >= start && value <= start + 255;
       }).length;
       const exact = state.data.prefixes.find((item) => item.cidr === cidr);
-      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
+      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact && exact.name !== exact.cidr ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
     }
     grid += `</div>`;
   }
