@@ -216,6 +216,29 @@ try {
   await ipamPreview.screenshot({path:path.join(outputDir,'ipam-24-compact-grid.png'),fullPage:true});
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
+
+  // Live query must work without a submit button, preserve CIDR rowspans, and jump to the IP.
+  await ipamPreview.locator('#sheetLiveSearch').fill('192.0.2.42');
+  await ipamPreview.locator('.sheet-search-result').first().waitFor();
+  assert.equal(await ipamPreview.locator('#sheetSearchMatches button').count(),1);
+  assert.equal(await ipamPreview.locator('.vertical-subnet-table tbody tr').count(),256,'Live search must not remove merged-row table cells');
+  await ipamPreview.locator('.sheet-search-result').first().click();
+  assert.equal(await ipamPreview.locator('.map-ip-cell[data-ip="192.0.2.42"].sheet-search-hit').count(),1);
+  await ipamPreview.locator('#sheetLiveSearch').fill('');
+  assert.equal(await ipamPreview.locator('.sheet-search-result').count(),0);
+  // A /16 query must discover records beyond the first eight lazily rendered /24 blocks.
+  const deepSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Live search /16 fixture',cidr:'198.19.0.0/16'},201);
+  await api('/api/hosts','PUT',{spaceId:deepSpace.id,ip:'198.19.210.19',name:'Far search target'});
+  await ipamPreview.goto('/#/ipam/'+deepSpace.id+'/198.19.0.0%2F16');
+  await ipamPreview.locator('#sheetLiveSearch').fill('Far search');
+  await ipamPreview.locator('.sheet-search-result').first().waitFor();
+  assert.ok((await ipamPreview.locator('#sheetSearchCount').innerText()).includes('1'));
+  await ipamPreview.locator('.sheet-search-result').first().click();
+  await ipamPreview.locator('.map-ip-cell[data-ip="198.19.210.19"].sheet-search-hit').waitFor();
+  assert.equal(await ipamPreview.locator('#sheetSelect').inputValue(),'198.19.210.0/24');
+  await api('/api/hosts/'+deepSpace.id+'/198.19.210.19','DELETE');
+  await api('/api/spaces/'+deepSpace.id,'DELETE');
+  check('IPAM live search: instant lookup, intact merged rows and /16 distant host jump');
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
