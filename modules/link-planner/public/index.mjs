@@ -13,7 +13,7 @@ export function createUi(ctx){
  const {state,page,request,toast}=ctx;
  const L=(english,persian)=>state.language==='fa'?persian:english;
  let input=INITIAL(),active='a',profile=null,profileKey='',scenarioName='',scenarios=[],busy=false,notice='',profileError='';
- let inspectedIndex=null,inspectChart=()=>{};
+ let inspectedIndex=null,inspectChart=()=>{},inspectStrip=()=>{};
  const ID='link-planner';
  const current=()=>state.view==='module'&&state.currentModuleId===ID;
  const doc=()=>document;
@@ -146,6 +146,7 @@ export function createUi(ctx){
    const accepted=Number.isInteger(index)&&index>=0&&index<81?index:null;
    inspectedIndex=accepted;
    inspectChart(accepted);
+   inspectStrip(accepted);
    if(!fromMap)doc().getElementById('lpMap')?.contentWindow?.postMessage({
      type:'ems:planner:inspect',index:accepted
    },location.origin);
@@ -248,8 +249,105 @@ export function createUi(ctx){
    inspect(inspectedIndex);
    return box;
  }
+ // Compact always-visible elevation strip directly beneath the geographic map.
+ // Uses the same SRTM samples and inspectSample() as the detailed profile, not duplicate data.
+ function updateElevationStrip(){
+   const host=doc().getElementById('lpElevationStrip');
+   if(!host)return;
+   host.replaceChildren();
+   inspectStrip=()=>{};
+   const plan=validPlan().value;
+   const current=plan&&profile&&profileKey===coordKey(plan);
+   const analysis=current?assessTerrain(plan,profile.elevations):null;
+   host.append(E('div',{class:'lp-strip-title'},
+     E('strong',{text:L('Elevation along A → B','نوار ارتفاع مسیر A تا B')}),
+     E('span',{class:'lp-strip-source',text:analysis?.samples?L('SRTM90 sample profile','پروفایل نمونه‌های SRTM90'):L('No elevation loaded','ارتفاع زمین دریافت نشده')})
+   ));
+   if(!analysis?.samples){
+     host.append(E('p',{id:'lpStripMissing',class:'lp-muted',
+       text:L('Select A and B, then load SRTM90 terrain to display the elevation bar and obstacles beneath the map.','دو نقطه A و B را انتخاب و ارتفاع SRTM90 را دریافت کنید تا نوار پستی‌وبلندی و موانع زیر نقشه نمایش داده شود.')}));
+     return;
+   }
+   const p=analysis.samples,range=profileBounds(p);
+   const min=Math.min(...p.map(x=>x.groundM)),max=Math.max(...p.map(x=>x.groundM));
+   const peak=p.reduce((at,item,i)=>item.groundM>p[at].groundM?i:at,0);
+   const total=p.at(-1).distanceKm,from=48,to=752;
+   // Shared elevation scale across LOS, ground and Fresnel; zero-minimum avoided for zoom.
+   const plot=i=>from+i/(p.length-1)*(to-from);
+   const ordinate=value=>114-(value-range.min)/(range.max-range.min)*90;
+   const svg=E('svg',{id:'lpElevationStripSvg',viewBox:'0 0 800 142',role:'img',
+     'aria-label':L('Interactive elevation strip: terrain height, LOS, Fresnel and potential blocked sections','نوار تعاملی ارتفاع مسیر: زمین، خط دید، فرنل و بخش‌های دارای مانع')});
+   const shape=key=>p.map((item,i)=>(i?'L':'M')+plot(i).toFixed(2)+' '+ordinate(item[key]).toFixed(2)).join(' ');
+   svg.append(
+     E('path',{d:shape('groundM')+' L '+to+' 120 L '+from+' 120 Z',fill:'rgba(60,152,106,.18)'}),
+     E('path',{d:shape('groundM'),fill:'none',stroke:'#278b5c','stroke-width':2.6,'data-strip-line':'ground'}),
+     E('path',{d:shape('lineM'),fill:'none',stroke:'#2469bb','stroke-width':1.8,'data-strip-line':'los'}),
+     E('path',{d:shape('requiredM'),fill:'none',stroke:'#e2a04b','stroke-width':1.5,'stroke-dasharray':'5 4','data-strip-line':'fresnel'})
+   );
+   for(let i=0;i<p.length;i++){
+     if(p[i].clearanceM>=0)continue;
+     svg.append(E('rect',{x:plot(i)-(to-from)/(p.length-1)/2,y:122,
+       width:(to-from)/(p.length-1)+.4,height:7,fill:'#d43c43','data-strip-obstructed':i}));
+   }
+   const peakCircle=E('circle',{cx:plot(peak),cy:ordinate(p[peak].groundM),r:5,fill:'#0f7c4c',
+     stroke:'white','stroke-width':1.5,'data-strip-peak':peak});
+   const peakLabel=E('text',{x:plot(peak),y:Math.max(13,ordinate(p[peak].groundM)-8),
+     'text-anchor':'middle',fill:'#185c44','font-size':12,'font-weight':700,text:number(max,0)+'m'});
+   svg.append(peakCircle,peakLabel);
+   const cursor=E('g',{'data-strip-cursor':'true'});
+   cursor.style.display='none';
+   const line=E('line',{x1:from,x2:from,y1:12,y2:132,stroke:'#182d42','stroke-width':1.5,'stroke-dasharray':'3 3'});
+   const dot=E('circle',{cx:from,cy:30,r:5,fill:'#278b5c',stroke:'white','stroke-width':2});
+   cursor.append(line,dot);
+   svg.append(cursor);
+   svg.append(E('text',{x:from,y:138,'font-size':11,fill:'var(--lp-muted,#677b8e)',text:'A · 0 km'}),
+     E('text',{x:to,y:138,'text-anchor':'end','font-size':11,fill:'var(--lp-muted,#677b8e)',text:'B · '+number(total,2)+' km'}));
+   const scrubber=E('input',{type:'range',id:'lpElevationScrubber',min:0,max:p.length-1,step:1,
+     value:Number.isInteger(inspectedIndex)?inspectedIndex:0,
+     'aria-label':L('Inspect a sampled position along the link from A to B','بررسی نقطه‌ای از مسیر لینک از A تا B')});
+   const readout=E('div',{class:'lp-strip-readout',id:'lpStripReadout',role:'status'});
+   const update=index=>{
+     if(!Number.isInteger(index)||index<0||index>=p.length){
+       cursor.style.display='none';
+       readout.textContent=L('Move the pointer across the bar or slide to inspect any location.','موس را روی نوار حرکت دهید یا اسلایدر را بکشید تا ارتفاع هر نقطه را ببینید.');
+       readout.removeAttribute('data-obstructed');
+       return;
+     }
+     scrubber.value=String(index);
+     const sample=p[index],x=plot(index);
+     cursor.style.display='';
+     line.setAttribute('x1',x);line.setAttribute('x2',x);
+     dot.setAttribute('cx',x);dot.setAttribute('cy',ordinate(sample.groundM));
+     readout.dataset.obstructed=String(sample.clearanceM<0);
+     readout.textContent=(sample.clearanceM<0?L('⚠ Potential obstruction','⚠ مانع احتمالی'):L('✓ Sampled path clear','✓ مسیر در این نقطه باز است'))+
+       ' · '+number(sample.distanceKm,2)+' km'+
+       ' · '+L('Ground','ارتفاع زمین')+' '+number(sample.groundM,1)+' m'+
+       ' · LOS '+number(sample.lineM,1)+' m'+
+       ' · '+L('Fresnel boundary','مرز فرنل')+' '+number(sample.requiredM,1)+' m'+
+       ' · '+L('Clearance','فاصله آزاد')+' '+number(sample.clearanceM,1)+' m';
+   };
+   const move=e=>{
+     const rect=svg.getBoundingClientRect();
+     const px=(e.clientX-rect.left)*800/rect.width;
+     inspectSample(Math.max(0,Math.min(p.length-1,Math.round((px-from)/(to-from)*(p.length-1)))));
+   };
+   svg.addEventListener('pointermove',move);
+   svg.addEventListener('pointerdown',move);
+   svg.addEventListener('pointerleave',()=>inspectSample(null));
+   scrubber.addEventListener('input',()=>inspectSample(Number(scrubber.value)));
+   host.append(E('div',{class:'lp-strip-meta'},
+     E('small',{text:L('Lowest terrain','کمترین ارتفاع')+': '+number(min,0)+' m'}),
+     E('small',{text:L('Highest terrain','بیشترین ارتفاع')+': '+number(max,0)+' m'}),
+     E('small',{class:analysis.status==='obstructed'?'lp-path-alert':'lp-path-clear',
+       text:analysis.status==='obstructed'?L('Red = potential obstruction','قرمز = مانع احتمالی'):L('No blocked samples','نمونه مسدودی دیده نشد')})),
+     svg,scrubber,readout);
+   inspectStrip=update;
+   update(inspectedIndex);
+ }
+
  function results(){
    const host=doc().getElementById('lpResults');if(!host)return;
+   updateElevationStrip();
    host.replaceChildren();
    const outcome=validPlan();
    if(!outcome.value){host.append(text(L('Choose two distinct points and valid radio parameters.','دو نقطه متفاوت و پارامترهای معتبر انتخاب کنید.'),'lp-notice'));return;}
@@ -420,6 +518,7 @@ export function createUi(ctx){
        button(L('Pick A','انتخاب A'),()=>activeButton('a'),'lp-pick'+(active==='a'?' selected':'')),
        button(L('Pick B','انتخاب B'),()=>activeButton('b'),'lp-pick'+(active==='b'?' selected':''))),
      E('iframe',{id:'lpMap',src:'/api/link-planner/map',title:L('OpenStreetMap two-site map','نقشه انتخاب دو سایت'),loading:'eager'}),
+     E('div',{class:'lp-elevation-strip',id:'lpElevationStrip','aria-label':L('Elevation bar for the A-to-B path','نوار پستی و بلندی مسیر A تا B')}),
      text(L('Choose A or B and click the map, or type coordinates. OpenStreetMap tiles require internet.','نقطه A یا B را انتخاب و روی نقشه کلیک کنید، یا مختصات را دستی وارد کنید. نقشه آنلاین به اینترنت نیاز دارد.'),'lp-muted'),
      E('div',{class:'lp-terrain-controls'},
        button(L('Load SRTM90 terrain','دریافت ارتفاع زمین SRTM90'),terrain,'primary'),
