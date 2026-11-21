@@ -1,3 +1,17 @@
+# Company hierarchy and grant preflight for XLSX fixture cleanup — 2026-11-21 UTC
+
+PR #78 merged as `6a8e598d4aab02bba87a100e9bcc2f2a4d2030ab`; [merge CI 44922365467](https://github.com/emsebi/EMS_IPAM/actions/runs/44922365467) completed successfully in all four gates. Fresh main `e158828c15c149822402742ce36235cd16f72053` only adds its generated Radio screenshot. The earlier failed merge run 44901729931 remains a failure. Open #83/#84/#85 overlap IPAM UI/browser/color work; this step does not edit those files. #12 remains draft pending practical Radio acceptance.
+
+This bounded step adds a SELECT-only fixture preflight for incoming companies.parent_company_id, user_company_access.company_id and user_space_access.space_id. Fixture creation owns no child companies or grants, so any such reference blocks cleanup, including archived children/Spaces and inactive users. Unrelated branch grants do not block it. The guard uses the existing beforeCleanup hook together with the Radio guard; it does not change the application or schema and is not a concurrency lock or a complete installed cleanup policy.
+
+A production-schema PGlite test runs each refusal in a read-only transaction and compares full hierarchy/Space/user/grant rows before and after. Three native-PostgreSQL HTTP cases cover all three reference types with active and already-archived fixtures: normal cleanup and journal recovery must send no DELETE for the blocked fixture, retain its active/trash entry, preserve full relevant rows and leave recovery journal bytes unchanged. Each case removes only its injected synthetic relation and completes repeatable recovery in its disposable database.
+
+Local combined journal/Radio/Company/HTTP validation: 27 passed, 0 failed, 7 native-only skips (34 including the HTTP parent). The three new HTTP cases therefore still require native PostgreSQL CI; expect all 31 HTTP tests with no skips. Source checksum and syntax validation are recorded in the PR, together with candidate CI run IDs. No local native-PostgreSQL pass is claimed.
+
+Next: inspect those three native HTTP cases and every test/browser/Docker/PostgreSQL gate for the exact candidate head; do not merge on skipped local coverage. Re-read main and PR heads before expected-SHA merge, preserving concurrent checksum entries. Then cover remaining module/personnel incoming references and private before/after preservation evidence before wiring an installed-loopback XLSX runner. No VM write/deployment, device scan, router push, credentials access or real-device acceptance in this step. Installed XLSX, Radio operator acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
 # Integrate Device Types readiness fix with current search/theme work — 2026-11-21 UTC
 
 PR #78 original head `b5bed9e28e7dbedeefa3ac1021ff2858cc6a9b0f` passed both [PR CI 44906660455](https://github.com/emsebi/EMS_IPAM/actions/runs/44906660455) and [push CI 44906652687](https://github.com/emsebi/EMS_IPAM/actions/runs/44906652687). Browser job 136853605742 passed 43 real HTTP/browser scenarios at 13:01:36 UTC, including the held real Device Types refresh and desktop/mobile layout assertions. Test, Docker and native PostgreSQL gates succeeded. This does not retroactively turn merge CI 44901729931 into success.
