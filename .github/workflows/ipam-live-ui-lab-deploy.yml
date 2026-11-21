@@ -43,7 +43,6 @@ jobs:
           test -f "$SRC/docker-app/public/app.js"
           cd "$SRC"
           python3 scripts/checksums.py --check
-          node --check docker-app/public/app.js
           test -f "$DEPLOY/compose.yml"
           test -f "$DEPLOY/docker-app/Dockerfile"
           test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
@@ -133,6 +132,7 @@ jobs:
           grep -q '"network-access"' "$BACK/health.json"
 
           docker exec "$APP" node --check /app/server/main.mjs
+          docker exec "$APP" node --check /app/public/app.js
           docker exec "$APP" sh -c 'grep -q "function applySheetLiveSearch" /app/public/app.js'
           docker exec "$APP" sh -c 'grep -q "function effectiveSubnetColor" /app/public/app.js'
           docker exec "$APP" sh -c 'grep -q "prefixSaveNext" /app/public/index.html'
