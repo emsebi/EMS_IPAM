@@ -202,7 +202,7 @@ export function createUi(ctx){
      E('span',{},E('b',{class:'lp-dot terrain'}),L('Ground','زمین')),
      E('span',{},E('b',{class:'lp-dot los'}),'LOS'),
      E('span',{},E('b',{class:'lp-dot fresnel'}),L('Terrain + curvature + Fresnel clearance','زمین + انحنای زمین + فرنل'))),
-     text(L('Sampled DEM only: ridges between samples, buildings and trees may be missing.','فقط نمونه‌های مدل ارتفاعی: پستی‌وبلندی بین نقاط، ساختمان‌ها و درختان ممکن است ثبت نشده باشند.'),'lp-muted')));
+     text(L('Sampled DEM only: ridges between samples, buildings and trees may be missing.','فقط نمونه‌های مدل ارتفاعی: پستی‌وبلندی بین نقاط، ساختمان‌ها و درختان ممکن است ثبت نشده باشند.'),'lp-muted'));
    return box;
  }
  function results(){
