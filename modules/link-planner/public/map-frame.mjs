@@ -1,8 +1,8 @@
 // Minimal OSM raster map. Tiles have public attribution; no inventory credentials are sent.
-import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs?v=0.2.1-lab.1';
+import {geoProject,geoUnproject,fitGeoPoints,validGeoPoint} from './model.mjs?v=0.2.2-lab.2';
 const get=id=>document.getElementById(id);
 const map=get('map'),tiles=get('tiles'),links=get('line'),pins=get('pins'),hint=get('hint');
-let center={latitude:24,longitude:40},zoom=2,sites={},active='a',tilesActive=new Map(),pan=null,initialFit=false;
+let center={latitude:24,longitude:40},zoom=2,sites={},active='a',terrainHeights=null,tilesActive=new Map(),pan=null,initialFit=false;
 const size=256,ns='http://www.w3.org/2000/svg';
 const world=()=>size*2**zoom;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -38,6 +38,45 @@ function refresh(){
    const line=document.createElementNS(ns,'line');
    for(const [k,v] of Object.entries({x1:pts.a.x,y1:pts.a.y,x2:pts.b.x,y2:pts.b.y,stroke:'#ed7830','stroke-width':3,'stroke-linecap':'round','stroke-dasharray':'9 5'}))line.setAttribute(k,v);
    fragment.append(line);
+   if(terrainHeights && terrainHeights.length >= 3){
+     // The offset ribbon follows the A-to-B screen direction and is visibly
+     // exaggerated for readability. The underlying ground samples are SRTM90.
+     const dx=pts.b.x-pts.a.x,dy=pts.b.y-pts.a.y,distance=Math.hypot(dx,dy);
+     if(distance>35 && distance<Math.max(rect.width,rect.height)*5){
+       const nx=-dy/distance,ny=dx/distance;
+       // Choose a side that keeps the elevation ribbon within the viewport.
+       const mx=(pts.a.x+pts.b.x)/2,my=(pts.a.y+pts.b.y)/2;
+       const preferred=(mx+nx*68<12||mx+nx*68>rect.width-12||my+ny*68<12||my+ny*68>rect.height-12)?-1:1;
+       const normal={x:nx*preferred,y:ny*preferred};
+       const min=Math.min(...terrainHeights),max=Math.max(...terrainHeights);
+       const relief=Math.max(1,max-min);
+       const base=16,amplitude=clamp(relief*0.65,12,54);
+       const baseAt=t=>({x:pts.a.x+dx*t+normal.x*base,y:pts.a.y+dy*t+normal.y*base});
+       const terrainAt=(height,t)=>{
+         const p=baseAt(t),offset=amplitude*(height-min)/relief;
+         return {x:p.x+normal.x*offset,y:p.y+normal.y*offset};
+       };
+       const samples=terrainHeights.map((height,i)=>terrainAt(height,i/(terrainHeights.length-1)));
+       const start=baseAt(0),end=baseAt(1);
+       const d='M '+samples.map(p=>p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' L ');
+       const fill=d+' L '+end.x.toFixed(1)+' '+end.y.toFixed(1)+' L '+start.x.toFixed(1)+' '+start.y.toFixed(1)+' Z';
+       const shape=(tag,attributes)=>{
+         const element=document.createElementNS(ns,tag);
+         for(const [key,value] of Object.entries(attributes))element.setAttribute(key,String(value));
+         fragment.append(element);
+         return element;
+       };
+       shape('path',{d:fill,fill:'rgba(28,143,103,0.30)',stroke:'none','data-profile':'terrain-fill'});
+       shape('path',{d,fill:'none',stroke:'#138b62','stroke-width':2.8,'stroke-linejoin':'round','data-profile':'terrain-ribbon'});
+       shape('line',{x1:start.x,y1:start.y,x2:end.x,y2:end.y,stroke:'#116b58','stroke-width':1,'stroke-dasharray':'3 4'});
+       const highest=terrainHeights.indexOf(max),t=highest/(terrainHeights.length-1),point=samples[highest];
+       const mark=shape('circle',{cx:point.x,cy:point.y,r:3,fill:'#065f46',stroke:'white','stroke-width':1.5});
+       mark.setAttribute('data-profile','highest-point');
+       // Annotation makes exaggeration explicit; no claim of a surveyed 3D model.
+       const label=shape('text',{x:point.x+7,y:point.y-7,fill:'#064e3b',stroke:'white','stroke-width':3,'paint-order':'stroke','font-size':11,'font-weight':700,'data-profile':'height-label'});
+       label.textContent=Math.round(max)+' m · SRTM';
+     }
+   }
  }
  links.replaceChildren(fragment);
  const symbols=document.createDocumentFragment();
@@ -74,6 +113,10 @@ window.addEventListener('message',event=>{
  sites={};
  for(const key of ['a','b'])if(validGeoPoint(msg[key]))sites[key]={latitude:Number(msg[key].latitude),longitude:Number(msg[key].longitude)};
  active=msg.active==='b'?'b':'a';
+ // Validate all profile samples. Coordinate edits clear the overlay upstream.
+ terrainHeights=Array.isArray(msg.terrainHeights)&&msg.terrainHeights.length>=3&&msg.terrainHeights.length<=100&&
+   msg.terrainHeights.every(height=>typeof height==='number'&&Number.isFinite(height)&&height>=-12000&&height<=12000)
+   ?msg.terrainHeights:null;
  hint.textContent=(active==='a'?'A':'B')+' · click map to set '+(active==='a'?'Site A':'Site B');
  // Picking a point edits a marker, never the viewport. Only initial data or explicit Fit may pan/zoom.
  if(msg.fit){ initialFit=true;fit(); }
