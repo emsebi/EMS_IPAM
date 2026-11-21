@@ -429,3 +429,8 @@ html[data-theme="light"] #sheetSelect{
 .vertical-subnet-table tr[hidden]{display:none!important}
 .vertical-subnet-table tr.sheet-search-hit>td:first-child{outline:2px solid #2b83ed;outline-offset:-2px}
 @media(max-width:630px){.sheet-search-bar{padding:9px}.sheet-search-bar input{min-width:100%}}
+
+/* Global topbar search: Ctrl+K is a hint only while the query is empty. */
+.searchbox:has(#searchInput:not(:placeholder-shown)) kbd{display:none}
+.searchbox:has(#searchInput:not(:placeholder-shown)) #searchInput{padding-left:12px}
+[dir="ltr"] .searchbox:has(#searchInput:not(:placeholder-shown)) #searchInput{padding-right:12px}
