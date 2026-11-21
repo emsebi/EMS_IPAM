@@ -1,0 +1,89 @@
+name: EMS-IPAM Restore Dark Theme Module Cards — Lab
+on:
+  push:
+    branches:
+      - fix/dark-regression-modules-20261121
+    paths:
+      - .github/dark-modules-deploy-trigger.txt
+permissions:
+  contents: read
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+jobs:
+  theme-css-only:
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated reviewed branch
+        uses: actions/checkout@v4
+        with:
+          path: theme-dark-source
+          clean: false
+      - name: Guarded three-module CSS update with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          SRC="$GITHUB_WORKSPACE/theme-dark-source"
+          DEPLOY="$HOME/ems-ipam-lab/current"
+          ENV_FILE="$HOME/.ems-ipam-lab.env"
+          BACK="$HOME/ems-ipam-lab/theme-css-backups/$GITHUB_SHA"
+          test -s "$ENV_FILE"
+          grep -qx 'EMS_HTTP_PORT=8888' "$ENV_FILE"
+          cd "$SRC"
+          python3 scripts/checksums.py --check
+          test -f "$DEPLOY/compose.yml"
+          test -f "$DEPLOY/modules/radius-ops/compose.module.yml"
+          for c in ems-ipam-app-1 ems-ipam-db-1 ems-ipam-radius_ops-1; do
+            test "$(docker inspect --format '{{.State.Running}}' "$c")" = true
+          done
+          DB_ID="$(docker inspect --format '{{.Id}}' ems-ipam-db-1)"
+          RADIUS_ID="$(docker inspect --format '{{.Id}}' ems-ipam-radius_ops-1)"
+          mkdir -p "$BACK"
+          docker exec ems-ipam-db-1 sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$BACK/db-before.dump"
+          test -s "$BACK/db-before.dump"
+          docker exec -i ems-ipam-db-1 sh -c 'exec pg_restore --list' < "$BACK/db-before.dump" >/dev/null
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --snapshot "$BACK/radius-before.json"
+          for mod in radio network-map reports; do
+            test -f "$DEPLOY/modules/$mod/public/style.css"
+            test -f "$SRC/modules/$mod/public/style.css"
+            cp -a "$DEPLOY/modules/$mod/public/style.css" "$BACK/$mod.css"
+          done
+          COMPOSE=(docker compose --project-name ems-ipam --env-file "$ENV_FILE" -f "$DEPLOY/compose.yml" -f "$DEPLOY/modules/radius-ops/compose.module.yml")
+          UPDATED=0
+          cleanup() {
+            rc=$?
+            if [ "$rc" -ne 0 ] && [ "$UPDATED" -eq 1 ]; then
+              echo "::warning::CSS validation failed, restoring original module styles."
+              for mod in radio network-map reports; do
+                cp -a "$BACK/$mod.css" "$DEPLOY/modules/$mod/public/style.css"
+              done
+              "${COMPOSE[@]}" restart app || true
+            fi
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          UPDATED=1
+          for mod in radio network-map reports; do
+            install -m 0644 "$SRC/modules/$mod/public/style.css" "$DEPLOY/modules/$mod/public/style.css"
+          done
+          "${COMPOSE[@]}" restart app
+          ready=0
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8888/health > "$BACK/health.json"; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          grep -q '"radio"' "$BACK/health.json"
+          grep -q '"network-map"' "$BACK/health.json"
+          grep -q '"reports"' "$BACK/health.json"
+          grep -Fq 'html[data-theme="dark"] .radio-doc-grid' "$DEPLOY/modules/radio/public/style.css"
+          grep -Fq 'html[data-theme="dark"] .nm-app' "$DEPLOY/modules/network-map/public/style.css"
+          grep -Fq 'html[data-theme="dark"] .reports-metrics' "$DEPLOY/modules/reports/public/style.css"
+          python3 "$DEPLOY/scripts/installed-modules-check.py"
+          python3 "$DEPLOY/scripts/radius-upgrade-check.py" --compare "$BACK/radius-before.json"
+          test "$(docker inspect --format '{{.Id}}' ems-ipam-db-1)" = "$DB_ID"
+          test "$(docker inspect --format '{{.Id}}' ems-ipam-radius_ops-1)" = "$RADIUS_ID"
+          UPDATED=0
+          echo "PASS DARK_THEME_MODULE_CARDS $GITHUB_SHA"
