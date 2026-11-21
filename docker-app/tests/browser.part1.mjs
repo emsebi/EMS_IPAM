@@ -270,6 +270,7 @@ try {
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
   // A single Import button accepts the same Portable JSON export as Excel/CSV.
+  const beforePortablePreview = await api('/api/spaces/test-space/data');
   await ipamPreview.locator('#sheetPortableImport').click();
   await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
   assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
@@ -283,10 +284,15 @@ try {
   await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
   await ipamPreview.locator('#bulkIpamCommit:not([disabled])').waitFor();
   assert.ok((await ipamPreview.locator('#bulkIpamPreview').innerText()).includes('Portable JSON'));
-  // Selecting an import file marks the form dirty; confirm cancellation and verify that the modal closes.
+  // Refusing dirty-form cancellation keeps the preview; accepting must close it without importing.
+  ipamPreview.once('dialog', dialog => dialog.dismiss());
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  assert.equal(await ipamPreview.locator('#bulkIpamDialog').isVisible(), true);
+  assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), false);
   ipamPreview.once('dialog', dialog => dialog.accept());
   await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
   await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'hidden'});
+  assert.deepEqual(await api('/api/spaces/test-space/data'), beforePortablePreview, 'preview/cancel must not write');
   await ipamPreview.locator('#overviewBack').click();
   await ipamPreview.locator('#ipamExcelImport').click();
   await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
@@ -1401,6 +1407,54 @@ try {
     await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
     return { body: response.request().postDataJSON(), result: await response.json() };
   };
+  // Hold real preview responses, then invalidate the selection before they return.
+  // Submit remains busy until that request settles, providing a deterministic
+  // completion signal for the negative assertions (no fixed sleep or mock data).
+  for (const change of ['file', 'destination', 'close/reopen']) {
+    await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
+    await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
+    await page.locator('#bulkIpamFile').setInputFiles(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    const endpoint = '**/api/imports/ipam/preview';
+    const holdPreview = async route => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    };
+    await page.route(endpoint, holdPreview, { times: 1 });
+    try {
+      await Promise.all([
+        page.waitForRequest(r => new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+        page.locator('#bulkIpamForm button[type=submit]').click(),
+      ]);
+      assert.equal(await page.locator('#bulkIpamForm button[type=submit]').isDisabled(), true);
+      if (change === 'file') {
+        await page.locator('#bulkIpamFile').setInputFiles({ name: 'replacement.csv', mimeType: 'text/csv',
+          buffer: Buffer.from('IP,Name,Description\n192.0.2.95,Replacement,Must be previewed separately') });
+      } else if (change === 'destination') {
+        await page.locator('#bulkIpamCompany').selectOption('test-co');
+        await page.locator('#bulkIpamSpace').selectOption('test-space');
+      } else {
+        await page.locator('#bulkIpamDialog [data-close]').first().click();
+        await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+        await page.locator('#ipamExcelImport').click();
+        await page.locator('#bulkIpamDialog').waitFor({ state: 'visible' });
+      }
+      release();
+      await page.locator('#bulkIpamForm button[type=submit]:not([disabled])').waitFor();
+      assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true, change + ' invalidates an in-flight preview');
+      assert.deepEqual(await api('/api/spaces/test-space/data'), xlsxBefore);
+      assert.deepEqual(await api('/api/spaces/' + xlsxOther.id + '/data'), xlsxOtherBefore);
+    } finally {
+      release();
+      await page.unroute(endpoint, holdPreview);
+    }
+  }
+  check('late import previews cannot authorize a changed file, destination or reopened dialog');
+  await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
+  await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
+  await page.locator('#bulkIpamFile').setInputFiles(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
   const otherPreview = await previewXlsx();
   assert.equal(otherPreview.body.destinationSpaceId, xlsxOther.id);
   assert.deepEqual(otherPreview.result.summary, { total:3, valid:2, invalid:1, existing:2, newRecords:0 });

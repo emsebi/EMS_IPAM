@@ -1,3 +1,19 @@
+# Unified Import CI recovery and stale-preview guard — 2026-11-22
+
+Current authority: Issue #89 and the user's 2026-11-22 instruction. **RADIUS is healthy and user-accepted, frozen and outside development scope.** All older requests below for real MikroTik Full/Read or new real RADIUS tests are superseded and removed from the current plan. No RADIUS code/config/database/schema/users/NAS/secrets/credentials/container/image/migration/restart/redeploy changes are authorized. Existing isolated CI regression tests do not authorize live service tests. Other deployments require backup, identity capture, health/regression and stop/rollback on risk.
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1` (screenshot-only successor of `21c792a00a6aace64cbc90dcdd98545501cf4e66`, whose CI 44948808270 succeeded). Open PRs checked: #90, #83, #84, #85 and draft #12. Leave the conflicting color variants and Radio draft untouched.
+
+PR #90 head `7a552db5ca23eb1c6d2d30fd540a3da89993abb1` fixed the dirty-import dialog interception: browser job 136987276394 in CI 44950541404 succeeded, as did Docker/PostgreSQL. The overall run failed only because SHA256SUMS still contained the old browser test hash. Refresh the manifest without bypassing verification.
+
+This step also prevents an in-flight Import preview from re-enabling Commit after the file/destination changes or the dialog closes and reopens. Starting another preview clears the old authorization; stale success/error replies cannot replace the current selection. Only IPAM client state is changed. Browser coverage holds actual HTTP preview responses, invalidates each of those three contexts, then waits for completion and requires disabled Commit and unchanged target/sibling data. The existing real XLSX and CSV preview/commit cases still run afterwards. Portable JSON cancellation now tests both rejecting and accepting the unsaved-form confirmation and verifies no database changes.
+
+Local validation: 11 portable/UI/import tests passed (zero skipped), four checksum-tool tests passed, JS syntax/whitespace and refreshed source manifest verified. Local browser execution is blocked before any scenario by Chromium's socket permission error; no local browser pass is claimed. The exact candidate SHA and GitHub CI results are recorded in #90 and #89. Require green browser/test/Docker/native PostgreSQL gates on the new candidate before any merge.
+
+VM: no access, write, deployment, restart, migration, scan or config push in this step. Latest observed UI deployment evidence is run 44948850727, source `f3995f6f75a258d63e6f93ec252825799e7a8de2`; this is an older UI-only source, not the current full installed SHA or fresh VM health proof. User acceptance remains open. Next: verify the new CI; complete Portable JSON conflict/validation preview and round-trip acceptance before a guarded rollout. Keep Work implementation and Chat feedback separate; only GitHub/#89 is the status ledger.
+
+---
+
 # Preserve Personnel during fixture cleanup — 2026-11-21 UTC
 
 [PR #86](https://github.com/emsebi/EMS_IPAM/pull/86) merged with expected head as `8f1c2d054c19394f784807ca327f5a95a2b4e87a`. Candidate CI 44927861295 and 44927857398 passed all four gates; native PostgreSQL job 136917806022 passed all 31 HTTP tests with no failures/skips and browser job 136917806041 passed 44 scenarios. [Merge CI 44933607196](https://github.com/emsebi/EMS_IPAM/actions/runs/44933607196) also succeeded, verified 18:07 UTC. Its tree equals the tested candidate. Fresh base is `8f1c2d054c19394f784807ca327f5a95a2b4e87a`; open #83/#84/#85 UI/browser work and draft #12 remain untouched.

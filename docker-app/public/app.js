@@ -718,6 +718,8 @@ function syncBulkIpamSpaces() {
   resetBulkIpamPreview();
 }
 function resetBulkIpamPreview() {
+  state.bulkIpamRevision = (state.bulkIpamRevision || 0) + 1;
+  state.bulkIpamFile = null;
   state.bulkIpamPreview = null;
   $("bulkIpamCommit").disabled = true;
   $("bulkIpamPreview").textContent = "برای مشاهده خطاها، تکراری‌ها و پیش‌نمایش ابتدا «بررسی فایل» را بزنید.";
@@ -2170,6 +2172,7 @@ $("importButton").addEventListener("click", () => openBulkIpamDialog());
 
 $("bulkIpamCompany").addEventListener("change", syncBulkIpamSpaces);
 $("bulkIpamSpace").addEventListener("change", resetBulkIpamPreview);
+$("bulkIpamDialog").addEventListener("close", resetBulkIpamPreview);
 $("bulkIpamFile").addEventListener("change", async () => {
   state.bulkIpamFile=null;
   resetBulkIpamPreview();
@@ -2177,21 +2180,29 @@ $("bulkIpamFile").addEventListener("change", async () => {
   if(!file)return;
   try {
     const detected=await classifyIpamImportFile(file);
+    if ($("bulkIpamFile").files?.[0] !== file || !$("bulkIpamDialog").open) return;
     $("bulkIpamFileTypeHint").textContent=detected.kind==="portable"
       ? "Portable JSON شناسایی شد؛ شامل Subnetها، IPها و مشخصات تجهیزات."
       : "Excel/CSV شناسایی شد؛ ستون‌های A=IP، B=Name، C=Description.";
     $("bulkIpamUpdateMode").textContent=detected.kind==="portable"
       ? "جایگزینی موارد تکراری از بسته JSON"
       : "به‌روزرسانی فقط نام و توضیحات (Excel/CSV)";
-  }catch(error){$("bulkIpamFileTypeHint").textContent=error.message;toast(error.message);}
+  }catch(error){
+    if ($("bulkIpamFile").files?.[0] !== file || !$("bulkIpamDialog").open) return;
+    $("bulkIpamFileTypeHint").textContent=error.message;toast(error.message);
+  }
 });
 $("bulkIpamForm").addEventListener("submit",async event=>{
   event.preventDefault();
+  resetBulkIpamPreview();
+  const revision = state.bulkIpamRevision;
+  const file = $("bulkIpamFile").files?.[0];
+  const destinationSpaceId = $("bulkIpamSpace").value;
+  const isCurrent = () => revision === state.bulkIpamRevision && $("bulkIpamDialog").open;
   const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
   try {
-    const file=$("bulkIpamFile").files?.[0];
     const identified=await classifyIpamImportFile(file);
-    const destinationSpaceId=$("bulkIpamSpace").value;
+    if (!isCurrent()) return;
     if(identified.kind==="portable"){
       const payload=identified.payload,scope=checkPortableImportDestination(payload,destinationSpaceId);
       // Preview only; actual duplicate handling and permissions are revalidated by the server at commit.
@@ -2206,8 +2217,10 @@ $("bulkIpamForm").addEventListener("submit",async event=>{
       $("bulkIpamCommit").disabled=!(payload.prefixes.length||payload.hosts.length);
     }else{
       const base64=await readBulkIpamFile(file);
+      if (!isCurrent()) return;
       const body={destinationSpaceId,filename:file.name,base64};
       const response=await request("/api/imports/ipam/preview",{method:"POST",body});
+      if (!isCurrent()) return;
       state.bulkIpamFile={kind:"sheet",...body};
       state.bulkIpamPreview=response;
       const summary=response.summary;
@@ -2219,7 +2232,10 @@ $("bulkIpamForm").addEventListener("submit",async event=>{
         (errors?'<p>خطاها:</p><ul>'+errors+'</ul>':'');
       $("bulkIpamCommit").disabled=summary.valid===0;
     }
-  }catch(error){resetBulkIpamPreview();$("bulkIpamPreview").textContent=error.message;toast(error.message);}
+  }catch(error){
+    if (!isCurrent()) return;
+    resetBulkIpamPreview();$("bulkIpamPreview").textContent=error.message;toast(error.message);
+  }
   finally{button.disabled=false;}
 });
 $("bulkIpamCommit").addEventListener("click",async()=>{
