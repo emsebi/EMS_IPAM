@@ -367,7 +367,7 @@ function effectiveSubnetColor(cidr) {
   if(owner){
     if(owner.info.cidr===range.cidr || owner.info.prefix===range.prefix)
       return owner.item.color || '#eef2f7';
-    return owner.item.inheritColorToChildren===false ? '#eef2f7' : (owner.item.color||'#eef2f7');
+    return owner.item.inheritColorToChildren===false ? '#ffffff' : (owner.item.color||'#eef2f7');
   }
   return state.data?.space?.color||'#eef2f7';
 }
