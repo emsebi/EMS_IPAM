@@ -75,3 +75,71 @@
 .lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{margin:10px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:650px){.lp-capacity-reference .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-height-solver .lp-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:395px){.lp-capacity-reference .lp-metrics,.lp-height-solver .lp-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Link Planner dark theme only: preserve the light palette and layout unchanged. */
+html[data-theme="dark"] .lp-shell{
+  --panel:#182338;
+  --text:#e7edf7;
+  --link:#8fc7ff;
+  --lp-grid:#35425a;
+  --lp-muted:#b2c1d6;
+  --soft:#101827;
+  color:#e7edf7;
+  color-scheme:dark;
+}
+html[data-theme="dark"] .lp-shell .lp-map-card,
+html[data-theme="dark"] .lp-shell .lp-card,
+html[data-theme="dark"] .lp-shell .lp-summary{
+  background:#182338;
+  border-color:#35425a;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-site,
+html[data-theme="dark"] .lp-shell .lp-fieldset,
+html[data-theme="dark"] .lp-shell .lp-device-group,
+html[data-theme="dark"] .lp-shell .lp-metric,
+html[data-theme="dark"] .lp-shell .lp-capacity-reference,
+html[data-theme="dark"] .lp-shell .lp-height-solver{
+  background:#101827;
+  border-color:#35425a;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell h1,
+html[data-theme="dark"] .lp-shell h2,
+html[data-theme="dark"] .lp-shell h3,
+html[data-theme="dark"] .lp-shell h4,
+html[data-theme="dark"] .lp-shell .lp-field span,
+html[data-theme="dark"] .lp-shell .lp-fieldset legend,
+html[data-theme="dark"] .lp-shell .lp-muted,
+html[data-theme="dark"] .lp-shell .lp-source{
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-field input,
+html[data-theme="dark"] .lp-shell .lp-card input,
+html[data-theme="dark"] .lp-shell .lp-card select{
+  background:#182338;
+  border-color:#536784;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-field input::placeholder,
+html[data-theme="dark"] .lp-shell .lp-card input::placeholder{
+  color:#b2c1d6;
+}
+html[data-theme="dark"] .lp-shell .lp-map-card .lp-pick:not(.selected){
+  background:#243550;
+  border-color:#536784;
+  color:#e7edf7;
+}
+html[data-theme="dark"] .lp-shell .lp-state.unknown,
+html[data-theme="dark"] .lp-shell .lp-state.unavailable{
+  background:#243550;
+  border-color:#536784;
+  color:#d6e2f3;
+}
+html[data-theme="dark"] .lp-shell .lp-chart{
+  background:#101827;
+  border-color:#35425a;
+}
+html[data-theme="dark"] .lp-shell .lp-profile-info a{
+  color:#8fc7ff;
+}
