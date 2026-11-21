@@ -1652,7 +1652,7 @@ async function api(req, res, url, user) {
     const values = [
       id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
-      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), body.inheritColorToChildren !== false, cleanText(body.description, 2000), user.id,
+      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), body.inheritColorToChildren === true, cleanText(body.description, 2000), user.id,
     ];
     if (requestedId) {
       const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1 AND deleted_at IS NULL", [requestedId]);
