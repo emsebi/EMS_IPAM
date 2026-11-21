@@ -358,10 +358,18 @@ function mostSpecific(address) {
 function effectiveSubnetColor(cidr) {
   const range=parseCidr(cidr);
   if(!range)return '#eef2f7';
-  const matches=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
-    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''));
-  matches.sort((a,b)=>b.info.prefix-a.info.prefix);
-  return matches[0]?.item.color||state.data?.space?.color||'#eef2f7';
+  const candidates=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
+    .filter(({info})=>info && info.start<=range.start && info.end>=range.end)
+    .sort((a,b)=>b.info.prefix-a.info.prefix);
+  // An exact subnet always displays its own color. A parent colors children only
+  // when the owner opted in. A nearer owner with opt-out blocks distant ancestors.
+  const owner=candidates[0];
+  if(owner){
+    if(owner.info.cidr===range.cidr || owner.info.prefix===range.prefix)
+      return owner.item.color || '#eef2f7';
+    return owner.item.inheritColorToChildren===false ? '#eef2f7' : (owner.item.color||'#eef2f7');
+  }
+  return state.data?.space?.color||'#eef2f7';
 }
 
 function existingPrefixAt(address) {
@@ -1308,6 +1316,7 @@ function openPrefixDialog(cidr, id = null) {
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
   $("prefixCidrTitle").textContent = value.cidr;
   for (const [key, field] of [["id", "prefixId"], ["cidr", "prefixCidr"], ["name", "prefixName"], ["status", "prefixStatus"], ["role", "prefixRole"], ["vlan", "prefixVlan"], ["gateway", "prefixGateway"], ["color", "prefixColor"], ["description", "prefixDescription"]]) $(field).value = value[key] || "";
+  $("prefixInheritColorToChildren").checked = value.inheritColorToChildren !== false;
   $("deletePrefixButton").classList.toggle("hidden", !item || !canWrite());
   $("exportPrefixButton").classList.toggle("hidden", !item);
   setFormWritable($("prefixForm"), canWrite());
@@ -2268,7 +2277,7 @@ $("prefixForm").addEventListener("submit",async event=>{
   const next=current&&root&&current.end<root.end?networkAt(current.end+1,current.prefix):null;
   const oldScroll=window.scrollY;
   try {
-    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,description:$("prefixDescription").value}});
+    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,inheritColorToChildren:$("prefixInheritColorToChildren").checked,description:$("prefixDescription").value}});
     $("prefixDialog").close();
     state.data=await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
     state.selectedCidr=null;renderCurrent();window.scrollTo(0,oldScroll);
