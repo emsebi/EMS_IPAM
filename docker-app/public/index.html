@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.2-search-hint1">
+  <link rel="stylesheet" href="/styles.css?v=1.7.2-child-colors1">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -146,6 +146,8 @@
           <label class="field">VLAN<input id="prefixVlan" class="ltr" inputmode="numeric"></label>
           <label class="field">Gateway<input id="prefixGateway" class="ltr mono"></label>
           <label class="field">رنگ<input id="prefixColor" type="color" value="#3157d5"></label>
+          <label class="field full prefix-inherit-choice"><input id="prefixInheritColor" type="checkbox"> رنگ این رنج به زیرشاخه‌های بدون رنگ اختصاصی هم منتقل شود</label>
+          <small class="prefix-inherit-help">اگر غیرفعال باشد، رنگ فقط برای همین رنج است. رنگ اختصاصی زیرشاخه‌ها (حتی سفید) همیشه حفظ می‌شود.</small>
           <label class="field full">توضیحات<textarea id="prefixDescription"></textarea></label>
         </div>
       </div>
@@ -465,6 +467,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.2-ipam-live1"></script>
+  <script type="module" src="/app.js?v=1.7.2-child-colors1"></script>
 </body>
 </html>
