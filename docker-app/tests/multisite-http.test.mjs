@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
 import { assertFixtureRadioIsolation } from './helpers/fixture-radio-isolation.mjs';
+import { assertFixtureCompanyIsolation } from './helpers/fixture-company-isolation.mjs';
 import { exerciseXlsxImport } from './helpers/xlsx-import-scenario.mjs';
 import { openFixtureJournal } from './helpers/fixture-journal.mjs';
 import { withXlsxHttpFixture, recoverXlsxHttpFixture } from './helpers/xlsx-http-fixture.mjs';
@@ -643,6 +644,111 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(reexported.source, pkg.source);
   });
 
+  await t.test('portable preview is scoped, read-only and matches skip/replace including trash and late conflicts', async () => {
+    const source = (await admin('POST', '/api/spaces', { companyId: north.companyId, name: 'Portable source', cidr: '198.18.88.0/24' }, 201)).id;
+    const target = (await admin('POST', '/api/spaces', { companyId: south.companyId, name: 'Portable target', cidr: '198.18.88.0/24' }, 201)).id;
+    const cidrs = ['198.18.88.0/25', '198.18.88.128/26', '198.18.88.192/27'];
+    for (const cidr of cidrs) await admin('POST', '/api/prefixes', { spaceId: source, cidr, name: 'Source range' });
+    const prefixIds = [];
+    for (const cidr of cidrs.slice(0, 2)) prefixIds.push((await admin('POST', '/api/prefixes', { spaceId: target, cidr, name: 'Target range' })).id);
+    await admin('DELETE', '/api/prefixes/' + prefixIds[1]);
+    for (const last of [10, 11, 12, 13]) await admin('PUT', '/api/hosts', { spaceId: source, ip: '198.18.88.' + last, name: 'Source ' + last });
+    const hostIds = [];
+    for (const last of [10, 11]) hostIds.push((await admin('PUT', '/api/hosts', { spaceId: target, ip: '198.18.88.' + last, name: 'Target ' + last })).id);
+    await admin('DELETE', '/api/hosts/' + target + '/198.18.88.11');
+    const reader = await client('north-reader'), editor = await client('north-editor');
+    const pkg = await admin('GET', '/api/spaces/' + source + '/export');
+    const body = { destinationSpaceId: target, package: pkg };
+    const snapshot = async () => ({
+      source: await admin('GET', '/api/spaces/' + source + '/data'),
+      target: await admin('GET', '/api/spaces/' + target + '/data'),
+      trash: await admin('GET', '/api/trash'),
+    });
+    const before = await snapshot();
+    const unauthenticated = await fetch(base + '/api/imports/subnet/preview', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-EMS-CSRF': '1' }, body: JSON.stringify(body) });
+    assert.equal(unauthenticated.status, 401);
+    await reader('POST', '/api/imports/subnet/preview', body, 403);
+    await editor('POST', '/api/imports/subnet/preview', body, 403);
+    await editor('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: source }, 403);
+    await admin('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: 'missing' }, 404);
+    const ownPreview = await admin('POST', '/api/imports/subnet/preview', { ...body, destinationSpaceId: source });
+    assert.equal(ownPreview.summary.hosts.existing, 4);
+    const preview = await admin('POST', '/api/imports/subnet/preview', body);
+    assert.deepEqual(preview.summary, {
+      prefixes: { total: 3, newRecords: 1, existing: 2, archived: 1 },
+      hosts: { total: 4, newRecords: 2, existing: 2, archived: 1 },
+    });
+    assert.equal(preview.destinationSpaceId, target);
+    assert.equal(preview.sample.hosts.find(h => h.ip === '198.18.88.11').archived, true);
+    for (const malformed of [
+      { ...pkg, hosts: [{ ip: '203.0.113.10' }] },
+      { ...pkg, hosts: [pkg.hosts[0], pkg.hosts[0]] },
+      { ...pkg, prefixes: [pkg.prefixes[0], pkg.prefixes[0]] },
+      { ...pkg, hosts: [null] },
+    ]) {
+      for (const endpoint of ['/api/imports/subnet/preview', '/api/imports/subnet']) {
+        await admin('POST', endpoint, { ...body, package: malformed }, 400);
+      }
+    }
+    assert.deepEqual(await snapshot(), before, 'preview and invalid requests must preserve source, target and trash');
+    // A record created after preview is rechecked by commit, never overwritten in skip mode.
+    const late = (await admin('PUT', '/api/hosts', { spaceId: target, ip: '198.18.88.12', name: 'Late record' })).id;
+    const skipped = (await admin('POST', '/api/imports/subnet', { ...body, mode: 'skip' })).result;
+    assert.deepEqual([skipped.prefixesCreated, skipped.prefixesSkipped, skipped.hostsCreated, skipped.hostsSkipped], [1, 2, 1, 3]);
+    const afterSkip = await admin('GET', '/api/spaces/' + target + '/data');
+    assert.equal(afterSkip.hosts.find(h => h.id === late).name, 'Late record');
+    assert.equal(afterSkip.hosts.some(h => h.id === hostIds[1]), false, 'skip does not restore trash');
+    const replaced = (await admin('POST', '/api/imports/subnet', { ...body, mode: 'replace' })).result;
+    assert.deepEqual([replaced.prefixesUpdated, replaced.hostsUpdated], [3, 4]);
+    const afterReplace = await admin('GET', '/api/spaces/' + target + '/data');
+    assert.equal(afterReplace.hosts.find(h => h.ip === '198.18.88.10').id, hostIds[0]);
+    assert.equal(afterReplace.hosts.find(h => h.ip === '198.18.88.11').id, hostIds[1]);
+    assert.equal(afterReplace.hosts.find(h => h.id === late).name, 'Source 12');
+    assert.equal(afterReplace.prefixes.find(p => p.cidr === cidrs[1]).id, prefixIds[1]);
+    assert.deepEqual(afterReplace.space, before.target.space);
+    assert.deepEqual(await admin('GET', '/api/spaces/' + source + '/data'), before.source);
+    const roundTrip = await admin('GET', '/api/spaces/' + target + '/export');
+    assert.deepEqual(roundTrip.hosts.map(({ sourceId, ...rest }) => rest), pkg.hosts.map(({ sourceId, ...rest }) => rest));
+    assert.deepEqual(roundTrip.prefixes, pkg.prefixes);
+  });
+
+  await t.test('misnamed XLSX/CSV content drives preview and commit while invalid files leave data unchanged', async () => {
+    const companyId = (await admin('POST', '/api/companies', { name: 'Format detection fixture' }, 201)).id;
+    const spaceId = (await admin('POST', '/api/spaces', { companyId, name: 'Format LAN', cidr: '192.0.2.0/24' }, 201)).id;
+    const original = await admin('PUT', '/api/hosts', { spaceId, ip: '192.0.2.50', name: 'Existing format host', mac: '02:00:00:00:55:50' });
+    const before = await admin('GET', '/api/spaces/' + spaceId + '/data');
+    const siblingBefore = await admin('GET', '/api/spaces/' + south.spaceId + '/data');
+    const workbook = await fs.readFile(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+    const upload = { destinationSpaceId: spaceId, filename: 'workbook-renamed.csv', base64: workbook.toString('base64') };
+    const preview = await admin('POST', '/api/imports/ipam/preview', upload);
+    assert.deepEqual(preview.summary, { total: 3, valid: 2, invalid: 1, existing: 1, newRecords: 1 });
+    const reader = await client('north-reader');
+    await reader('POST', '/api/imports/ipam/preview', upload, 403);
+    await reader('POST', '/api/imports/ipam/commit', { ...upload, mode: 'update' }, 403);
+    for (const buffer of [Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from([0xff, 0xfe, 0x49, 0]),
+      Buffer.from('IP,Name\n192.0.2.90,\x00binary'), Buffer.from('{"format":"EMS-IPAM-SUBNET"}')]) {
+      for (const endpoint of ['preview', 'commit']) await admin('POST', '/api/imports/ipam/' + endpoint,
+        { ...upload, base64: buffer.toString('base64'), mode: 'update' }, 400);
+    }
+    assert.deepEqual(await admin('GET', '/api/spaces/' + spaceId + '/data'), before);
+    const committed = await admin('POST', '/api/imports/ipam/commit', { ...upload, mode: 'update' });
+    assert.deepEqual(committed.result, { total: 3, invalid: 1, created: 1, updated: 1, skipped: 0 });
+    const after = await admin('GET', '/api/spaces/' + spaceId + '/data');
+    const changed = after.hosts.find(h => h.ip === '192.0.2.50');
+    assert.equal(changed.id, original.id);
+    assert.equal(changed.mac, '02:00:00:00:55:50');
+    assert.equal(changed.name, 'سوئیچ آزمایشی');
+    const csv = { destinationSpaceId: spaceId, filename: 'text-renamed.xlsx',
+      base64: Buffer.from('\ufeffIP;Name;Description\r\n192.0.2.94;CSV تغییرنام;توضیح فارسی').toString('base64') };
+    assert.deepEqual((await admin('POST', '/api/imports/ipam/preview', csv)).summary,
+      { total: 1, valid: 1, invalid: 0, existing: 1, newRecords: 0 });
+    assert.deepEqual(await admin('GET', '/api/spaces/' + spaceId + '/data'), after);
+    assert.equal((await admin('POST', '/api/imports/ipam/commit', { ...csv, mode: 'update' })).result.updated, 1);
+    assert.equal((await admin('GET', '/api/spaces/' + spaceId + '/data')).hosts.find(h => h.ip === '192.0.2.94').name, 'CSV تغییرنام');
+    assert.deepEqual(await admin('GET', '/api/spaces/' + south.spaceId + '/data'), siblingBefore);
+  });
+
   await t.test('MS-03 HTTP search and direct reads isolate overlapping Spaces in the same branch', {
     skip: !postgres && 'requires the disposable PostgreSQL database with domain-scoped uniqueness',
   }, async t => {
@@ -972,6 +1078,85 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     }
     assert.equal((await admin('GET', '/api/spaces/' + south.spaceId + '/data')).hosts.find(h => h.id === south.id).id, south.id);
   });
+
+  for (const relation of ['child companies', 'Company grants', 'Space grants', 'Personnel']) {
+    await t.test('XLSX cleanup and recovery preserve ' + relation + ' for active and archived fixtures', {
+      skip: !postgres && 'requires a separate SQL connection to the running fixture database',
+    }, async () => {
+      const db = new pg.Client({ connectionString: env.DATABASE_URL });
+      await db.connect();
+      try {
+        const userId = (await db.query("SELECT id FROM users WHERE username='north-reader'")).rows[0].id;
+        const originalParent = (await db.query('SELECT parent_company_id FROM companies WHERE id=$1', [south.companyId])).rows[0].parent_company_id;
+        const personnelId = relation === 'Personnel' ? randomUUID() : null;
+        if (personnelId) await db.query('INSERT INTO personnel(id,full_name,company_id,active) VALUES ($1,$2,$3,false)',
+          [personnelId, 'Synthetic existing Personnel', south.companyId]);
+        const originalPersonnel = personnelId ? (await db.query('SELECT * FROM personnel WHERE id=$1', [personnelId])).rows[0] : null;
+        const beforeCleanup = async id => {
+          await assertFixtureRadioIsolation(db, id);
+          await assertFixtureCompanyIsolation(db, id);
+        };
+        for (const archived of [false, true]) {
+          const journalPath = path.join(backups, 'company-reference-' + relation.replaceAll(' ', '-') + '-' + archived + '.jsonl');
+          let destination, linkedRows;
+          const deletes = [];
+          const call = async (method, url, ...args) => {
+            if (method === 'DELETE') deletes.push(url);
+            return admin(method, url, ...args);
+          };
+          const snapshot = async () => ({
+            companies: (await db.query('SELECT * FROM companies WHERE id=ANY($1::text[]) ORDER BY id', [[south.companyId, destination.companyId]])).rows,
+            spaces: (await db.query('SELECT * FROM address_spaces WHERE company_id=ANY($1::text[]) ORDER BY id', [[south.companyId, destination.companyId]])).rows,
+            companyGrants: (await db.query('SELECT * FROM user_company_access ORDER BY user_id,company_id')).rows,
+            spaceGrants: (await db.query('SELECT * FROM user_space_access ORDER BY user_id,space_id')).rows,
+            personnel: (await db.query('SELECT * FROM personnel ORDER BY id')).rows,
+          });
+          const blocked = error => error instanceof AggregateError && error.errors.some(e => e.message.includes(relation));
+          try {
+            await assert.rejects(withXlsxHttpFixture(call, async site => {
+              destination = site;
+              // Rehearse a relationship introduced after archive as well as before it.
+              if (archived) await admin('DELETE', '/api/companies/' + site.companyId);
+              if (relation === 'child companies') {
+                await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [site.companyId, south.companyId]);
+              } else if (relation === 'Company grants') {
+                await db.query('INSERT INTO user_company_access(user_id,company_id) VALUES ($1,$2)', [userId, site.companyId]);
+              } else if (relation === 'Space grants') {
+                await db.query('INSERT INTO user_space_access(user_id,space_id) VALUES ($1,$2)', [userId, site.spaceId]);
+              } else {
+                await db.query('UPDATE personnel SET company_id=$1 WHERE id=$2', [site.companyId, personnelId]);
+              }
+              linkedRows = await snapshot();
+            }, { journalPath, beforeCleanup }), blocked);
+            assert.deepEqual(await snapshot(), linkedRows);
+            assert.ok(!deletes.some(url => url.endsWith('/' + destination.companyId)));
+            deletes.length = 0;
+            const journalBefore = await fs.readFile(journalPath);
+            await assert.rejects(recoverXlsxHttpFixture(call, journalPath, { beforeCleanup }), blocked);
+            assert.deepEqual(await fs.readFile(journalPath), journalBefore);
+            assert.deepEqual(await snapshot(), linkedRows);
+            assert.deepEqual(deletes, []);
+            if (archived) {
+              assert.ok((await admin('GET', '/api/trash')).items.some(item => item.kind === 'company' && item.id === destination.companyId));
+            } else {
+              assert.equal((await admin('GET', '/api/companies/' + destination.companyId)).company.id, destination.companyId);
+            }
+          } finally {
+            if (destination) {
+              // Undo only this case's injected relationship in the disposable database.
+              if (relation === 'child companies') await db.query('UPDATE companies SET parent_company_id=$1 WHERE id=$2', [originalParent, south.companyId]);
+              else if (relation === 'Company grants') await db.query('DELETE FROM user_company_access WHERE user_id=$1 AND company_id=$2', [userId, destination.companyId]);
+              else if (relation === 'Space grants') await db.query('DELETE FROM user_space_access WHERE user_id=$1 AND space_id=$2', [userId, destination.spaceId]);
+              else await db.query('UPDATE personnel SET company_id=$1 WHERE id=$2', [originalPersonnel.company_id, personnelId]);
+              await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+              await recoverXlsxHttpFixture(admin, journalPath, { beforeCleanup });
+              if (personnelId) assert.deepEqual((await db.query('SELECT * FROM personnel WHERE id=$1', [personnelId])).rows[0], originalPersonnel);
+            }
+          }
+        }
+      } finally { await db.end(); }
+    });
+  }
 
   await t.test('XLSX fixture identity guards reject mismatched destinations without import requests', async () => {
     const read = site => admin('GET', '/api/spaces/' + site.spaceId + '/data');

@@ -1,3 +1,125 @@
+# Inherited-color display defaults OFF — 2026-11-22
+
+Fresh main: `4c871ea555a33a5a6055000cbc3a89c537f6748c`, screenshot-only successor of #91 merge `1b584ac899bed2f46b599d794b372ea84aa1f7d9`; merge CI 45005886278 passed all four gates (48 browser/API scenarios and 34 native HTTP tests). #83 is now closed without merge; #84 is open with failed CI; #85 is the separate display-only option and #12 remains draft. Read #89 and both acceptance contracts before continuing.
+
+Integrate #85 with current main while preserving every unified Import change and browser scenario. A fresh browser now defaults inherited-color display OFF; only an explicitly stored `true` enables it. Existing explicit ON/OFF preferences are retained. Exact prefix colors, including white, and the Space's own stored color remain visible in either setting. Uncolored descendants use the existing neutral color when OFF, and the most-specific parent/Space fallback when ON. The sheet banner follows the selected subnet's display color too. This is a local display preference, not the still-pending per-prefix persisted propagation rule in #84. No API, schema, migration, module or RADIUS change.
+
+The browser scenario creates isolated real HTTP prefix records and uses a fresh authenticated browser context with empty local storage. It checks default OFF; ON/OFF persistence after reload/navigation; actual rendered colors in overview table/cards and detail table/tree; explicit parent/green/white colors and nearest-parent selection; unchanged full target/sibling data; and no write request from display actions. All previous Import/Dark Mode tests remain. Sixteen related local Node tests pass with zero skips; require this candidate's full CI/browser result recorded in #85/#89. No local Chromium pass is claimed under the known socket restriction.
+
+VM remains unchanged this step. Actual read-only diagnostic 45005783543 from #91 found health=200 and stable app identity, but missing shared classifier (HTTP 404) and five mismatched Import files; the diagnostic correctly returned BLOCKED/exit 2. Full deployed SHA remains unverified, and no rollout/restart/migration or new real RADIUS test is permitted by that evidence. RADIUS is healthy/user-accepted/frozen. After green candidate and merge CI, continue #84's per-prefix semantics, default-OFF persistence and Export/Import preservation without merging conflicting migrations blindly; operational acceptance and guarded deployment remain open. Work executes; Chat handles feedback; GitHub/#89 owns status.
+
+---
+
+# Installed Import compatibility evidence — 2026-11-22
+
+Fresh main: `ca4f1829695bdb1ff95bc799157bd52de3b4f96b`, a screenshot-only successor of #90 merge `24dcbaefb2410903dacec5a4f20771f54f811498`. Both candidate CI 44979017800 and merge CI 44979172804 passed all four gates (48 browser scenarios, 34 native HTTP tests, no native skips). Import code is merged, while installed/operator acceptance remains PARTIAL. Open #83/#85 are green, #84 failed and #12 is draft; none is changed here. #89 and both acceptance documents remain authoritative.
+
+The new read-only Import preflight checks nine explicit source/dependency file hashes inside the app container, three loopback-served assets, existing GET /health and selected app identity fields before/after observation. It detects an old backend, missing shared classifier, stale served UI and an intervening container restart/replacement. No login, import request, DB/table/credential/RADIUS access, scan, push, image build, migration, restart or deployment. Only diagnostic checkout/evidence files are written by its dedicated runner workflow.
+
+Fourteen isolated Python tests pass locally, including fail-closed reference/identity/health handling, bounded HTTP, redirect refusal and redacted failures. Ordinary CI now runs them. Matching files remain `files_match_runtime_unverified`, never a full deployed SHA or runtime/operator acceptance. See docs/IMPORT-INSTALLED-PREFLIGHT.md; exact candidate CI and VM diagnostic observations belong in #89. Do not infer live success from mocked tests.
+
+Next: after candidate CI, run the dedicated read-only VM diagnostic and record actual compatibility blockers; then continue the #83/#84/#85 color conflict with default OFF while deployment acceptance remains open. Do not run old UI-only deploy workflows for the new backend endpoint/shared module. Any later permitted non-RADIUS rollout needs backup/restore validation and identity/health/regression protection. RADIUS is healthy/user-accepted/frozen, and new real RADIUS testing is removed from the plan. Work executes; Chat handles decisions/feedback; GitHub/#89 is the status ledger.
+
+---
+
+# Content-based unified import detection — 2026-11-22
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; #90 base head `9d6dccf6dcc8300de21de3a60930980bf30bfca6` passed CI 44960535711 (all four gates, 47 browser scenarios, 33 native HTTP tests). Open #83/#85 remain green, #84 failed and #12 draft; they are not changed here. Current #89 and both acceptance documents were reviewed. RADIUS remains healthy/user-accepted and frozen, with no new real RADIUS testing.
+
+A shared browser/server format classifier now uses bytes instead of filename/MIME: ZIP signature selects the existing workbook validator, UTF-8 JSON content selects Portable validation, and delimited text selects CSV validation. A ZIP signature does not assert workbook validity. The server independently classifies spreadsheet content, so renamed/missing extensions work without trusting the browser. BOM and JSON after more than 512 bytes of whitespace are recognized; CSV retains comma/semicolon/tab/single-column behavior, including blank lines before the header. Empty, unsupported binary/UTF-16/invalid UTF-8 and malformed workbook input cannot be committed. Existing 7 MiB spreadsheet and 8 MiB Portable limits remain.
+
+Tests cover the extension/content matrix, UTF-8 and size boundaries, corrupt/non-workbook ZIP rejection, authorized HTTP preview/commit for misnamed Excel and CSV, no writes on rejected input, stable host ID/MAC and unchanged sibling Space. Browser coverage adds invalid-input rejection with Commit disabled, a truncated XLSX rejected by the server, a no-extension/BOM/long-whitespace JSON, CSV named .xlsx and a real XLSX named .json. The existing preview-conflict, round-trip, late-response and Dark Mode tests remain intact.
+
+Local targeted result before publication: 38 passed, zero failures, 8 native-PostgreSQL-only skips (46 including parent). Checksums/syntax/whitespace are verified. No local browser pass is claimed because of the previously observed Chromium socket restriction; require the candidate's full CI and native HTTP/browser evidence, recorded in #90/#89. If every gate succeeds and refs remain unchanged, merge this reviewed Import work, then verify merge CI separately; no deployment is implied by merge.
+
+VM: no access/write/deployment/restart/migration/discovery/config push. Last observed older UI installation is 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`; full current deployed SHA and fresh health are unverified. The new shared module must be packaged with both frontend and backend, and the new preview endpoint needs a compatible server; do not use old UI-only rollout workflows. Next: read-only installed compatibility/identity and backup/restore planning before any protected VM rollout, or proceed with the color-conflict priority while VM acceptance is pending. No stable/DONE claim before practical acceptance. Work handles execution, Chat feedback; GitHub/#89 owns status.
+
+---
+
+# Portable JSON server preview and conflict round-trip — 2026-11-22
+
+Fresh main remains `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; PR #90 starts from `770f5c721e6fd2c99669eaa9d421cdf6fbed802c`, whose CI 44954749978 passed all four gates and 46 browser/API scenarios. Open #83/#85 are green, #84 failed, and #12 remains draft; no color/Radio branch is changed.
+
+The unified dialog now calls POST /api/imports/subnet/preview instead of trusting a local sample. The endpoint shares commit authorization (currently admin-only), destination lookup and package validation. It runs only SELECTs in a repeatable-read, read-only transaction, counting new/existing/archived prefixes and hosts in the selected Space. Safe samples are bounded to 50 per kind with conflicts first; totals cover the entire validated file. The UI displays skip/replace effects, explains restoration of trash and replacement of device ports, and explicitly says commit rechecks current state. No preview token promises that the database is locked until commit.
+
+Shared validation rejects malformed/oversized record lists instead of silently truncating, rejects unaligned/duplicate prefixes, and canonicalizes IP/CIDR identities before duplicate checks. Legacy missing lists and source host IDs remain supported. No schema/migration/RADIUS/module/config/container change. RADIUS remains healthy, user-accepted and frozen; no new real RADIUS testing is in the plan.
+
+Tests add actual HTTP preview/invalid-request no-write comparisons (source, destination and trash), unauthorized viewer/branch requests, missing destination, active and archived conflicts, a new conflict inserted after preview, skip preservation, replace restoration with stable IDs, and export/import/export round-trip. Browser tests exercise held late responses for both spreadsheet and JSON paths, invalid JSON records rejected by the server with Commit disabled, and a real export uploaded under a .csv filename through preview, skip and replace. Spreadsheet workflows and Dark Mode checks remain intact.
+
+Local targeted validation: 38 passed, 0 failed, 8 native-PostgreSQL-only cases skipped (46 including parent). The new HTTP case passes under PGlite; native PostgreSQL and browser evidence must come from this candidate's CI, recorded in #90/#89. Local Chromium's previously confirmed socket restriction remains; do not claim a local browser pass. Syntax, whitespace, checksum-tool tests and manifest are checked before publication.
+
+VM/deployed SHA: no VM access, write, deployment, restart, migration, scan or config push. Latest observed old UI deployment remains 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`, not evidence of the full current installed tree. Acceptance stays PARTIAL. Next: inspect all candidate gates, finish file-detection edge cases and review compatibility/guarded rollout with backup, identity capture and regression protection. Backend preview is a new route, so a UI-only copy is insufficient for deployment. Work implements, Chat handles decisions/feedback, GitHub/#89 owns status.
+
+---
+
+# Unified Import CI recovery and stale-preview guard — 2026-11-22
+
+Current authority: Issue #89 and the user's 2026-11-22 instruction. **RADIUS is healthy and user-accepted, frozen and outside development scope.** All older requests below for real MikroTik Full/Read or new real RADIUS tests are superseded and removed from the current plan. No RADIUS code/config/database/schema/users/NAS/secrets/credentials/container/image/migration/restart/redeploy changes are authorized. Existing isolated CI regression tests do not authorize live service tests. Other deployments require backup, identity capture, health/regression and stop/rollback on risk.
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1` (screenshot-only successor of `21c792a00a6aace64cbc90dcdd98545501cf4e66`, whose CI 44948808270 succeeded). Open PRs checked: #90, #83, #84, #85 and draft #12. Leave the conflicting color variants and Radio draft untouched.
+
+PR #90 head `7a552db5ca23eb1c6d2d30fd540a3da89993abb1` fixed the dirty-import dialog interception: browser job 136987276394 in CI 44950541404 succeeded, as did Docker/PostgreSQL. The overall run failed only because SHA256SUMS still contained the old browser test hash. Refresh the manifest without bypassing verification.
+
+This step also prevents an in-flight Import preview from re-enabling Commit after the file/destination changes or the dialog closes and reopens. Starting another preview clears the old authorization; stale success/error replies cannot replace the current selection. Only IPAM client state is changed. Browser coverage holds actual HTTP preview responses, invalidates each of those three contexts, then waits for completion and requires disabled Commit and unchanged target/sibling data. The existing real XLSX and CSV preview/commit cases still run afterwards. Portable JSON cancellation now tests both rejecting and accepting the unsaved-form confirmation and verifies no database changes.
+
+Local validation: 11 portable/UI/import tests passed (zero skipped), four checksum-tool tests passed, JS syntax/whitespace and refreshed source manifest verified. Local browser execution is blocked before any scenario by Chromium's socket permission error; no local browser pass is claimed. The exact candidate SHA and GitHub CI results are recorded in #90 and #89. Require green browser/test/Docker/native PostgreSQL gates on the new candidate before any merge.
+
+VM: no access, write, deployment, restart, migration, scan or config push in this step. Latest observed UI deployment evidence is run 44948850727, source `f3995f6f75a258d63e6f93ec252825799e7a8de2`; this is an older UI-only source, not the current full installed SHA or fresh VM health proof. User acceptance remains open. Next: verify the new CI; complete Portable JSON conflict/validation preview and round-trip acceptance before a guarded rollout. Keep Work implementation and Chat feedback separate; only GitHub/#89 is the status ledger.
+
+---
+
+# Preserve Personnel during fixture cleanup — 2026-11-21 UTC
+
+[PR #86](https://github.com/emsebi/EMS_IPAM/pull/86) merged with expected head as `8f1c2d054c19394f784807ca327f5a95a2b4e87a`. Candidate CI 44927861295 and 44927857398 passed all four gates; native PostgreSQL job 136917806022 passed all 31 HTTP tests with no failures/skips and browser job 136917806041 passed 44 scenarios. [Merge CI 44933607196](https://github.com/emsebi/EMS_IPAM/actions/runs/44933607196) also succeeded, verified 18:07 UTC. Its tree equals the tested candidate. Fresh base is `8f1c2d054c19394f784807ca327f5a95a2b4e87a`; open #83/#84/#85 UI/browser work and draft #12 remain untouched.
+
+The next narrow preflight covers personnel.company_id: its ON DELETE SET NULL relationship would silently detach a person if the fixture company were purged. Fixture creation owns no Personnel, so any linked record blocks cleanup, including inactive Personnel. The production-schema read-only test compares complete Personnel rows alongside hierarchy/grants. A new native PostgreSQL HTTP case injects a synthetic existing person's link to active and already-archived fixtures, then requires normal cleanup/recovery refusal, no DELETE for the blocked fixture, identical rows/journal bytes and retained active/trash entries. Restoring only the injected link permits repeatable recovery, after which the complete original Personnel row must still match.
+
+Local combined journal/Radio/Company/HTTP validation: 27 passed, 0 failed, 8 native-only skips (35 including parent); all 315 listed source checksums, syntax and whitespace pass. The new native HTTP case is not executed by the local PGlite adapter. Candidate CI IDs/status are recorded in the PR; require all 32 native HTTP tests with zero skips/failures and every other gate before fresh-ref/expected-SHA merge.
+
+Next: inspect the candidate's Personnel case and all gates. Then inventory remaining incoming references from the actual migrated schema (old migration text alone is not the current RADIUS contract), cover module references and private preservation comparisons before any installed-loopback XLSX runner. This SELECT-only guard remains optional rehearsal tooling, not an atomic concurrency lock or a complete installed cleanup policy. No application/schema change, VM write/deployment, real-device scan or router push. Installed XLSX acceptance, practical Radio acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
+# Company hierarchy and grant preflight for XLSX fixture cleanup — 2026-11-21 UTC
+
+PR #78 merged as `6a8e598d4aab02bba87a100e9bcc2f2a4d2030ab`; [merge CI 44922365467](https://github.com/emsebi/EMS_IPAM/actions/runs/44922365467) completed successfully in all four gates. Fresh main `e158828c15c149822402742ce36235cd16f72053` only adds its generated Radio screenshot. The earlier failed merge run 44901729931 remains a failure. Open #83/#84/#85 overlap IPAM UI/browser/color work; this step does not edit those files. #12 remains draft pending practical Radio acceptance.
+
+This bounded step adds a SELECT-only fixture preflight for incoming companies.parent_company_id, user_company_access.company_id and user_space_access.space_id. Fixture creation owns no child companies or grants, so any such reference blocks cleanup, including archived children/Spaces and inactive users. Unrelated branch grants do not block it. The guard uses the existing beforeCleanup hook together with the Radio guard; it does not change the application or schema and is not a concurrency lock or a complete installed cleanup policy.
+
+A production-schema PGlite test runs each refusal in a read-only transaction and compares full hierarchy/Space/user/grant rows before and after. Three native-PostgreSQL HTTP cases cover all three reference types with active and already-archived fixtures: normal cleanup and journal recovery must send no DELETE for the blocked fixture, retain its active/trash entry, preserve full relevant rows and leave recovery journal bytes unchanged. Each case removes only its injected synthetic relation and completes repeatable recovery in its disposable database.
+
+Local combined journal/Radio/Company/HTTP validation: 27 passed, 0 failed, 7 native-only skips (34 including the HTTP parent). The three new HTTP cases therefore still require native PostgreSQL CI; expect all 31 HTTP tests with no skips. Source checksum and syntax validation are recorded in the PR, together with candidate CI run IDs. No local native-PostgreSQL pass is claimed.
+
+Next: inspect those three native HTTP cases and every test/browser/Docker/PostgreSQL gate for the exact candidate head; do not merge on skipped local coverage. Re-read main and PR heads before expected-SHA merge, preserving concurrent checksum entries. Then cover remaining module/personnel incoming references and private before/after preservation evidence before wiring an installed-loopback XLSX runner. No VM write/deployment, device scan, router push, credentials access or real-device acceptance in this step. Installed XLSX, Radio operator acceptance and actual MikroTik Full/Read login remain open.
+
+---
+
+# Integrate Device Types readiness fix with current search/theme work — 2026-11-21 UTC
+
+PR #78 original head `b5bed9e28e7dbedeefa3ac1021ff2858cc6a9b0f` passed both [PR CI 44906660455](https://github.com/emsebi/EMS_IPAM/actions/runs/44906660455) and [push CI 44906652687](https://github.com/emsebi/EMS_IPAM/actions/runs/44906652687). Browser job 136853605742 passed 43 real HTTP/browser scenarios at 13:01:36 UTC, including the held real Device Types refresh and desktop/mobile layout assertions. Test, Docker and native PostgreSQL gates succeeded. This does not retroactively turn merge CI 44901729931 into success.
+
+Fresh main `7cc2f5a23c8b96871c41d5c8f435ad89e2d2b7dd` includes merged Link Planner #79/#80, global live-search #81 and module dark-theme #82 plus generated screenshots. Those PRs are closed; only #78 and inactive draft #12 remain open. Bring main into #78 without replacing any application/module/workflow/screenshot bytes. The browser test merges cleanly, retaining the new global-search/Ctrl+K assertions and the Device Types atomic layout snapshot. Resolve only the SHA256SUMS conflict by using the current main manifest and recomputing the changed test/checkpoint hashes.
+
+Local checks: Node syntax, listed-source checksums and whitespace against fresh main. New integration CI IDs/status are recorded in #78. Next: require all gates on the integrated head, especially both the global-search/Ctrl+K case and delayed Device Types desktop/mobile case (44 browser/API scenarios expected). Re-read both refs before expected-SHA merge; preserve intervening main changes. Older candidate success is not evidence for this new integrated tree. If pending, follow the recorded run IDs next turn rather than waiting indefinitely.
+
+After P0 integration, resume the recorded Company hierarchy/access-grant cleanup preflight and preservation tests before an installed-loopback XLSX runner. No VM write/deployment, application/schema change, device discovery or router push. Radio operator acceptance, installed XLSX acceptance and real MikroTik Full/Read login remain open.
+
+---
+
+# P0 browser readiness repair after PR #65 merge — 2026-11-21 UTC
+
+PR #65 merged with expected head at `1ac9fc9fee1a55bdb3409198b9d3df8033e16a6e`, after both candidate CIs passed all four gates and native PostgreSQL job 136825476390 passed all 28 HTTP tests with no failures/skips. Its merge CI [44901729931](https://github.com/emsebi/EMS_IPAM/actions/runs/44901729931) subsequently **failed** in browser job 136838868126 at 12:00:58 UTC: Device Types desktop measured one column and every row at x/y/height zero. Ordinary tests, Docker and PostgreSQL succeeded. Do not describe that merge run as successful.
+
+New main `15028b4dc443a7e372192187bf43b807f8c8bd11` contains Link Planner longitude PR #77; [CI 44906244285](https://github.com/emsebi/EMS_IPAM/actions/runs/44906244285) passed all gates, including browser. Current base `31297c49375d0a808db1641423356ebdae9bda39` adds only seven generated screenshots. Preserve the active Link Planner work and all deployed UI changes.
+
+This bounded P0 step repairs the Device Types browser readiness check. The previous count >= 6 could accept the pre-refresh list; locator evaluation could then measure a grid detached by asynchronous page replacement (consistent with the observed zero geometry). The replacement requires all newly created fixture IDs and positive card dimensions, and reads the current connected DOM and its layout in one browser task. Desktop/mobile column counts, row alignment, wrapping, compact height and overflow assertions remain unchanged. A held real GET response proves the pre-refresh list is rejected before the response is released; no API data is fabricated and no fixed sleep/retry hides a failed layout assertion. Response interception and DOM readiness are bounded by timeouts.
+
+Local checks: Node syntax, listed-source checksum verification and diff whitespace. Full browser behavior requires this candidate's CI; run IDs/status are in the PR body. Next: inspect the held-response readiness case and the complete browser gate plus the other gates before expected-SHA merge with fresh main. Do not repeat the old 44901729931 success claim or treat newer main success as proof of this patch. If CI remains pending, follow the recorded runs next turn.
+
+After this P0 gate is green, resume the already recorded Company/access-grant cleanup preflight (companies.parent_company_id, user_company_access.company_id, user_space_access.space_id), with exact-row/journal preservation and no DELETE on refusal; then module references and private preservation evidence before any installed-loopback XLSX runner. That work was deferred in this turn to address the observed CI failure. No VM write/deployment, application/schema change, device discovery, router push or real-device acceptance. Installed XLSX, Radio operator acceptance and actual MikroTik login remain open.
+
+---
+
 # PR #65 integrated with current IPAM/Radio main — 2026-11-21 UTC
 
 Fresh main is `e7f877281e8361ad20225255a58f257cb30927eb`, preserving the IPAM live-search/inherited-color and Radio compact-UI merges (#75/#74), Link Planner, all generated screenshots and their workflows. PR #12 remains draft/inactive. Only the fixture helper/tests, this checkpoint and source manifest differ from that main; no active UI/module files are edited or deployed.

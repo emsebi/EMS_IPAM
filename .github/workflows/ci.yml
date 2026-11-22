@@ -23,6 +23,7 @@ jobs:
         working-directory: .
         run: |
           python3 -m unittest discover -s scripts/tests -p 'test_checksums.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_import_installed_check.py'
           python3 scripts/checksums.py --check
       - name: Use Node.js 22
         uses: actions/setup-node@v4

@@ -1,0 +1,48 @@
+name: EMS-IPAM Import Read-only VM Preflight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ops/import-readonly-preflight-20261122]
+    paths: [.github/import-readonly-probe-trigger.txt]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+
+jobs:
+  inspect-import:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 4
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: import-preflight-source
+          persist-credentials: false
+          clean: false
+      - name: Verify diagnostic source and isolated tests
+        working-directory: import-preflight-source
+        run: |
+          python3 scripts/checksums.py --check
+          python3 -m unittest discover -s scripts/tests -p 'test_import_installed_check.py'
+      - name: Observe fixed loopback assets and app file identity only
+        working-directory: import-preflight-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/import-installed-check.py \
+            --source-root "$PWD" --source-sha "$GITHUB_SHA" | tee import-installed-evidence.json
+      - name: Save bounded diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-installed-evidence
+          path: import-preflight-source/import-installed-evidence.json
+          if-no-files-found: warn
+          retention-days: 14
