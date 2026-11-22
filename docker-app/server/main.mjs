@@ -30,7 +30,7 @@ import {
   validateRootCidr,
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
-import { buildSubnetPackage, importSubnetPackage } from "./portable.mjs";
+import { buildSubnetPackage, importSubnetPackage, previewSubnetPackage } from "./portable.mjs";
 import { parseIpamImport } from "./ipam-bulk.mjs";
 import { usageSegments } from "../public/subnet-model.mjs";
 import { buildMikrotikScript } from "./mikrotik.mjs";
@@ -1476,11 +1476,15 @@ async function api(req, res, url, user) {
     return res.end(body);
   }
 
-  if (req.method === "POST" && pathname === "/api/imports/subnet") {
+  if (req.method === "POST" && ["/api/imports/subnet", "/api/imports/subnet/preview"].includes(pathname)) {
     requireWriter(user);
     const body = await readBody(req);
     const space = await getSpaceForUser(user, cleanText(body.destinationSpaceId, 80));
     if (!(await canManageCompany(user, space.companyId))) throw Object.assign(new Error("برای ورود اطلاعات باید به کل شرکت مقصد دسترسی ویرایش داشته باشید."), { status: 403 });
+    if (pathname.endsWith("/preview")) {
+      const preview = await previewSubnetPackage({ pool, destinationSpace: space, packageData: body.package, parseCidr, contains });
+      return json(res, 200, { ok: true, ...preview });
+    }
     const result = await importSubnetPackage({
       pool,
       user,
@@ -1649,10 +1653,13 @@ async function api(req, res, url, user) {
     const cidr = validateChildCidr(body.cidr, space.cidr).cidr;
     const requestedId = cleanText(body.id, 80);
     const id = requestedId || crypto.randomUUID();
+    if (body.inheritColorToChildren !== undefined && typeof body.inheritColorToChildren !== "boolean") {
+      throw new Error("گزینهٔ انتقال رنگ باید روشن یا خاموش باشد.");
+    }
     const values = [
       id, body.spaceId, cidr, cleanText(body.name, 160) || cidr,
       cleanText(body.status, 40) || "active", cleanText(body.role, 100), cleanText(body.vlan, 40),
-      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), body.inheritColorToChildren === true, cleanText(body.description, 2000), user.id,
+      cleanText(body.gateway, 80) || defaultGateway(cidr), validColor(body.color), body.inheritColorToChildren ?? null, cleanText(body.description, 2000), user.id,
     ];
     if (requestedId) {
       const current = await pool.query("SELECT space_id AS \"spaceId\" FROM prefixes WHERE id=$1 AND deleted_at IS NULL", [requestedId]);
@@ -1660,7 +1667,7 @@ async function api(req, res, url, user) {
         throw Object.assign(new Error("رنج پیدا نشد یا به این شبکه تعلق ندارد."), { status: 404 });
       }
       await pool.query(
-        `UPDATE prefixes SET cidr=$3,name=$4,status=$5,role=$6,vlan=$7,gateway=$8,color=$9,inherit_color_to_children=$10,
+        `UPDATE prefixes SET cidr=$3,name=$4,status=$5,role=$6,vlan=$7,gateway=$8,color=$9,inherit_color_to_children=COALESCE($10,inherit_color_to_children),
              description=$11,updated_by=$12,updated_at=now()
           WHERE id=$1 AND space_id=$2`,
         values,
@@ -1668,7 +1675,7 @@ async function api(req, res, url, user) {
     } else {
       await pool.query(
         `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,inherit_color_to_children,description,created_by,updated_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,false),$11,$12,$12)`,
         values,
       );
     }

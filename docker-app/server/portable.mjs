@@ -15,6 +15,9 @@ function normalizeConnections(value) {
 }
 
 function sanitizePrefix(item) {
+  if (item.inheritColorToChildren !== undefined && typeof item.inheritColorToChildren !== "boolean") {
+    throw new Error("گزینهٔ انتقال رنگ زیررنج باید روشن یا خاموش باشد.");
+  }
   return {
     cidr: clean(item.cidr, 64),
     name: clean(item.name, 160),
@@ -23,6 +26,7 @@ function sanitizePrefix(item) {
     vlan: clean(item.vlan, 40),
     gateway: clean(item.gateway, 80),
     color: clean(item.color, 7),
+    ...(item.inheritColorToChildren === undefined ? {} : { inheritColorToChildren: item.inheritColorToChildren }),
     description: clean(item.description, 2000),
   };
 }
@@ -71,7 +75,7 @@ export async function buildSubnetPackage({ pool, space, cidr, appVersion, parseC
   if (!scope || !root || !contains(root, scope)) throw new Error("رنج انتخاب‌شده داخل فضای آدرس نیست.");
   const [prefixes, hosts, devicePorts] = await Promise.all([
     pool.query(
-      `SELECT id,cidr,name,status,role,vlan,gateway,color,description
+      `SELECT id,cidr,name,status,role,vlan,gateway,color,inherit_color_to_children AS "inheritColorToChildren",description
          FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
       [space.id],
     ),
@@ -131,15 +135,28 @@ export function validateSubnetPackage(value, { parseCidr, contains, destinationS
   const scope = parseCidr(value.source?.cidr);
   const root = parseCidr(destinationSpace.cidr);
   if (!scope || !root || !contains(root, scope)) throw new Error("رنج بسته داخل فضای آدرس مقصد قرار نمی‌گیرد.");
-  const prefixes = Array.isArray(value.prefixes) ? value.prefixes.slice(0, 20000).map(sanitizePrefix) : [];
-  const hosts = Array.isArray(value.hosts) ? value.hosts.slice(0, 200000).map(sanitizeHost) : [];
+  for (const [key, limit] of [["prefixes", 20000], ["hosts", 200000]]) {
+    if (value[key] !== undefined && (!Array.isArray(value[key]) || value[key].length > limit ||
+        value[key].some(item => !item || typeof item !== "object" || Array.isArray(item)))) {
+      throw new Error(`فهرست ${key} نامعتبر یا بیش از حد مجاز است.`);
+    }
+  }
+  const prefixes = (value.prefixes || []).map(sanitizePrefix);
+  const hosts = (value.hosts || []).map(sanitizeHost);
+  const cidrs = new Set();
   for (const item of prefixes) {
     const info = parseCidr(item.cidr);
-    if (!info || !contains(scope, info) || !contains(root, info)) throw new Error(`زیررنج نامعتبر در بسته: ${item.cidr || "بدون مقدار"}`);
+    if (!info || !info.canonical || !contains(scope, info) || !contains(root, info)) throw new Error(`زیررنج نامعتبر در بسته: ${item.cidr || "بدون مقدار"}`);
+    item.cidr = info.cidr;
+    if (cidrs.has(item.cidr)) throw new Error("زیررنج در بسته تکراری است.");
+    cidrs.add(item.cidr);
   }
   const sourceIds = new Set();
   const ips = new Set();
   for (const item of hosts) {
+    const address = parseCidr(item.ip + "/32");
+    if (!address || !contains(scope, address) || !contains(root, address)) throw new Error(`آدرس نامعتبر در بسته: ${item.ip || "بدون مقدار"}`);
+    item.ip = address.cidr.split("/")[0];
     if (ips.has(item.ip) || (item.sourceId && sourceIds.has(item.sourceId))) {
       throw new Error("آدرس یا شناسه میزبان در بسته تکراری است.");
     }
@@ -148,6 +165,40 @@ export function validateSubnetPackage(value, { parseCidr, contains, destinationS
     if (!contains(scope, item.ip) || !contains(root, item.ip)) throw new Error(`آدرس نامعتبر در بسته: ${item.ip || "بدون مقدار"}`);
   }
   return { scope, prefixes, hosts };
+}
+
+export async function previewSubnetPackage({ pool, destinationSpace, packageData, parseCidr, contains }) {
+  // Use the same validation as commit, but never call the writer or roll back a trial import.
+  const data = validateSubnetPackage(packageData, { parseCidr, contains, destinationSpace });
+  const client = await pool.connect();
+  const summary = {}, sample = {}, sampleLimit = 50;
+  try {
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    for (const [kind, key] of [["prefixes", "cidr"], ["hosts", "ip"]]) {
+      // Table/column names come only from the fixed list above. Include trash:
+      // skip retains it, while replace restores that existing identity.
+      const found = await client.query(
+        `SELECT ${key},deleted_at FROM ${kind} WHERE space_id=$1 AND ${key}=ANY($2::text[])`,
+        [destinationSpace.id, data[kind].map(item => item[key])],
+      );
+      const existing = new Map(found.rows.map(row => [row[key], row]));
+      const items = data[kind].map(item => ({
+        [key]: item[key], name: item.name, existing: existing.has(item[key]),
+        archived: Boolean(existing.get(item[key])?.deleted_at),
+      }));
+      summary[kind] = { total: items.length, newRecords: items.length - existing.size,
+        existing: existing.size, archived: items.filter(item => item.archived).length };
+      // Put conflicts first; expose only safe fields, with a clearly bounded sample.
+      sample[kind] = items.filter(item => item.existing).concat(items.filter(item => !item.existing)).slice(0, sampleLimit);
+    }
+    await client.query("COMMIT");
+    return { destinationSpaceId: destinationSpace.id, cidr: data.scope.cidr, summary, sample, sampleLimit };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function importSubnetPackage({ pool, user, destinationSpace, packageData, mode, parseCidr, contains }) {
@@ -166,15 +217,16 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
       if (existing) {
         await client.query(
           `UPDATE prefixes SET name=$1,status=$2,role=$3,vlan=$4,gateway=$5,color=$6,description=$7,
+             inherit_color_to_children=COALESCE($10,inherit_color_to_children),
              deleted_at=NULL,deleted_by=NULL,updated_by=$8,updated_at=now() WHERE id=$9`,
-          [item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, id],
+          [item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, id, item.inheritColorToChildren ?? null],
         );
         result.prefixesUpdated += 1;
       } else {
         await client.query(
-          `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
-          [id, destinationSpace.id, item.cidr, item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id],
+          `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by,inherit_color_to_children)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,COALESCE($12,false))`,
+          [id, destinationSpace.id, item.cidr, item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, item.inheritColorToChildren ?? null],
         );
         result.prefixesCreated += 1;
       }

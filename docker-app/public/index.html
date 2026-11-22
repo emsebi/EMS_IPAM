@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>EMS IPAM — Network Management</title>
-  <link rel="stylesheet" href="/styles.css?v=1.7.2-color-inheritance1">
+  <link rel="stylesheet" href="/styles.css?v=1.7.2-prefix-inherit1">
 </head>
 <body>
   <section id="loginView" class="login-view">
@@ -146,7 +146,7 @@
           <label class="field">VLAN<input id="prefixVlan" class="ltr" inputmode="numeric"></label>
           <label class="field">Gateway<input id="prefixGateway" class="ltr mono"></label>
           <label class="field">رنگ<input id="prefixColor" type="color" value="#3157d5"></label>
-          <label class="field full prefix-inherit-setting"><input id="prefixInheritColorToChildren" type="checkbox"><span>انتقال رنگ این رنج به زیرشاخه‌ها</span><small>فقط زیرشاخه‌های بدون رنگ اختصاصی؛ رنگ فرزند (حتی سفید) تغییر نمی‌کند.</small></label>
+          <label class="field full prefix-inherit-setting"><input id="prefixInheritColorToChildren" type="checkbox"><span>انتقال رنگ این رنج به زیرشاخه‌ها</span><small>با روشن‌بودن «نمایش رنگ ارثی»، فقط زیرشاخه‌های بدون رنگ اختصاصی رنگ می‌گیرند؛ رنگ فرزند، حتی سفید، حفظ می‌شود.</small></label>
           <label class="field full">توضیحات<textarea id="prefixDescription"></textarea></label>
         </div>
       </div>
@@ -325,13 +325,13 @@
 
   <dialog id="bulkIpamDialog" class="wide-dialog">
     <form id="bulkIpamForm">
-      <div class="modal-head"><div><h3>ورود گروهی IP از Excel / CSV</h3><p>A: IP · B: Name · C: Description — فایل اصلی شما بدون تغییر می‌ماند</p></div><button class="close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><h3>Import اطلاعات IPAM</h3><p>تشخیص خودکار Excel، CSV و بسته Portable JSON — هیچ داده‌ای قبل از تأیید وارد نمی‌شود.</p></div><button class="close" type="button" data-close>×</button></div>
       <div class="modal-body import-layout">
-        <label class="drop-file">انتخاب فایل Excel / CSV<input id="bulkIpamFile" type="file" accept=".xlsx,.csv" required><span>حداکثر ۷ مگابایت / ۱۰ هزار ردیف؛ شیت اول Excel خوانده می‌شود</span></label>
+        <label class="drop-file">انتخاب فایل<input id="bulkIpamFile" type="file" accept=".xlsx,.csv,.json,.emsipam.json,text/csv,application/json" required><span id="bulkIpamFileTypeHint">Excel/CSV: ستون‌های A=IP، B=Name، C=Description · JSON: بسته خروجی Portable Export</span></label>
         <div class="form-grid">
           <label class="field">شرکت مقصد<select id="bulkIpamCompany" required></select></label>
           <label class="field">رنج مقصد<select id="bulkIpamSpace" required></select></label>
-          <label class="field full">IPهای تکراری<select id="bulkIpamMode"><option value="skip">رد تکراری‌ها، حفظ اطلاعات قبلی</option><option value="update">فقط نام و توضیحات را به‌روزرسانی کن (بقیه مشخصات حفظ شوند)</option></select></label>
+          <label class="field full">رفتار در تداخل<select id="bulkIpamMode"><option value="skip">رد تکراری‌ها، حفظ اطلاعات قبلی</option><option id="bulkIpamUpdateMode" value="update">فقط نام و توضیحات را به‌روزرسانی کن (Excel/CSV)</option></select></label>
         </div>
         <div id="bulkIpamPreview" class="bulk-ipam-preview" aria-live="polite">فایل و رنج را انتخاب کنید، سپس «بررسی فایل» را بزنید. هیچ داده‌ای قبل از تأیید ثبت نمی‌شود.</div>
       </div>
@@ -466,6 +466,6 @@
   <div id="toolMenu" class="tool-menu hidden"></div>
   <div id="toast" class="toast"></div>
   <script src="/mock-api.js"></script>
-  <script type="module" src="/app.js?v=1.7.2-color-inheritance1"></script>
+  <script type="module" src="/app.js?v=1.7.2-prefix-inherit1"></script>
 </body>
 </html>

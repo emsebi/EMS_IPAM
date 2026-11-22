@@ -1,3 +1,4 @@
+import { detectIpamImportFormat, MAX_SHEET_IMPORT_BYTES, MAX_PORTABLE_IMPORT_BYTES } from "./ipam-import-format.mjs?v=1.7.2";
 import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight, usageSegments } from "./subnet-model.mjs?v=1.7.2";
 import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.2";
 
@@ -17,6 +18,7 @@ const state = {
   sheetCidr: null,
   displayMode: localStorage.getItem("ems-display-mode") || "table",
   overviewMode: localStorage.getItem("ems-overview-mode") || "table",
+  showInheritedSubnetColors: localStorage.getItem("ems-show-inherited-subnet-colors") === "true",
   radioViewMode: localStorage.getItem("ems-radio-view-mode") || "tree",
   drillPrefix: 24,
   paint: false,
@@ -358,18 +360,29 @@ function mostSpecific(address) {
 function effectiveSubnetColor(cidr) {
   const range=parseCidr(cidr);
   if(!range)return '#eef2f7';
-  const candidates=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
-    .filter(({info})=>info && info.start<=range.start && info.end>=range.end)
-    .sort((a,b)=>b.info.prefix-a.info.prefix);
-  // An exact subnet always displays its own color. A parent colors children only
-  // when the owner opted in. A nearer owner with opt-out blocks distant ancestors.
-  const owner=candidates[0];
-  if(owner){
-    if(owner.info.cidr===range.cidr || owner.info.prefix===range.prefix)
-      return owner.item.color || '#eef2f7';
-    return owner.item.inheritColorToChildren===false ? '#ffffff' : (owner.item.color||'#eef2f7');
-  }
-  return state.data?.space?.color||'#eef2f7';
+  const matches=(state.data?.prefixes||[]).map(item=>({item,info:prefixInfo(item)}))
+    .filter(({item,info})=>info&&info.start<=range.start&&info.end>=range.end&&/^#[0-9a-f]{6}$/i.test(item.color||''));
+  matches.sort((a,b)=>b.info.prefix-a.info.prefix);
+  const nearest=matches[0];
+  if(nearest?.info.cidr===range.cidr)return nearest.item.color;
+  if(range.cidr===parseCidr(state.data?.space?.cidr)?.cidr)return state.data.space.color||'#eef2f7';
+  if(!state.showInheritedSubnetColors)return '#eef2f7';
+  if(nearest?.item.inheritColorToChildren===false)return '#eef2f7';
+  return nearest?.item.color||state.data?.space?.color||'#eef2f7';
+}
+
+function inheritedColorToggleHtml() {
+  return '<label class="ipam-inheritance-toggle"><input type="checkbox" class="ipam-inheritance-display" '+
+   (state.showInheritedSubnetColors?'checked ':'')+
+   'aria-label="نمایش رنگ ارثی زیرشبکه‌ها"><span>نمایش رنگ ارثی زیرشبکه‌ها</span></label>';
+}
+function attachInheritedColorToggle(render) {
+ page.querySelectorAll('.ipam-inheritance-display').forEach(node=>node.addEventListener('change',event=>{
+  const scrollY=window.scrollY;
+  state.showInheritedSubnetColors=event.target.checked;
+  localStorage.setItem('ems-show-inherited-subnet-colors',String(state.showInheritedSubnetColors));
+  render();window.scrollTo(0,scrollY);
+ }));
 }
 
 function existingPrefixAt(address) {
@@ -680,7 +693,7 @@ async function openCompanyPage(companyId, { fromRoute = false } = {}) {
     const free = Math.max(0, total - used);
     const prefixCount = Number(space.prefixCount || 0);
     const percent = total ? Math.round((used / total) * 1000) / 10 : 0;
-    return `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small><span class="space-usage"><span><strong>${formatNumber(used)}</strong> IP ثبت‌شده از ${formatNumber(total)} · <strong>${formatNumber(free)}</strong> آزاد</span><span>${formatNumber(prefixCount)} رنج تعریف‌شده · مصرف ${formatNumber(percent)}٪</span><i><em style="width:${Math.min(100, percent)}%"></em></i></span><div class="space-company-distribution" data-space="${escapeHtml(space.id)}" aria-label="موقعیت آدرس‌های ثبت‌شده"></div></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm company-import-ipam" data-space="${escapeHtml(space.id)}">ورود Excel</button><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`;
+    return `<div class="space-card-wrap"><button class="space-card open-space" data-space="${escapeHtml(space.id)}" style="--space-color:${escapeHtml(space.color)}"><b>${escapeHtml(space.name)}</b><small>${escapeHtml(space.cidr)}</small><span class="space-usage"><span><strong>${formatNumber(used)}</strong> IP ثبت‌شده از ${formatNumber(total)} · <strong>${formatNumber(free)}</strong> آزاد</span><span>${formatNumber(prefixCount)} رنج تعریف‌شده · مصرف ${formatNumber(percent)}٪</span><i><em style="width:${Math.min(100, percent)}%"></em></i></span><div class="space-company-distribution" data-space="${escapeHtml(space.id)}" aria-label="موقعیت آدرس‌های ثبت‌شده"></div></button>${canManageCompany(companyId) ? `<div class="space-actions"><button class="btn sm company-import-ipam" data-space="${escapeHtml(space.id)}">Import</button><button class="btn sm edit-space" data-space="${escapeHtml(space.id)}">ویرایش</button><button class="btn sm danger delete-space" data-space="${escapeHtml(space.id)}">حذف</button></div>` : ""}</div>`;
   }).join("") || `<div class="empty-state compact-empty">رنج اصلی تعریف نشده است.</div>`;
   page.innerHTML = `<section class="company-hero"><div class="company-identity"><span class="company-avatar">${escapeHtml(company.name.slice(0, 1))}</span><div><span class="company-tree-badge">${escapeHtml(kind)}${parent ? ` زیرمجموعه ${escapeHtml(parent.name)}` : ""}</span><h2>${escapeHtml(company.name)}</h2><p>${escapeHtml(company.description || company.address || "اطلاعات تکمیلی ثبت نشده است.")}</p></div></div><div class="company-hero-actions"><button id="backCompanies" class="btn">بازگشت به شرکت‌ها</button>${canManageCompany(companyId) ? `<button id="editCurrentCompany" class="btn">ویرایش اطلاعات</button><button id="addCurrentSpace" class="btn primary">افزودن رنج اصلی</button>` : ""}</div></section>
     <section class="company-quick-info"><article class="info-card"><span>مدیر شرکت</span><b>${escapeHtml(company.managerName || "ثبت نشده")}</b></article><article class="info-card"><span>شماره تماس</span><b class="ltr">${escapeHtml(company.phone || "—")}</b></article><article class="info-card"><span>کد پستی</span><b class="ltr">${escapeHtml(company.postalCode || "—")}</b></article><article class="info-card"><span>موقعیت</span>${mapUrl ? `<a href="${mapUrl}" target="_blank" rel="noopener noreferrer">نمایش در Google Maps</a>` : `<b>ثبت نشده</b>`}</article></section>
@@ -726,6 +739,8 @@ function syncBulkIpamSpaces() {
   resetBulkIpamPreview();
 }
 function resetBulkIpamPreview() {
+  state.bulkIpamRevision = (state.bulkIpamRevision || 0) + 1;
+  state.bulkIpamFile = null;
   state.bulkIpamPreview = null;
   $("bulkIpamCommit").disabled = true;
   $("bulkIpamPreview").textContent = "برای مشاهده خطاها، تکراری‌ها و پیش‌نمایش ابتدا «بررسی فایل» را بزنید.";
@@ -742,8 +757,43 @@ function openBulkIpamDialog(spaceId = state.currentSpaceId) {
   if (selected) $("bulkIpamSpace").value = selected.id;
   $("bulkIpamDialog").showModal();
 }
+async function classifyIpamImportFile(file) {
+  if(!file)throw new Error("ابتدا فایل را انتخاب کنید.");
+  if (file.size > MAX_PORTABLE_IMPORT_BYTES) throw new Error("فایل بیش از حد بزرگ است (حداکثر ۸ مگابایت).");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const format = detectIpamImportFormat(bytes);
+  if (format === "json") {
+    let payload;
+    try {payload=JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));} catch {throw new Error("ساختار JSON فایل معتبر نیست.");}
+    if(payload?.format!=="EMS-IPAM-SUBNET" || Number(payload.formatVersion)!==1 || !Array.isArray(payload.prefixes) || !Array.isArray(payload.hosts)){
+      throw new Error("فایل JSON بسته Portable Export معتبر EMS_IPAM نیست.");
+    }
+    return {kind:"portable",payload};
+  }
+  return { kind: "sheet", format };
+}
+function renderPortableImportPreview(preview) {
+  const replace = $("bulkIpamMode").value === "update";
+  const { summary, sample, sampleLimit } = preview;
+  const sections = [["prefixes", "cidr", "Subnet"], ["hosts", "ip", "IP/تجهیز"]].map(([kind, key, label]) => {
+    const counts = summary[kind];
+    const rows = sample[kind].map(item => {
+      const status = item.archived ? "موجود در سطل بازیافت" : item.existing ? "موجود" : "جدید";
+      const action = !item.existing ? "ایجاد" : !replace ? "رد شدن بدون تغییر" : item.archived ? "بازیابی و جایگزینی" : "جایگزینی";
+      return '<tr><td>' + escapeHtml(item[key]) + '</td><td>' + escapeHtml(item.name) + '</td><td>' + status + '</td><td>' + action + '</td></tr>';
+    }).join("");
+    return '<h4>' + label + ' · کل: ' + formatNumber(counts.total) + ' · جدید: ' + formatNumber(counts.newRecords) +
+      ' · موجود: ' + formatNumber(counts.existing) + ' · از موجودها در سطل بازیافت: ' + formatNumber(counts.archived) +
+      '</h4><p>نمونه تا ' + formatNumber(sampleLimit) + ' ردیف، ابتدا موارد تکراری:</p>' +
+      '<div class="bulk-preview-scroll"><table><thead><tr><th>IP / CIDR</th><th>Name</th><th>وضعیت مقصد</th><th>عملیات انتخاب‌شده</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  });
+  $("bulkIpamPreview").innerHTML = '<b>Portable JSON · محدوده ' + escapeHtml(preview.cidr) + '</b>' + sections.join("") +
+    '<p>جایگزینی، مشخصات و پورت‌های رکورد موجود را با اطلاعات فایل عوض می‌کند و موارد حذف‌شده را بازیابی می‌کند؛ شناسه مقصد حفظ می‌شود. رمزهای تجهیزات منتقل نمی‌شوند.</p>' +
+    '<p>این پیش‌نمایش داده‌ای ذخیره نمی‌کند. وضعیت مقصد ممکن است تغییر کند؛ مجوز، اعتبار فایل و تعارض‌ها هنگام ثبت دوباره بررسی می‌شوند.</p>';
+}
+
 function readBulkIpamFile(file) {
-  if (!file || !/\.(xlsx|csv)$/i.test(file.name) || file.size > 7 * 1024 * 1024) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
+  if (!file || file.size > MAX_SHEET_IMPORT_BYTES) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("خواندن فایل ممکن نیست."));
@@ -908,10 +958,11 @@ function renderOverview() {
   if (state.paintPrefix < selectionMinimum || state.paintPrefix > 24) state.paintPrefix = 24;
   if (state.drillPrefix < selectionMinimum || state.drillPrefix > 24) state.drillPrefix = 24;
   const overviewContent = state.overviewMode === "table" ? renderRootVerticalTable(root, hosts) : grid;
-  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر ردیف یک شبکهٔ /24 است و ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button><button class="btn" id="ipamCsvExport">خروجی CSV</button>${canWrite() ? `<button class="btn primary" id="ipamExcelImport">ورود Excel / CSV</button><button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
+  page.innerHTML = `<div class="headline"><div><div class="crumb">${escapeHtml(space.companyName)} ← رنج اصلی</div><h2 class="ltr mono">${escapeHtml(space.cidr)}</h2><div class="subtitle">${escapeHtml(space.name)} — هر ردیف یک شبکهٔ /24 است و ستون‌ها مرز دقیق رنج‌های بزرگ‌تر را نشان می‌دهند.</div></div><div class="head-actions"><button class="btn" id="companyBack">نمای شرکت</button><button class="btn" id="ipamCsvExport">خروجی CSV</button>${canWrite() ? `<button class="btn primary" id="ipamExcelImport">Import</button><button class="btn" id="editCurrentSpace">ویرایش رنج اصلی</button>` : ""}</div></div>
     <section class="stats"><div class="stat"><div class="label">کل آدرس‌ها</div><div class="value">${formatNumber(root.size)}</div><div class="foot ltr">${intToIpv4(root.start)} – ${intToIpv4(root.end)}</div></div><div class="stat"><div class="label">فضای تخصیص‌یافته</div><div class="value">${formatNumber(used)}</div><div class="progress"><i style="width:${Math.min(100, percent)}%"></i></div></div><div class="stat"><div class="label">فضای ثبت‌نشده</div><div class="value">${formatNumber(Math.max(0, root.size - used))}</div><div class="foot">${formatNumber(Math.max(0, 100 - percent))}٪ از کل شبکه</div></div><div class="stat"><div class="label">IP دارای اطلاعات</div><div class="value">${formatNumber(state.data.hosts.length)}</div><div class="foot">صرف‌نظر از نتیجهٔ پینگ</div></div></section>
-    <section class="panel"><div class="ipam-distribution-header"><b>نقشه موقعیت IPهای ثبت‌شده و زیرشبکه‌ها</b><span>رنگ پر: دارای IP ثبت‌شده · رنگ کم‌رنگ: زیرشبکه تعریف‌شده</span></div>${distribution}<div class="toolbar"><div class="toolgroup">${state.overviewMode === "table" ? `<b>نقشه رنج‌ها</b><span class="mode-note">روی متن CIDR برای ورود به همان رنج کلیک کنید؛ مربع کوچک کنار هر کادر فقط نام‌گذاری و رنگ همان رنج را باز می‌کند.</span>` : `<b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت رنج جدید"}</button>` : ""}`}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کاشی</button></div></div><div class="legend"><span><i class="dot used"></i>گروه ثبت‌شده</span><span><i class="dot record"></i>IP دارای اطلاعات</span><span><i class="dot free"></i>خالی/بدون گروه</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
+    <section class="panel"><div class="ipam-distribution-header"><b>نقشه موقعیت IPهای ثبت‌شده و زیرشبکه‌ها</b><span>رنگ پر: دارای IP ثبت‌شده · رنگ کم‌رنگ: زیرشبکه تعریف‌شده</span></div>${distribution}<div class="toolbar"><div class="toolgroup">${state.overviewMode === "table" ? `<b>نقشه رنج‌ها</b><span class="mode-note">روی متن CIDR برای ورود به همان رنج کلیک کنید؛ مربع کوچک کنار هر کادر فقط نام‌گذاری و رنگ همان رنج را باز می‌کند.</span>` : `<b>${state.paint ? "اندازه رنج جدید" : "اندازه نمایش"}</b>${prefixButtons(selectionMinimum, 24)}${canWrite() ? `<button class="btn ${state.paint ? "paint-active" : ""}" id="paintToggle">${state.paint ? "پایان ثبت رنج" : "ثبت رنج جدید"}</button>` : ""}`}${inheritedColorToggleHtml()}<div class="segmented"><button class="overview-mode ${state.overviewMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="overview-mode ${state.overviewMode === "cards" ? "active" : ""}" data-mode="cards">نمای کاشی</button></div></div><div class="legend"><span><i class="dot used"></i>گروه ثبت‌شده</span><span><i class="dot record"></i>IP دارای اطلاعات</span><span><i class="dot free"></i>خالی/بدون گروه</span></div></div><div class="map-wrap ${state.overviewMode === "table" ? "root-table-container" : ""}">${overviewContent}</div></section>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های ثبت‌شده</h3><span class="subtitle">${formatNumber(state.data.prefixes.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">هنوز رنجی ثبت نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>شرکت</span><b>${escapeHtml(space.companyName)}</b></div><div class="summary-item"><span>رنج اصلی</span><b class="ltr mono">${escapeHtml(space.cidr)}</b></div><div class="summary-item"><span>زیررنج‌ها</span><b>${formatNumber(state.data.prefixes.length)}</b></div><div class="summary-item"><span>درصد استفاده</span><b>${formatNumber(percent)}٪</b></div></div></section></div>`;
+  attachInheritedColorToggle(renderOverview);
   $("companyBack").addEventListener("click", () => openCompanyPage(space.companyId));
   $("ipamExcelImport")?.addEventListener("click", () => openBulkIpamDialog(space.id));
   $("ipamCsvExport")?.addEventListener("click", () => window.location.assign(`/api/spaces/${encodeURIComponent(space.id)}/hosts.csv`));
@@ -1123,16 +1174,19 @@ function renderSheet() {
   const contextRange = containingRanges[0]?.item || null;
   const contextInfo = contextRange ? prefixInfo(contextRange) : root;
   const contextIsExact = contextInfo.cidr === selected.cidr;
-  const sheetColor = contextRange?.color || space.color;
+  const sheetColor = effectiveSubnetColor(selected.cidr);
   const contextTitle = contextRange?.name || space.name;
   const contextDescription = contextRange?.description || contextRange?.role || space.description || "بدون توضیح ثبت‌شده";
   const usable = blockCount * 254;
   page.innerHTML = `<section class="sheet-banner" style="--sheet-color:${escapeHtml(sheetColor)}"><div class="sheet-color"></div><div class="sheet-main"><div class="sheet-title"><button id="overviewBack" class="back">← نمای رنج اصلی</button><div><div class="subtitle">رنج انتخاب‌شده</div><h2 class="ltr mono">${escapeHtml(selected.cidr)}</h2><p>${escapeHtml(space.companyName)} ← ${escapeHtml(space.name)} — ${formatNumber(blockCount)} جدول /24</p></div><div class="sheet-context"><i></i><div><span>${contextIsExact ? "مشخصات همین رنج" : `رنج ثبت‌شدهٔ والد /${contextInfo.prefix}`}</span><b>${escapeHtml(contextTitle)}</b><small class="mono ltr">${escapeHtml(contextInfo.cidr)}</small><em>${escapeHtml(contextDescription)}</em></div></div></div><div class="util"><div><b>${formatNumber(hostCount)}</b><div class="subtitle">IP ثبت‌شده</div></div><div class="ring" style="--p:${Math.round(hostCount / Math.max(1, usable) * 100)}" data-value="${formatNumber(Math.round(hostCount / Math.max(1, usable) * 100))}٪"></div></div><div class="sheet-nav"><button class="btn sm" id="prevSheet" ${selectionIndex <= 0 ? "disabled" : ""}>قبلی</button><select id="sheetSelect">${options}</select><button class="btn sm" id="nextSheet" ${selectionIndex >= selectionCount - 1 ? "disabled" : ""}>بعدی</button></div></div></section>
-    <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span></div></section>
+    <section class="panel view-controls"><div class="toolbar"><div class="toolgroup"><b>حالت نمایش</b><div class="segmented"><button class="display-mode ${state.displayMode === "classic" ? "active" : ""}" data-mode="classic">نمای تصویری</button><button class="display-mode ${state.displayMode === "table" ? "active" : ""}" data-mode="table">جدول عمودی</button><button class="display-mode ${state.displayMode === "tree" ? "active" : ""}" data-mode="tree">نمای درختی</button></div>${canWrite() && selected.prefix === 24 ? `<button class="btn" id="scanButton" ${state.scanning ? "disabled" : ""}>${state.scanning ? "در حال پینگ…" : "پینگ مجدد"}</button>` : ""}</div><span class="mode-note">در جدول عمودی، هر سطر یک IP است و گروه‌های /30 تا /24 در ستون‌های کنار آن قرار دارند.</span>${canWrite() ? `<button type="button" class="btn sm" id="sheetPortableImport">Import</button>` : ""}</div></section>
+    <div class="ipam-inheritance-control">${inheritedColorToggleHtml()}<small>خاموش: فقط رنگ اختصاصی هر زیرSubnet نمایش داده می‌شود؛ رنگ‌های ذخیره‌شده حذف نمی‌شوند.</small></div>
     <div class="sheet-search-bar"><label for="sheetLiveSearch">جست‌وجو در جدول</label><input type="search" id="sheetLiveSearch" autocomplete="off" placeholder="IP، Hostname، نام Subnet…" aria-describedby="sheetSearchCount"><small id="sheetSearchCount" aria-live="polite">برای جست‌وجو تایپ کنید</small></div>
     <div class="detail-stack">${blocks}</div>
     <div class="lower-grid"><section class="panel"><div class="section-title"><h3>رنج‌های مرتبط</h3><span class="subtitle">${formatNumber(relevant.length)} رنج</span></div><div class="range-list">${rangeRows || `<div class="empty-state">برای این محدوده رنجی تعریف نشده است.</div>`}</div></section><section class="panel"><div class="section-title"><h3>خلاصه</h3></div><div class="summary-list"><div class="summary-item"><span>تعداد جدول /24</span><b>${formatNumber(blockCount)}</b></div><div class="summary-item"><span>IP ثبت‌شده</span><b>${formatNumber(hostCount)}</b></div><div class="summary-item"><span>پاسخ پینگ</span><b>${formatNumber(onlineCount)}</b></div><div class="summary-item"><span>رنج مرتبط</span><b>${formatNumber(relevant.length)}</b></div></div></section></div>`;
+  attachInheritedColorToggle(renderSheet);
   $("sheetLiveSearch")?.addEventListener("input", (event) => applySheetLiveSearch(event.target.value,true));
+  $("sheetPortableImport")?.addEventListener("click", () => openBulkIpamDialog(space.id));
   $("overviewBack").addEventListener("click", () => { state.view = "overview"; state.paint = false; renderOverview(); });
   $("prevSheet").addEventListener("click", () => { if (selectionIndex > 0) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex - 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
   $("nextSheet").addEventListener("click", () => { if (selectionIndex < selectionCount - 1) { state.sheetCidr = `${intToIpv4(root.start + (selectionIndex + 1) * selected.size)}/${selected.prefix}`; renderSheet(); } });
@@ -2032,13 +2086,16 @@ function syncImportSpaces() {
   $("importSpace").innerHTML = spaces.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} — ${escapeHtml(item.cidr)}</option>`).join("");
 }
 
-function openImportDialog() {
+function openImportDialog(destinationSpaceId = null) {
   $("importForm").reset();
   state.importPackage = null;
   const companies = state.bootstrap.companies.filter((item) => canManageCompany(item.id));
   $("importCompany").innerHTML = companies.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
-  $("importCompany").value = companies.some((item) => item.id === state.currentCompanyId) ? state.currentCompanyId : companies[0]?.id || "";
+  const destination = destinationSpaceId ? state.bootstrap.spaces.find((item) => item.id === destinationSpaceId) : null;
+  const preferredCompany = destination?.companyId || state.currentCompanyId;
+  $("importCompany").value = companies.some((item) => item.id === preferredCompany) ? preferredCompany : companies[0]?.id || "";
   syncImportSpaces();
+  if (destination && [...$("importSpace").options].some((option) => option.value === destination.id)) $("importSpace").value = destination.id;
   $("importFileSummary").textContent = "هنوز فایلی انتخاب نشده است.";
   markFormClean($("importForm"));
   $("importDialog").showModal();
@@ -2147,47 +2204,102 @@ $("networkMapButton").addEventListener("click", () => { window.location.href = "
 $("topologyButton").addEventListener("click", () => { window.location.href = "/network-map/"; });
 $("backupsButton").addEventListener("click", openBackupsDialog);
 $("trashButton").addEventListener("click", openTrashDialog);
-$("importButton").addEventListener("click", openImportDialog);
+$("importButton").addEventListener("click", () => openBulkIpamDialog());
 
 $("bulkIpamCompany").addEventListener("change", syncBulkIpamSpaces);
 $("bulkIpamSpace").addEventListener("change", resetBulkIpamPreview);
-$("bulkIpamFile").addEventListener("change", () => { state.bulkIpamFile = null; resetBulkIpamPreview(); });
-$("bulkIpamForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = event.currentTarget.querySelector('[type="submit"]');
-  button.disabled = true;
-  try {
-    const file = $("bulkIpamFile").files?.[0];
-    const base64 = await readBulkIpamFile(file);
-    const body = { destinationSpaceId: $("bulkIpamSpace").value, filename: file.name, base64 };
-    const response = await request("/api/imports/ipam/preview", { method: "POST", body });
-    state.bulkIpamFile = body;
-    state.bulkIpamPreview = response;
-    const s = response.summary;
-    const samples = response.sample.map((item) => '<tr><td>' + escapeHtml(item.ip) + '</td><td>' + escapeHtml(item.name) + '</td><td>' + escapeHtml(item.notes) + '</td></tr>').join('');
-    const errors = (response.errors || []).map((item) => '<li>سطر ' + item.row + ' — ' + escapeHtml(item.ip + ': ' + item.reason) + '</li>').join('');
-    $("bulkIpamPreview").innerHTML = '<b>کل ردیف‌ها: ' + formatNumber(s.total) + ' · معتبر: ' + formatNumber(s.valid) +
-      ' · جدید: ' + formatNumber(s.newRecords) + ' · موجود: ' + formatNumber(s.existing) + ' · خطا: ' + formatNumber(s.invalid) + '</b>' +
-      '<div class="bulk-preview-scroll"><table><thead><tr><th>IP</th><th>Name</th><th>Description</th></tr></thead><tbody>' + samples + '</tbody></table></div>' +
-      (errors ? '<p>خطاها (حداکثر ۳۰ مورد):</p><ul>' + errors + '</ul>' : '');
-    $("bulkIpamCommit").disabled = s.valid === 0;
-  } catch (error) { resetBulkIpamPreview(); $("bulkIpamPreview").textContent = error.message; toast(error.message); }
-  finally { button.disabled = false; }
+$("bulkIpamDialog").addEventListener("close", resetBulkIpamPreview);
+$("bulkIpamMode").addEventListener("change", () => {
+  if (state.bulkIpamPreview?.kind === "portable") renderPortableImportPreview(state.bulkIpamPreview);
 });
-$("bulkIpamCommit").addEventListener("click", async () => {
-  if (!state.bulkIpamFile || !state.bulkIpamPreview) return;
-  if (!confirm("آیا ثبت IPهای معتبر با رفتار انتخاب‌شده را تأیید می‌کنید؟")) return;
-  const button = $("bulkIpamCommit"); button.disabled = true;
+$("bulkIpamFile").addEventListener("change", async () => {
+  state.bulkIpamFile=null;
+  resetBulkIpamPreview();
+  const file=$("bulkIpamFile").files?.[0];
+  if(!file)return;
   try {
-    const saved = await request("/api/imports/ipam/commit", { method: "POST", body: { ...state.bulkIpamFile, mode: $("bulkIpamMode").value } });
+    const detected=await classifyIpamImportFile(file);
+    if ($("bulkIpamFile").files?.[0] !== file || !$("bulkIpamDialog").open) return;
+    $("bulkIpamFileTypeHint").textContent=detected.kind==="portable"
+      ? "Portable JSON شناسایی شد؛ شامل Subnetها، IPها و مشخصات تجهیزات."
+      : "Excel/CSV شناسایی شد؛ ستون‌های A=IP، B=Name، C=Description.";
+    $("bulkIpamUpdateMode").textContent=detected.kind==="portable"
+      ? "جایگزینی موارد تکراری از بسته JSON"
+      : "به‌روزرسانی فقط نام و توضیحات (Excel/CSV)";
+  }catch(error){
+    if ($("bulkIpamFile").files?.[0] !== file || !$("bulkIpamDialog").open) return;
+    $("bulkIpamFileTypeHint").textContent=error.message;toast(error.message);
+  }
+});
+$("bulkIpamForm").addEventListener("submit",async event=>{
+  event.preventDefault();
+  resetBulkIpamPreview();
+  const revision = state.bulkIpamRevision;
+  const file = $("bulkIpamFile").files?.[0];
+  const destinationSpaceId = $("bulkIpamSpace").value;
+  const isCurrent = () => revision === state.bulkIpamRevision && $("bulkIpamDialog").open;
+  const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
+  try {
+    const identified=await classifyIpamImportFile(file);
+    if (!isCurrent()) return;
+    if(identified.kind==="portable"){
+      const payload = identified.payload;
+      const response = await request("/api/imports/subnet/preview", {
+        method: "POST", body: { destinationSpaceId, package: payload },
+      });
+      if (!isCurrent()) return;
+      state.bulkIpamFile = { kind: "portable", destinationSpaceId, payload };
+      state.bulkIpamPreview = { kind: "portable", ...response };
+      renderPortableImportPreview(response);
+      $("bulkIpamCommit").disabled = !(response.summary.prefixes.total || response.summary.hosts.total);
+    }else{
+      const base64=await readBulkIpamFile(file);
+      if (!isCurrent()) return;
+      const body={destinationSpaceId,filename:file.name,base64};
+      const response=await request("/api/imports/ipam/preview",{method:"POST",body});
+      if (!isCurrent()) return;
+      state.bulkIpamFile={kind:"sheet",...body};
+      state.bulkIpamPreview=response;
+      const summary=response.summary;
+      const samples=response.sample.map(item=>'<tr><td>'+escapeHtml(item.ip)+'</td><td>'+escapeHtml(item.name)+'</td><td>'+escapeHtml(item.notes)+'</td></tr>').join("");
+      const errors=(response.errors||[]).map(item=>'<li>سطر '+item.row+' — '+escapeHtml(item.ip+': '+item.reason)+'</li>').join("");
+      $("bulkIpamPreview").innerHTML='<b>Excel/CSV · کل: '+formatNumber(summary.total)+' · معتبر: '+formatNumber(summary.valid)+
+        ' · جدید: '+formatNumber(summary.newRecords)+' · موجود: '+formatNumber(summary.existing)+
+        ' · خطا: '+formatNumber(summary.invalid)+'</b><div class="bulk-preview-scroll"><table><thead><tr><th>IP</th><th>Name</th><th>Description</th></tr></thead><tbody>'+samples+'</tbody></table></div>'+
+        (errors?'<p>خطاها:</p><ul>'+errors+'</ul>':'');
+      $("bulkIpamCommit").disabled=summary.valid===0;
+    }
+  }catch(error){
+    if (!isCurrent()) return;
+    resetBulkIpamPreview();$("bulkIpamPreview").textContent=error.message;toast(error.message);
+  }
+  finally{button.disabled=false;}
+});
+$("bulkIpamCommit").addEventListener("click",async()=>{
+  const source=state.bulkIpamFile;
+  if(!source||!state.bulkIpamPreview)return;
+  if(!confirm("ورود اطلاعات با نحوه برخورد انتخاب‌شده تأیید می‌شود؟"))return;
+  const button=$("bulkIpamCommit");button.disabled=true;
+  try{
+    let result;
+    if(source.kind==="portable"){
+      const mode=$("bulkIpamMode").value==="update"?"replace":"skip";
+      const saved=await request("/api/imports/subnet",{method:"POST",body:{destinationSpaceId:source.destinationSpaceId,mode,package:source.payload}});
+      result=saved.result;
+      toast(formatNumber(result.prefixesCreated+result.prefixesUpdated)+" زیرSubnet و "+
+        formatNumber(result.hostsCreated+result.hostsUpdated)+" IP/تجهیز وارد شد.");
+    }else{
+      const saved=await request("/api/imports/ipam/commit",{method:"POST",body:{destinationSpaceId:source.destinationSpaceId,filename:source.filename,base64:source.base64,mode:$("bulkIpamMode").value}});
+      result=saved.result;
+      toast(formatNumber(result.created)+" جدید، "+formatNumber(result.updated)+" به‌روزرسانی، "+
+        formatNumber(result.skipped)+" تکراری، "+formatNumber(result.invalid)+" خطادار");
+    }
     $("bulkIpamDialog").close();
-    state.bootstrap = await request("/api/bootstrap");
-    await loadSpace(state.bulkIpamFile.destinationSpaceId);
-    const result = saved.result;
-    toast(formatNumber(result.created) + " جدید، " + formatNumber(result.updated) + " به‌روزرسانی، " + formatNumber(result.skipped) + " تکراری، " + formatNumber(result.invalid) + " خطادار");
-    state.bulkIpamFile = null; state.bulkIpamPreview = null;
-  } catch (error) { toast(error.message); }
-  finally { button.disabled = false; }
+    state.bootstrap=await request("/api/bootstrap");
+    await loadSpace(source.destinationSpaceId);
+    state.bulkIpamFile=null;state.bulkIpamPreview=null;
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
 });
 
 $("aboutButton").addEventListener("click", openAboutDialog);

@@ -16,7 +16,7 @@ test('fresh install, revocation and renamed/deleted types survive repeated start
    UPDATE device_types SET name='Core switch' WHERE id='builtin-switch';
    DELETE FROM device_types WHERE id='builtin-camera';`);
   await migrateDatabase(pool);await migrateDatabase(pool);
-  assert.equal((await pool.query(`SELECT column_default FROM information_schema.columns WHERE table_name='prefixes' AND column_name='inherit_color_to_children'`)).rows[0].column_default,'true');
+  assert.equal((await pool.query(`SELECT column_default FROM information_schema.columns WHERE table_name='prefixes' AND column_name='inherit_color_to_children'`)).rows[0].column_default,'false');
   assert.equal((await pool.query("SELECT name FROM device_types WHERE id='builtin-switch'")).rows[0].name,'Core switch');
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM device_types WHERE id='builtin-camera'")).rows[0].n,0);
   assert.deepEqual((await pool.query("SELECT module_id FROM user_module_access WHERE user_id='u'")).rows,[{module_id:'radio'}]);

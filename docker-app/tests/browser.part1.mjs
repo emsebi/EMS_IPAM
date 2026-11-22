@@ -20,6 +20,32 @@ let serverLog = '';
 const checks = [];
 const check = (name) => { checks.push(name); console.log(`PASS: ${name}`); };
 let browser, page;
+// Resolve and measure the current DOM in one browser task. A locator can retain
+// a detached grid while an asynchronous Device Types refresh replaces page HTML.
+function readDeviceTypeLayout(expectedIds) {
+  const grid = document.getElementById('deviceTypesList');
+  if (!grid?.isConnected) return null;
+  const renderedIds = new Set([...grid.querySelectorAll('.edit-device-type')].map(button => button.dataset.id));
+  if (!expectedIds.every(id => renderedIds.has(id))) return null;
+  const rows = [...grid.querySelectorAll('.device-type-item')];
+  const rectangles = rows.map(row => row.getBoundingClientRect());
+  if (!rows.length || rectangles.some(rect => rect.width <= 0 || rect.height <= 0)) return null;
+  const first = rows[0], name = first.querySelector('.device-type-info b').getBoundingClientRect();
+  const actions = first.querySelector('.device-type-actions').getBoundingClientRect();
+  return {
+    columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+    positions: rectangles.map(rect => ({ x: Math.round(rect.x), y: Math.round(rect.y) })),
+    firstRowCenterDelta: Math.abs((name.top + name.bottom) / 2 - (actions.top + actions.bottom) / 2),
+    actionsWrap: getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
+    firstHeight: rectangles[0].height,
+    cards: rows.map((row, i) => ({ width: rectangles[i].width, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth })),
+  };
+}
+async function waitForDeviceTypeLayout(expectedIds) {
+  const result = await page.waitForFunction(readDeviceTypeLayout, expectedIds);
+  try { return await result.jsonValue(); }
+  finally { await result.dispose(); }
+}
 try {
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`Server startup timed out: ${serverLog}`)), 30000);
@@ -59,36 +85,6 @@ try {
   await page.locator('#loginForm [type=submit]').click();
   await page.locator('#deviceTypesButton').waitFor({ state: 'visible' });
   check('real login and application bootstrap');
-  // Per-prefix inheritance is persisted, opt-out stays false after reload,
-  // and migration defaults existing prefixes to the earlier inherited behavior.
-  const colorSpace=await api('/api/spaces','POST',{companyId:'test-co',name:'Color inheritance isolated test',cidr:'198.18.52.0/24'},201);
-  const parentPref=await api('/api/prefixes','POST',{
-    spaceId:colorSpace.id,cidr:'198.18.52.128/26',name:'Color propagation fixture',
-    color:'#334455',inheritColorToChildren:false
-  });
-  let prefData=await api('/api/spaces/'+colorSpace.id+'/data');
-  assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,false);
-  await api('/api/prefixes','POST',{
-    id:parentPref.id,spaceId:colorSpace.id,cidr:'198.18.52.128/26',name:'Color propagation fixture',
-    color:'#334455',inheritColorToChildren:true
-  });
-  prefData=await api('/api/spaces/'+colorSpace.id+'/data');
-  assert.equal(prefData.prefixes.find(p=>p.id===parentPref.id)?.inheritColorToChildren,true);
-  assert.equal(await page.locator('#prefixInheritColorToChildren').count(),1);
-  const unnamedWhite=await api('/api/prefixes','POST',{
-    spaceId:colorSpace.id,cidr:'198.18.52.160/27',name:'',color:'#ffffff',inheritColorToChildren:false
-  });
-  prefData=await api('/api/spaces/'+colorSpace.id+'/data');
-  const whiteChild=prefData.prefixes.find(p=>p.id===unnamedWhite.id);
-  assert.equal(whiteChild?.color,'#ffffff','White must remain a stored explicit child color');
-  assert.equal(whiteChild?.name,'198.18.52.160/27','Empty name saves as the CIDR fallback');
-  assert.equal(whiteChild?.inheritColorToChildren,false);
-  await api('/api/prefixes/'+unnamedWhite.id,'DELETE');
-
-  await api('/api/prefixes/'+parentPref.id,'DELETE');
-  await api('/api/spaces/'+colorSpace.id,'DELETE');
-  check('per-subnet color inheritance persists and checkbox exists in subnet editor');
-
   // The header search is live, not a submit form. Ctrl+K disappears while typing.
   await page.locator('#searchInput').fill('192.0.2.50');
   await page.locator('#searchResults').waitFor({state:'visible'});
@@ -140,16 +136,35 @@ try {
     const created=await api('/api/device-types','POST',{name:'Layout Preview '+n,color:'#3157d5'},201);
     demoTypeIds.push(created.id);
   }
-  await page.locator('#deviceTypesButton').click();
-  await page.waitForFunction(()=>document.querySelectorAll('#deviceTypesList .device-type-item').length>=6);
-  const desktopLayout=await page.locator('#deviceTypesList').evaluate(grid=>{
-    const rows=[...grid.querySelectorAll('.device-type-item')],columns=getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-    const positions=rows.map(item=>({x:Math.round(item.getBoundingClientRect().x),y:Math.round(item.getBoundingClientRect().y)}));
-    const first=rows[0],name=first.querySelector('.device-type-info b').getBoundingClientRect(),actions=first.querySelector('.device-type-actions').getBoundingClientRect();
-    return {columns,positions,firstRowCenterDelta:Math.abs((name.top+name.bottom)/2-(actions.top+actions.bottom)/2),
-      actionsWrap:getComputedStyle(first.querySelector('.device-type-actions')).flexWrap,
-      firstHeight:first.getBoundingClientRect().height};
+  // Hold the real refresh response: existing rows already exceed the former
+  // count threshold, but must not qualify as the newly requested layout.
+  let releaseTypes, typesReceived, typesDeadline;
+  const heldTypes = new Promise(resolve => { releaseTypes = resolve; });
+  const receivedTypes = new Promise((resolve, reject) => {
+    typesReceived = resolve;
+    typesDeadline = setTimeout(() => reject(new Error('Device Types refresh response was not intercepted')), 12000);
   });
+  const holdTypes = async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    typesReceived();
+    await heldTypes;
+    await route.fulfill({ response });
+  };
+  await page.route('**/api/device-types', holdTypes);
+  let desktopLayout;
+  try {
+    await page.locator('#deviceTypesButton').click();
+    await receivedTypes;
+    assert.equal(await page.evaluate(readDeviceTypeLayout, demoTypeIds), null,
+      'Existing rows must not satisfy readiness while the real refresh is held');
+    releaseTypes();
+    desktopLayout = await waitForDeviceTypeLayout(demoTypeIds);
+  } finally {
+    releaseTypes();
+    clearTimeout(typesDeadline);
+    await page.unroute('**/api/device-types', holdTypes);
+  }
   assert.ok(desktopLayout.columns>=2,'Device Types desktop must have multiple columns: '+JSON.stringify(desktopLayout));
   assert.ok(new Set(desktopLayout.positions.map(p=>p.x)).size>=2,'Cards should occupy multiple horizontal columns');
   assert.ok(desktopLayout.firstRowCenterDelta<15,'Name and Edit/Delete must appear on the same line');
@@ -157,10 +172,7 @@ try {
   assert.ok(desktopLayout.firstHeight<=64,'Device Type rows should be compact: '+desktopLayout.firstHeight);
   await page.screenshot({path:path.join(outputDir,'device-types-compact-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
-  const mobileLayout=await page.locator('#deviceTypesList').evaluate(grid=>({
-    columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length,
-    cards:[...grid.querySelectorAll('.device-type-item')].map(el=>({width:el.getBoundingClientRect().width,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth}))
-  }));
+  const mobileLayout = await waitForDeviceTypeLayout(demoTypeIds);
   assert.equal(mobileLayout.columns,1,'Device Types mobile should be a single column');
   assert.ok(mobileLayout.cards.every(c=>c.scrollWidth<=c.clientWidth+2),'Device Type action buttons must not overflow mobile cards');
   await page.screenshot({path:path.join(outputDir,'device-types-compact-mobile.png'),fullPage:true});
@@ -257,9 +269,186 @@ try {
   await ipamPreview.locator('.display-mode[data-mode="table"]').click();
   await ipamPreview.locator('.vertical-subnet-table tbody tr').first().waitFor();
   await ipamPreview.screenshot({ path: path.join(outputDir, 'ipam.png'), fullPage: true });
+  // A single Import button accepts the same Portable JSON export as Excel/CSV.
+  const beforePortablePreview = await api('/api/spaces/test-space/data');
+  await ipamPreview.locator('#sheetPortableImport').click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
+  const accept=await ipamPreview.locator('#bulkIpamFile').getAttribute('accept');
+  for(const extension of ['.json','.xlsx','.csv'])assert.ok(accept.includes(extension));
+  const importRequests = [];
+  const recordImport = request => { if (new URL(request.url()).pathname.startsWith('/api/imports/')) importRequests.push(request.url()); };
+  ipamPreview.on('request', recordImport);
+  try {
+    for (const [name, buffer] of [['empty.csv', Buffer.alloc(0)], ['binary.csv', Buffer.from([0xff, 0xfe, 0x49, 0])],
+      ['wrong-schema.xlsx', Buffer.from('[]')]]) {
+      await ipamPreview.locator('#bulkIpamFile').setInputFiles({ name, mimeType: 'text/csv', buffer });
+      await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
+      await ipamPreview.waitForFunction(() => /UTF-8|معتبر/.test(document.getElementById('bulkIpamPreview').textContent));
+      await ipamPreview.locator('#bulkIpamForm [type=submit]:not([disabled])').waitFor();
+      assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), true);
+    }
+    assert.deepEqual(importRequests, [], 'invalid non-workbook content must not reach a write or preview route');
+    await ipamPreview.locator('#bulkIpamFile').setInputFiles({ name: 'truncated.csv', mimeType: 'text/csv', buffer: Buffer.from([0x50, 0x4b, 3, 4]) });
+    const [badZip] = await Promise.all([
+      ipamPreview.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+      ipamPreview.locator('#bulkIpamForm [type=submit]').click(),
+    ]);
+    assert.equal(badZip.status(), 400, 'ZIP signature alone is not a valid Excel workbook');
+    await ipamPreview.locator('#bulkIpamForm [type=submit]:not([disabled])').waitFor();
+    assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), true);
+    assert.deepEqual(await api('/api/spaces/test-space/data'), beforePortablePreview);
+  } finally { ipamPreview.off('request', recordImport); }
+  check('unified picker rejects empty/binary/wrong-schema input and server rejects truncated XLSX without writes');
+  await ipamPreview.locator('#bulkIpamFile').setInputFiles({
+    name:'export-without-extension',mimeType:'application/octet-stream',
+    buffer:Buffer.from('\ufeff' + ' '.repeat(1024) + JSON.stringify({format:'EMS-IPAM-SUBNET',formatVersion:1,
+      source:{cidr:'192.0.2.0/24'},prefixes:[],hosts:[{ip:'192.0.2.48',name:'Portable preview'}]}))
+  });
+  await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
+  await ipamPreview.locator('#bulkIpamCommit:not([disabled])').waitFor();
+  assert.ok((await ipamPreview.locator('#bulkIpamPreview').innerText()).includes('Portable JSON'));
+  // Refusing dirty-form cancellation keeps the preview; accepting must close it without importing.
+  ipamPreview.once('dialog', dialog => dialog.dismiss());
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  assert.equal(await ipamPreview.locator('#bulkIpamDialog').isVisible(), true);
+  assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), false);
+  ipamPreview.once('dialog', dialog => dialog.accept());
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'hidden'});
+  assert.deepEqual(await api('/api/spaces/test-space/data'), beforePortablePreview, 'preview/cancel must not write');
+  await ipamPreview.locator('#overviewBack').click();
+  await ipamPreview.locator('#ipamExcelImport').click();
+  await ipamPreview.locator('#bulkIpamDialog').waitFor({state:'visible'});
+  assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
+  assert.equal(await ipamPreview.locator('#ipamPortableImport').count(),0);
+  await ipamPreview.locator('#bulkIpamDialog [data-close]').first().click();
+  check('Unified IPAM Import detects Portable JSON and accepts Excel/CSV in the same dialog');
   await ipamPreview.close();
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
+
+  // Fresh browser preferences default OFF; display changes never write prefix data.
+  const colorSpace = await api('/api/spaces', 'POST', {
+    companyId: 'test-co', name: 'Inherited display fixture', cidr: '198.18.64.0/22', color: '#aabbcc',
+  }, 201);
+  for (const [cidr, color] of [['198.18.64.0/23', '#3157d5'], ['198.18.65.0/24', '#ffffff'],
+    ['198.18.64.128/25', '#11aa55'], ['198.18.64.0/26', '#ffffff']]) {
+    await api('/api/prefixes', 'POST', { spaceId: colorSpace.id, cidr, name: 'Stored ' + cidr, color, inheritColorToChildren: true });
+  }
+  const colorBefore = await api(`/api/spaces/${colorSpace.id}/data`);
+  const siblingBeforeColors = await api('/api/spaces/test-space/data');
+  const colorContext = await browser.newContext({ baseURL, viewport: { width: 1440, height: 980 },
+    storageState: { cookies: (await context.storageState()).cookies, origins: [] } });
+  const colorPage = await colorContext.newPage();
+  colorPage.setDefaultTimeout(12000);
+  colorPage.on('pageerror', error => errors.push(error.message));
+  const colorWrites = [];
+  colorPage.on('request', request => {
+    if (!['GET', 'HEAD'].includes(request.method())) colorWrites.push(request.method() + ' ' + request.url());
+  });
+  const colorToggle = colorPage.locator('.ipam-inheritance-display');
+  const renderedColor = async (selector, property = '--range-color') =>
+    colorPage.locator(selector).evaluate((element, key) => getComputedStyle(element).getPropertyValue(key).trim(), property);
+  const assertOverviewColors = async inherited => {
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.64.0/24"]'), inherited ? '#3157d5' : '#eef2f7');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.65.0/24"]'), '#ffffff', 'exact white survives either display setting');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.66.0/24"]'), inherited ? '#aabbcc' : '#eef2f7');
+    assert.equal(await renderedColor('.root-prefix-open[data-cidr="198.18.64.0/22"]'), '#aabbcc', 'Space keeps its own stored color');
+    assert.equal(await renderedColor('.root-prefix-open[data-cidr="198.18.64.0/23"]'), '#3157d5', 'parent keeps its own stored color');
+  };
+  const assertDetailColors = async (mode, inherited) => {
+    const selector = mode === 'table' ? '.table-prefix' : '.tree-node';
+    for (const [cidr, expected] of [['198.18.64.128/25', '#11aa55'], ['198.18.64.0/26', '#ffffff'],
+      ['198.18.64.64/26', inherited ? '#3157d5' : '#eef2f7'],
+      ['198.18.64.128/26', inherited ? '#11aa55' : '#eef2f7'],
+      ['198.18.64.0/27', inherited ? '#ffffff' : '#eef2f7']]) {
+      assert.equal(await renderedColor(`${selector}[data-cidr="${cidr}"]`), expected, `${mode}: ${cidr}`);
+    }
+    assert.equal(await renderedColor('.sheet-banner', '--sheet-color'), inherited ? '#3157d5' : '#eef2f7');
+  };
+  try {
+    await colorPage.goto(`/#/ipam/${colorSpace.id}`);
+    await colorToggle.waitFor();
+    assert.equal(await colorPage.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')), null);
+    assert.equal(await colorToggle.isChecked(), false, 'fresh browser defaults OFF');
+    await assertOverviewColors(false);
+    await colorToggle.check();
+    await assertOverviewColors(true);
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), true, 'explicit ON survives reload');
+    await assertOverviewColors(true);
+    await colorPage.locator('.overview-mode[data-mode="cards"]').click();
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.64.0/24"]', '--tile-color'), '#3157d5');
+    await colorToggle.uncheck();
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.64.0/24"]', '--tile-color'), '#eef2f7');
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.65.0/24"]', '--tile-color'), '#ffffff');
+    await colorPage.goto(`/#/ipam/${colorSpace.id}/198.18.64.0%2F24`);
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), false, 'OFF persists across navigation');
+    for (const mode of ['table', 'tree']) {
+      await colorPage.locator(`.display-mode[data-mode="${mode}"]`).click();
+      await assertDetailColors(mode, false);
+      await colorToggle.check();
+      await assertDetailColors(mode, true);
+      await colorToggle.uncheck();
+      await assertDetailColors(mode, false);
+    }
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), false, 'explicit OFF survives reload');
+    await assertDetailColors('tree', false);
+    assert.equal(await colorPage.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')), 'false');
+    assert.deepEqual(colorWrites, [], 'display-only toggle must not send any write request');
+    assert.deepEqual(await api(`/api/spaces/${colorSpace.id}/data`), colorBefore, 'all stored colors, names and IDs remain unchanged');
+    assert.deepEqual(await api('/api/spaces/test-space/data'), siblingBeforeColors, 'sibling data remains unchanged');
+    check('inherited color display defaults OFF, preserves exact/white colors and data, and persists across overview/card/table/tree views');
+    // Persisted ownership is separate from the display preference. Opting a
+    // parent out blocks distant ancestors but leaves exact child colors intact.
+    await colorToggle.check();
+    await colorPage.goto(`/#/ipam/${colorSpace.id}`);
+    await colorPage.locator('.overview-mode[data-mode="table"]').click();
+    await colorPage.locator('.range-label-action[data-cidr="198.18.64.0/23"]').click();
+    const inheritChoice = colorPage.locator('#prefixInheritColorToChildren');
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), true);
+    await inheritChoice.uncheck();
+    await colorPage.locator('#prefixForm [type=submit]').click();
+    await colorPage.locator('#prefixDialog').waitFor({ state: 'hidden' });
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), true, 'display remains ON independently');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.64.0/24"]'), '#eef2f7', 'nearest opt-out blocks Space fallback');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.65.0/24"]'), '#ffffff');
+    await colorPage.locator('.range-label-action[data-cidr="198.18.64.0/23"]').click();
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), false, 'saved per-prefix OFF survives reload');
+    await colorPage.locator('#prefixDialog [data-close]').first().click();
+    await colorPage.locator('.range-label-action[data-cidr="198.18.66.0/23"]').click();
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), false, 'new prefix editor defaults OFF');
+    assert.equal(await colorPage.locator('#prefixName').getAttribute('required'), null, 'coloring does not require a typed name');
+    await colorPage.locator('#prefixDialog [data-close]').first().click();
+    await colorPage.goto(`/#/ipam/${colorSpace.id}/198.18.64.0%2F24`);
+    await colorPage.locator('.display-mode[data-mode="table"]').click();
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.64/26"]'), '#eef2f7');
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.128/26"]'), '#11aa55', 'nearer opted-in child still propagates');
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.0/26"]'), '#ffffff');
+    const afterChoice = await api(`/api/spaces/${colorSpace.id}/data`);
+    const parentBefore = colorBefore.prefixes.find(p => p.cidr === '198.18.64.0/23');
+    const parentAfter = afterChoice.prefixes.find(p => p.id === parentBefore.id);
+    assert.equal(parentAfter.inheritColorToChildren, false);
+    const { updatedAt: oldTime, ...oldFields } = parentBefore;
+    const { updatedAt: newTime, ...newFields } = parentAfter;
+    assert.deepEqual(newFields, { ...oldFields, inheritColorToChildren: false });
+    assert.deepEqual(afterChoice.prefixes.filter(p => p.id !== parentBefore.id), colorBefore.prefixes.filter(p => p.id !== parentBefore.id));
+    assert.deepEqual(await api('/api/spaces/test-space/data'), siblingBeforeColors);
+    check('per-prefix color propagation defaults OFF, persists independently, and preserves exact child white and nearer opt-in');
+  } finally {
+    await colorContext.close();
+    await api(`/api/spaces/${colorSpace.id}`, 'DELETE');
+  }
 
   await page.locator('#deviceTypesButton').click();
   const row = page.locator('#deviceTypesList .user-row').filter({ has: page.getByText('Test Device', { exact: true }) });
@@ -1328,8 +1517,8 @@ try {
   assert.equal(await page.locator('#appView').evaluate((node)=>node.classList.contains('sidebar-collapsed')),false);
   await page.locator('#ipamExcelImport').click();
   await page.locator('#bulkIpamDialog').waitFor();
-  await page.locator('#bulkIpamFile').setInputFiles({ name:'import.csv', mimeType:'text/csv',
-    buffer:Buffer.from('IP,Name,Description\n192.0.2.82,From Panel,Created through preview') });
+  await page.locator('#bulkIpamFile').setInputFiles({ name:'csv-renamed.xlsx', mimeType:'application/octet-stream',
+    buffer:Buffer.from('\ufeffIP;Name;Description\r\n192.0.2.82;From Panel;Created through preview') });
   await page.locator('#bulkIpamForm button[type=submit]').click();
   await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
   await page.locator('#bulkIpamCommit').click();
@@ -1364,6 +1553,61 @@ try {
     await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
     return { body: response.request().postDataJSON(), result: await response.json() };
   };
+  // Hold real preview responses, then invalidate the selection before they return.
+  // Submit remains busy until that request settles, providing a deterministic
+  // completion signal for the negative assertions (no fixed sleep or mock data).
+  for (const kind of ['sheet', 'portable']) for (const change of ['file', 'destination', 'close/reopen']) {
+    await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
+    await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
+    await page.locator('#bulkIpamFile').setInputFiles(kind === 'sheet'
+      ? path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx')
+      : { name: 'held-preview.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+        format: 'EMS-IPAM-SUBNET', formatVersion: 1, source: { cidr: '192.0.2.0/24' }, prefixes: [],
+        hosts: [{ ip: '192.0.2.50', name: 'Held JSON' }, { ip: '192.0.2.94', name: 'New JSON' }],
+      })) });
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    const previewPath = kind === 'sheet' ? '/api/imports/ipam/preview' : '/api/imports/subnet/preview';
+    const endpoint = '**' + previewPath;
+    const holdPreview = async route => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    };
+    await page.route(endpoint, holdPreview, { times: 1 });
+    try {
+      await Promise.all([
+        page.waitForRequest(r => new URL(r.url()).pathname === previewPath),
+        page.locator('#bulkIpamForm button[type=submit]').click(),
+      ]);
+      assert.equal(await page.locator('#bulkIpamForm button[type=submit]').isDisabled(), true);
+      if (change === 'file') {
+        await page.locator('#bulkIpamFile').setInputFiles({ name: 'replacement.csv', mimeType: 'text/csv',
+          buffer: Buffer.from('IP,Name,Description\n192.0.2.95,Replacement,Must be previewed separately') });
+      } else if (change === 'destination') {
+        await page.locator('#bulkIpamCompany').selectOption('test-co');
+        await page.locator('#bulkIpamSpace').selectOption('test-space');
+      } else {
+        await page.locator('#bulkIpamDialog [data-close]').first().click();
+        await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+        await page.locator('#ipamExcelImport').click();
+        await page.locator('#bulkIpamDialog').waitFor({ state: 'visible' });
+      }
+      release();
+      await page.locator('#bulkIpamForm button[type=submit]:not([disabled])').waitFor();
+      assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true, change + ' invalidates an in-flight preview');
+      assert.deepEqual(await api('/api/spaces/test-space/data'), xlsxBefore);
+      assert.deepEqual(await api('/api/spaces/' + xlsxOther.id + '/data'), xlsxOtherBefore);
+    } finally {
+      release();
+      await page.unroute(endpoint, holdPreview);
+    }
+  }
+  check('late import previews cannot authorize a changed file, destination or reopened dialog');
+  await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
+  await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
+  await page.locator('#bulkIpamFile').setInputFiles({ name: 'workbook-renamed.json', mimeType: 'application/json',
+    buffer: await fs.readFile(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx')) });
   const otherPreview = await previewXlsx();
   assert.equal(otherPreview.body.destinationSpaceId, xlsxOther.id);
   assert.deepEqual(otherPreview.result.summary, { total:3, valid:2, invalid:1, existing:2, newRecords:0 });
@@ -1373,7 +1617,7 @@ try {
   assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true, 'changing destination invalidates the old preview');
   const selectedPreview = await previewXlsx();
   assert.equal(selectedPreview.body.destinationSpaceId, 'test-space');
-  assert.equal(selectedPreview.body.filename, 'ipam-two-sheets.xlsx');
+  assert.equal(selectedPreview.body.filename, 'workbook-renamed.json');
   assert.deepEqual(selectedPreview.result.summary, { total:3, valid:2, invalid:1, existing:1, newRecords:1 });
   assert.deepEqual(await page.locator('#bulkIpamPreview tbody td').allTextContents(), [
     '192.0.2.50', 'سوئیچ آزمایشی', 'طبقه اول & اتاق <۱>',
@@ -1449,6 +1693,69 @@ try {
     assert.deepEqual(await api('/api/spaces/' + sibling.spaceId + '/data'), siblingBefore);
   }
   check('same-branch import selects routing-domain labels in English and Persian without changing sibling records');
+
+  // Real export file -> unified preview -> skip -> replace in isolated Spaces.
+  const portableSource = await api('/api/spaces', 'POST', {
+    companyId: searchSites[1].companyId, name: 'Portable browser source', cidr: '198.18.91.0/24',
+  }, 201);
+  const portableTarget = await api('/api/spaces', 'POST', {
+    companyId: 'test-co', name: 'Portable browser target', cidr: '198.18.91.0/24',
+  }, 201);
+  await api('/api/prefixes', 'POST', { spaceId: portableSource.id, cidr: '198.18.91.0/25', name: 'Portable range' });
+  for (const last of [10, 11]) await api('/api/hosts', 'PUT', {
+    spaceId: portableSource.id, ip: '198.18.91.' + last, name: '<سوئیچ & ' + last + '>',
+  });
+  const existingPortable = await api('/api/hosts', 'PUT', {
+    spaceId: portableTarget.id, ip: '198.18.91.10', name: 'Keep until replace',
+  });
+  const exportedPortable = await api('/api/spaces/' + portableSource.id + '/export');
+  const sourceBefore = await api('/api/spaces/' + portableSource.id + '/data');
+  const portableBefore = await api('/api/spaces/' + portableTarget.id + '/data');
+  const openPortable = async (pkg = exportedPortable) => {
+    await page.goto('/#/ipam/' + portableTarget.id);
+    await page.locator('#ipamExcelImport').click();
+    await page.locator('#bulkIpamFile').setInputFiles({ name: 'export-with-csv-extension.csv', mimeType: 'text/csv',
+      buffer: Buffer.from(JSON.stringify(pkg)) });
+  };
+  const previewPortable = async (expected = 200) => {
+    const [response] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/subnet/preview'),
+      page.locator('#bulkIpamForm button[type=submit]').click(),
+    ]);
+    assert.equal(response.status(), expected);
+    await page.locator('#bulkIpamForm button[type=submit]:not([disabled])').waitFor();
+    return response.json();
+  };
+  await page.reload();
+  await openPortable({ ...exportedPortable, hosts: [{ ip: '203.0.113.10' }] });
+  await previewPortable(400);
+  assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true);
+  await page.locator('#bulkIpamDialog [data-close]').first().click();
+  await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+  for (const mode of ['skip', 'replace']) {
+    await openPortable();
+    const preview = await previewPortable();
+    assert.deepEqual(preview.summary.hosts, mode === 'skip'
+      ? { total: 2, newRecords: 1, existing: 1, archived: 0 }
+      : { total: 2, newRecords: 0, existing: 2, archived: 0 });
+    assert.ok((await page.locator('#bulkIpamPreview').innerText()).includes('<سوئیچ & 10>'));
+    assert.equal(await page.locator('#bulkIpamPreview img, #bulkIpamPreview script').count(), 0);
+    if (mode === 'skip') assert.deepEqual(await api('/api/spaces/' + portableTarget.id + '/data'), portableBefore);
+    await page.locator('#bulkIpamMode').selectOption(mode === 'replace' ? 'update' : 'skip');
+    const [commit] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/subnet'),
+      page.locator('#bulkIpamCommit').click(),
+    ]);
+    assert.equal(commit.status(), 200);
+    assert.equal(commit.request().postDataJSON().mode, mode);
+    await page.locator('#bulkIpamDialog').waitFor({ state: 'hidden' });
+    const target = await api('/api/spaces/' + portableTarget.id + '/data');
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.10').id, existingPortable.id);
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.10').name, mode === 'skip' ? 'Keep until replace' : '<سوئیچ & 10>');
+    assert.equal(target.hosts.find(h => h.ip === '198.18.91.11').name, '<سوئیچ & 11>');
+    assert.deepEqual(await api('/api/spaces/' + portableSource.id + '/data'), sourceBefore);
+  }
+  check('Portable JSON server preview rejects invalid content and round-trips exported records with skip/replace and stable destination IDs');
 
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');

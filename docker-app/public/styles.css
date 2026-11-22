@@ -435,6 +435,11 @@ html[data-theme="light"] #sheetSelect{
 .searchbox:has(#searchInput:not(:placeholder-shown)) #searchInput{padding-left:12px}
 [dir="ltr"] .searchbox:has(#searchInput:not(:placeholder-shown)) #searchInput{padding-right:12px}
 
+/* Reversible inherited subnet color display switch (both themes). */
+.ipam-inheritance-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-size:.8rem;color:var(--ink,inherit);cursor:pointer}
+.ipam-inheritance-toggle input{width:17px;height:17px;accent-color:var(--blue,#2581ed);margin:0}
+.ipam-inheritance-control{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:8px 12px;border:1px solid var(--line,#dce3ed);border-radius:10px;margin:9px 0;background:var(--card,transparent)}
+.ipam-inheritance-control small{color:var(--muted,#66758b);font-size:.74rem}
 /* Per-subnet color inheritance choice; respect both existing themes. */
 .prefix-inherit-setting{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;column-gap:9px;row-gap:4px;cursor:pointer;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft)}
 .prefix-inherit-setting input[type="checkbox"]{width:17px;height:17px;padding:0;min-width:17px;grid-column:1;grid-row:1;accent-color:var(--blue)}
