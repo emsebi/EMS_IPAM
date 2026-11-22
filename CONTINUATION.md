@@ -1,3 +1,49 @@
+# Content-based unified import detection — 2026-11-22
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; #90 base head `9d6dccf6dcc8300de21de3a60930980bf30bfca6` passed CI 44960535711 (all four gates, 47 browser scenarios, 33 native HTTP tests). Open #83/#85 remain green, #84 failed and #12 draft; they are not changed here. Current #89 and both acceptance documents were reviewed. RADIUS remains healthy/user-accepted and frozen, with no new real RADIUS testing.
+
+A shared browser/server format classifier now uses bytes instead of filename/MIME: ZIP signature selects the existing workbook validator, UTF-8 JSON content selects Portable validation, and delimited text selects CSV validation. A ZIP signature does not assert workbook validity. The server independently classifies spreadsheet content, so renamed/missing extensions work without trusting the browser. BOM and JSON after more than 512 bytes of whitespace are recognized; CSV retains comma/semicolon/tab/single-column behavior, including blank lines before the header. Empty, unsupported binary/UTF-16/invalid UTF-8 and malformed workbook input cannot be committed. Existing 7 MiB spreadsheet and 8 MiB Portable limits remain.
+
+Tests cover the extension/content matrix, UTF-8 and size boundaries, corrupt/non-workbook ZIP rejection, authorized HTTP preview/commit for misnamed Excel and CSV, no writes on rejected input, stable host ID/MAC and unchanged sibling Space. Browser coverage adds invalid-input rejection with Commit disabled, a truncated XLSX rejected by the server, a no-extension/BOM/long-whitespace JSON, CSV named .xlsx and a real XLSX named .json. The existing preview-conflict, round-trip, late-response and Dark Mode tests remain intact.
+
+Local targeted result before publication: 38 passed, zero failures, 8 native-PostgreSQL-only skips (46 including parent). Checksums/syntax/whitespace are verified. No local browser pass is claimed because of the previously observed Chromium socket restriction; require the candidate's full CI and native HTTP/browser evidence, recorded in #90/#89. If every gate succeeds and refs remain unchanged, merge this reviewed Import work, then verify merge CI separately; no deployment is implied by merge.
+
+VM: no access/write/deployment/restart/migration/discovery/config push. Last observed older UI installation is 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`; full current deployed SHA and fresh health are unverified. The new shared module must be packaged with both frontend and backend, and the new preview endpoint needs a compatible server; do not use old UI-only rollout workflows. Next: read-only installed compatibility/identity and backup/restore planning before any protected VM rollout, or proceed with the color-conflict priority while VM acceptance is pending. No stable/DONE claim before practical acceptance. Work handles execution, Chat feedback; GitHub/#89 owns status.
+
+---
+
+# Portable JSON server preview and conflict round-trip — 2026-11-22
+
+Fresh main remains `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; PR #90 starts from `770f5c721e6fd2c99669eaa9d421cdf6fbed802c`, whose CI 44954749978 passed all four gates and 46 browser/API scenarios. Open #83/#85 are green, #84 failed, and #12 remains draft; no color/Radio branch is changed.
+
+The unified dialog now calls POST /api/imports/subnet/preview instead of trusting a local sample. The endpoint shares commit authorization (currently admin-only), destination lookup and package validation. It runs only SELECTs in a repeatable-read, read-only transaction, counting new/existing/archived prefixes and hosts in the selected Space. Safe samples are bounded to 50 per kind with conflicts first; totals cover the entire validated file. The UI displays skip/replace effects, explains restoration of trash and replacement of device ports, and explicitly says commit rechecks current state. No preview token promises that the database is locked until commit.
+
+Shared validation rejects malformed/oversized record lists instead of silently truncating, rejects unaligned/duplicate prefixes, and canonicalizes IP/CIDR identities before duplicate checks. Legacy missing lists and source host IDs remain supported. No schema/migration/RADIUS/module/config/container change. RADIUS remains healthy, user-accepted and frozen; no new real RADIUS testing is in the plan.
+
+Tests add actual HTTP preview/invalid-request no-write comparisons (source, destination and trash), unauthorized viewer/branch requests, missing destination, active and archived conflicts, a new conflict inserted after preview, skip preservation, replace restoration with stable IDs, and export/import/export round-trip. Browser tests exercise held late responses for both spreadsheet and JSON paths, invalid JSON records rejected by the server with Commit disabled, and a real export uploaded under a .csv filename through preview, skip and replace. Spreadsheet workflows and Dark Mode checks remain intact.
+
+Local targeted validation: 38 passed, 0 failed, 8 native-PostgreSQL-only cases skipped (46 including parent). The new HTTP case passes under PGlite; native PostgreSQL and browser evidence must come from this candidate's CI, recorded in #90/#89. Local Chromium's previously confirmed socket restriction remains; do not claim a local browser pass. Syntax, whitespace, checksum-tool tests and manifest are checked before publication.
+
+VM/deployed SHA: no VM access, write, deployment, restart, migration, scan or config push. Latest observed old UI deployment remains 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`, not evidence of the full current installed tree. Acceptance stays PARTIAL. Next: inspect all candidate gates, finish file-detection edge cases and review compatibility/guarded rollout with backup, identity capture and regression protection. Backend preview is a new route, so a UI-only copy is insufficient for deployment. Work implements, Chat handles decisions/feedback, GitHub/#89 owns status.
+
+---
+
+# Unified Import CI recovery and stale-preview guard — 2026-11-22
+
+Current authority: Issue #89 and the user's 2026-11-22 instruction. **RADIUS is healthy and user-accepted, frozen and outside development scope.** All older requests below for real MikroTik Full/Read or new real RADIUS tests are superseded and removed from the current plan. No RADIUS code/config/database/schema/users/NAS/secrets/credentials/container/image/migration/restart/redeploy changes are authorized. Existing isolated CI regression tests do not authorize live service tests. Other deployments require backup, identity capture, health/regression and stop/rollback on risk.
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1` (screenshot-only successor of `21c792a00a6aace64cbc90dcdd98545501cf4e66`, whose CI 44948808270 succeeded). Open PRs checked: #90, #83, #84, #85 and draft #12. Leave the conflicting color variants and Radio draft untouched.
+
+PR #90 head `7a552db5ca23eb1c6d2d30fd540a3da89993abb1` fixed the dirty-import dialog interception: browser job 136987276394 in CI 44950541404 succeeded, as did Docker/PostgreSQL. The overall run failed only because SHA256SUMS still contained the old browser test hash. Refresh the manifest without bypassing verification.
+
+This step also prevents an in-flight Import preview from re-enabling Commit after the file/destination changes or the dialog closes and reopens. Starting another preview clears the old authorization; stale success/error replies cannot replace the current selection. Only IPAM client state is changed. Browser coverage holds actual HTTP preview responses, invalidates each of those three contexts, then waits for completion and requires disabled Commit and unchanged target/sibling data. The existing real XLSX and CSV preview/commit cases still run afterwards. Portable JSON cancellation now tests both rejecting and accepting the unsaved-form confirmation and verifies no database changes.
+
+Local validation: 11 portable/UI/import tests passed (zero skipped), four checksum-tool tests passed, JS syntax/whitespace and refreshed source manifest verified. Local browser execution is blocked before any scenario by Chromium's socket permission error; no local browser pass is claimed. The exact candidate SHA and GitHub CI results are recorded in #90 and #89. Require green browser/test/Docker/native PostgreSQL gates on the new candidate before any merge.
+
+VM: no access, write, deployment, restart, migration, scan or config push in this step. Latest observed UI deployment evidence is run 44948850727, source `f3995f6f75a258d63e6f93ec252825799e7a8de2`; this is an older UI-only source, not the current full installed SHA or fresh VM health proof. User acceptance remains open. Next: verify the new CI; complete Portable JSON conflict/validation preview and round-trip acceptance before a guarded rollout. Keep Work implementation and Chat feedback separate; only GitHub/#89 is the status ledger.
+
+---
+
 # Preserve Personnel during fixture cleanup — 2026-11-21 UTC
 
 [PR #86](https://github.com/emsebi/EMS_IPAM/pull/86) merged with expected head as `8f1c2d054c19394f784807ca327f5a95a2b4e87a`. Candidate CI 44927861295 and 44927857398 passed all four gates; native PostgreSQL job 136917806022 passed all 31 HTTP tests with no failures/skips and browser job 136917806041 passed 44 scenarios. [Merge CI 44933607196](https://github.com/emsebi/EMS_IPAM/actions/runs/44933607196) also succeeded, verified 18:07 UTC. Its tree equals the tested candidate. Fresh base is `8f1c2d054c19394f784807ca327f5a95a2b4e87a`; open #83/#84/#85 UI/browser work and draft #12 remain untouched.

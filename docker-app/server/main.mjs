@@ -30,7 +30,7 @@ import {
   validateRootCidr,
 } from "./ip.mjs";
 import { pingMany } from "./ping.mjs";
-import { buildSubnetPackage, importSubnetPackage } from "./portable.mjs";
+import { buildSubnetPackage, importSubnetPackage, previewSubnetPackage } from "./portable.mjs";
 import { parseIpamImport } from "./ipam-bulk.mjs";
 import { usageSegments } from "../public/subnet-model.mjs";
 import { buildMikrotikScript } from "./mikrotik.mjs";
@@ -1476,11 +1476,15 @@ async function api(req, res, url, user) {
     return res.end(body);
   }
 
-  if (req.method === "POST" && pathname === "/api/imports/subnet") {
+  if (req.method === "POST" && ["/api/imports/subnet", "/api/imports/subnet/preview"].includes(pathname)) {
     requireWriter(user);
     const body = await readBody(req);
     const space = await getSpaceForUser(user, cleanText(body.destinationSpaceId, 80));
     if (!(await canManageCompany(user, space.companyId))) throw Object.assign(new Error("برای ورود اطلاعات باید به کل شرکت مقصد دسترسی ویرایش داشته باشید."), { status: 403 });
+    if (pathname.endsWith("/preview")) {
+      const preview = await previewSubnetPackage({ pool, destinationSpace: space, packageData: body.package, parseCidr, contains });
+      return json(res, 200, { ok: true, ...preview });
+    }
     const result = await importSubnetPackage({
       pool,
       user,
