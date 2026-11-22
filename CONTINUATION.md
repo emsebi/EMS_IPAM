@@ -1,3 +1,15 @@
+# Installed Import compatibility evidence — 2026-11-22
+
+Fresh main: `ca4f1829695bdb1ff95bc799157bd52de3b4f96b`, a screenshot-only successor of #90 merge `24dcbaefb2410903dacec5a4f20771f54f811498`. Both candidate CI 44979017800 and merge CI 44979172804 passed all four gates (48 browser scenarios, 34 native HTTP tests, no native skips). Import code is merged, while installed/operator acceptance remains PARTIAL. Open #83/#85 are green, #84 failed and #12 is draft; none is changed here. #89 and both acceptance documents remain authoritative.
+
+The new read-only Import preflight checks nine explicit source/dependency file hashes inside the app container, three loopback-served assets, existing GET /health and selected app identity fields before/after observation. It detects an old backend, missing shared classifier, stale served UI and an intervening container restart/replacement. No login, import request, DB/table/credential/RADIUS access, scan, push, image build, migration, restart or deployment. Only diagnostic checkout/evidence files are written by its dedicated runner workflow.
+
+Fourteen isolated Python tests pass locally, including fail-closed reference/identity/health handling, bounded HTTP, redirect refusal and redacted failures. Ordinary CI now runs them. Matching files remain `files_match_runtime_unverified`, never a full deployed SHA or runtime/operator acceptance. See docs/IMPORT-INSTALLED-PREFLIGHT.md; exact candidate CI and VM diagnostic observations belong in #89. Do not infer live success from mocked tests.
+
+Next: after candidate CI, run the dedicated read-only VM diagnostic and record actual compatibility blockers; then continue the #83/#84/#85 color conflict with default OFF while deployment acceptance remains open. Do not run old UI-only deploy workflows for the new backend endpoint/shared module. Any later permitted non-RADIUS rollout needs backup/restore validation and identity/health/regression protection. RADIUS is healthy/user-accepted/frozen, and new real RADIUS testing is removed from the plan. Work executes; Chat handles decisions/feedback; GitHub/#89 is the status ledger.
+
+---
+
 # Content-based unified import detection — 2026-11-22
 
 Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; #90 base head `9d6dccf6dcc8300de21de3a60930980bf30bfca6` passed CI 44960535711 (all four gates, 47 browser scenarios, 33 native HTTP tests). Open #83/#85 remain green, #84 failed and #12 draft; they are not changed here. Current #89 and both acceptance documents were reviewed. RADIUS remains healthy/user-accepted and frozen, with no new real RADIUS testing.
