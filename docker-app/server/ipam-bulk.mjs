@@ -3,8 +3,9 @@
 import { inflateRawSync } from "node:zlib";
 import { posix as path } from "node:path";
 import { ipv4ToInt, intToIpv4, parseCidr } from "./ip.mjs";
+import { detectIpamImportFormat, MAX_SHEET_IMPORT_BYTES } from "../public/ipam-import-format.mjs";
 
-const MAX_FILE_BYTES = 7 * 1024 * 1024;
+const MAX_FILE_BYTES = MAX_SHEET_IMPORT_BYTES;
 const MAX_XML_BYTES = 16 * 1024 * 1024;
 const MAX_ROWS = 10000;
 
@@ -121,7 +122,7 @@ function xlsxRows(buffer) {
 
 function csvRows(text) {
   const normalized = String(text).replace(/^\ufeff/, "");
-  const first = normalized.split(/\r?\n/, 1)[0];
+  const first = normalized.split(/\r?\n/).find(line => line.trim()) || "";
   const delimiters = [",", ";", "\t"];
   const delimiter = delimiters.sort((a, b) => first.split(b).length - first.split(a).length)[0];
   const rows = [];
@@ -152,12 +153,13 @@ function isHeader(value) {
   return /^(ip|ip\s*address|ipaddress|آی\s*پی|آدرس\s*ip|آدرس\s*آی\s*پی)$/i.test(String(value).trim());
 }
 
-export function parseIpamImport({ filename, base64, cidr }) {
-  if (!/\.(csv|xlsx)$/i.test(String(filename))) throw new Error("فقط فایل xlsx یا csv قابل ورود است.");
+export function parseIpamImport({ base64, cidr }) {
   if (typeof base64 !== "string" || base64.length > MAX_FILE_BYTES * 1.4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("فایل معتبر نیست یا بیش از حد بزرگ است.");
   const buffer = Buffer.from(base64, "base64");
   if (!buffer.length || buffer.length > MAX_FILE_BYTES) throw new Error("فایل خالی یا بیش از حد بزرگ است.");
-  const rows = /\.xlsx$/i.test(filename) ? xlsxRows(buffer) : csvRows(buffer.toString("utf8"));
+  const format = detectIpamImportFormat(buffer);
+  if (format === "json") throw new Error("بسته JSON باید از مسیر Portable Import بررسی و وارد شود.");
+  const rows = format === "xlsx" ? xlsxRows(buffer) : csvRows(buffer.toString("utf8"));
   const root = parseCidr(cidr);
   if (!root) throw new Error("فضای آدرس مقصد معتبر نیست.");
   if (rows.length && isHeader(rows[0].fields[0])) rows.shift();

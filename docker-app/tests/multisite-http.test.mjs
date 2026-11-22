@@ -713,6 +713,42 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(roundTrip.prefixes, pkg.prefixes);
   });
 
+  await t.test('misnamed XLSX/CSV content drives preview and commit while invalid files leave data unchanged', async () => {
+    const companyId = (await admin('POST', '/api/companies', { name: 'Format detection fixture' }, 201)).id;
+    const spaceId = (await admin('POST', '/api/spaces', { companyId, name: 'Format LAN', cidr: '192.0.2.0/24' }, 201)).id;
+    const original = await admin('PUT', '/api/hosts', { spaceId, ip: '192.0.2.50', name: 'Existing format host', mac: '02:00:00:00:55:50' });
+    const before = await admin('GET', '/api/spaces/' + spaceId + '/data');
+    const siblingBefore = await admin('GET', '/api/spaces/' + south.spaceId + '/data');
+    const workbook = await fs.readFile(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+    const upload = { destinationSpaceId: spaceId, filename: 'workbook-renamed.csv', base64: workbook.toString('base64') };
+    const preview = await admin('POST', '/api/imports/ipam/preview', upload);
+    assert.deepEqual(preview.summary, { total: 3, valid: 2, invalid: 1, existing: 1, newRecords: 1 });
+    const reader = await client('north-reader');
+    await reader('POST', '/api/imports/ipam/preview', upload, 403);
+    await reader('POST', '/api/imports/ipam/commit', { ...upload, mode: 'update' }, 403);
+    for (const buffer of [Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from([0xff, 0xfe, 0x49, 0]),
+      Buffer.from('IP,Name\n192.0.2.90,\x00binary'), Buffer.from('{"format":"EMS-IPAM-SUBNET"}')]) {
+      for (const endpoint of ['preview', 'commit']) await admin('POST', '/api/imports/ipam/' + endpoint,
+        { ...upload, base64: buffer.toString('base64'), mode: 'update' }, 400);
+    }
+    assert.deepEqual(await admin('GET', '/api/spaces/' + spaceId + '/data'), before);
+    const committed = await admin('POST', '/api/imports/ipam/commit', { ...upload, mode: 'update' });
+    assert.deepEqual(committed.result, { total: 3, invalid: 1, created: 1, updated: 1, skipped: 0 });
+    const after = await admin('GET', '/api/spaces/' + spaceId + '/data');
+    const changed = after.hosts.find(h => h.ip === '192.0.2.50');
+    assert.equal(changed.id, original.id);
+    assert.equal(changed.mac, '02:00:00:00:55:50');
+    assert.equal(changed.name, 'سوئیچ آزمایشی');
+    const csv = { destinationSpaceId: spaceId, filename: 'text-renamed.xlsx',
+      base64: Buffer.from('\ufeffIP;Name;Description\r\n192.0.2.94;CSV تغییرنام;توضیح فارسی').toString('base64') };
+    assert.deepEqual((await admin('POST', '/api/imports/ipam/preview', csv)).summary,
+      { total: 1, valid: 1, invalid: 0, existing: 1, newRecords: 0 });
+    assert.deepEqual(await admin('GET', '/api/spaces/' + spaceId + '/data'), after);
+    assert.equal((await admin('POST', '/api/imports/ipam/commit', { ...csv, mode: 'update' })).result.updated, 1);
+    assert.equal((await admin('GET', '/api/spaces/' + spaceId + '/data')).hosts.find(h => h.ip === '192.0.2.94').name, 'CSV تغییرنام');
+    assert.deepEqual(await admin('GET', '/api/spaces/' + south.spaceId + '/data'), siblingBefore);
+  });
+
   await t.test('MS-03 HTTP search and direct reads isolate overlapping Spaces in the same branch', {
     skip: !postgres && 'requires the disposable PostgreSQL database with domain-scoped uniqueness',
   }, async t => {

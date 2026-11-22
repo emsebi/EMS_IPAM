@@ -1,3 +1,4 @@
+import { detectIpamImportFormat, MAX_SHEET_IMPORT_BYTES, MAX_PORTABLE_IMPORT_BYTES } from "./ipam-import-format.mjs?v=1.7.2";
 import { DETAIL_PREFIXES, detailGroupSize, rootVerticalLevels, tableBlockCount, treeDepth, visibleTableCount, viewportMapHeight, usageSegments } from "./subnet-model.mjs?v=1.7.2";
 import { createTranslator, createKeyTranslator } from "./i18n-core.mjs?v=1.7.2";
 
@@ -738,20 +739,18 @@ function openBulkIpamDialog(spaceId = state.currentSpaceId) {
 }
 async function classifyIpamImportFile(file) {
   if(!file)throw new Error("ابتدا فایل را انتخاب کنید.");
-  const name=String(file.name||"").toLowerCase();
-  const sample=await file.slice(0,512).text();
-  if(sample.replace(/^\uFEFF/,"").trimStart().startsWith("{") || /\.json$/i.test(name)){
+  if (file.size > MAX_PORTABLE_IMPORT_BYTES) throw new Error("فایل بیش از حد بزرگ است (حداکثر ۸ مگابایت).");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const format = detectIpamImportFormat(bytes);
+  if (format === "json") {
     let payload;
-    if(file.size>8*1024*1024)throw new Error("فایل Portable JSON باید کمتر از ۸ مگابایت باشد.");
-    try {payload=JSON.parse(await file.text());} catch {throw new Error("ساختار JSON فایل معتبر نیست.");}
+    try {payload=JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));} catch {throw new Error("ساختار JSON فایل معتبر نیست.");}
     if(payload?.format!=="EMS-IPAM-SUBNET" || Number(payload.formatVersion)!==1 || !Array.isArray(payload.prefixes) || !Array.isArray(payload.hosts)){
       throw new Error("فایل JSON بسته Portable Export معتبر EMS_IPAM نیست.");
     }
     return {kind:"portable",payload};
   }
-  if(/\.xlsx$/i.test(name))return {kind:"sheet"};
-  if(/\.csv$/i.test(name) || /^(?:IP|\uFEFFIP)\s*[,;]/i.test(sample))return {kind:"sheet"};
-  throw new Error("فایل Excel (.xlsx)، CSV (.csv) یا Portable JSON (.json) انتخاب کنید.");
+  return { kind: "sheet", format };
 }
 function renderPortableImportPreview(preview) {
   const replace = $("bulkIpamMode").value === "update";
@@ -774,7 +773,7 @@ function renderPortableImportPreview(preview) {
 }
 
 function readBulkIpamFile(file) {
-  if (!file || !/\.(xlsx|csv)$/i.test(file.name) || file.size > 7 * 1024 * 1024) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
+  if (!file || file.size > MAX_SHEET_IMPORT_BYTES) throw new Error("فقط xlsx یا csv تا ۷ مگابایت پذیرفته است.");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("خواندن فایل ممکن نیست."));

@@ -276,9 +276,33 @@ try {
   assert.equal(await ipamPreview.locator('#bulkIpamSpace').inputValue(),'test-space');
   const accept=await ipamPreview.locator('#bulkIpamFile').getAttribute('accept');
   for(const extension of ['.json','.xlsx','.csv'])assert.ok(accept.includes(extension));
+  const importRequests = [];
+  const recordImport = request => { if (new URL(request.url()).pathname.startsWith('/api/imports/')) importRequests.push(request.url()); };
+  ipamPreview.on('request', recordImport);
+  try {
+    for (const [name, buffer] of [['empty.csv', Buffer.alloc(0)], ['binary.csv', Buffer.from([0xff, 0xfe, 0x49, 0])],
+      ['wrong-schema.xlsx', Buffer.from('[]')]]) {
+      await ipamPreview.locator('#bulkIpamFile').setInputFiles({ name, mimeType: 'text/csv', buffer });
+      await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
+      await ipamPreview.waitForFunction(() => /UTF-8|معتبر/.test(document.getElementById('bulkIpamPreview').textContent));
+      await ipamPreview.locator('#bulkIpamForm [type=submit]:not([disabled])').waitFor();
+      assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), true);
+    }
+    assert.deepEqual(importRequests, [], 'invalid non-workbook content must not reach a write or preview route');
+    await ipamPreview.locator('#bulkIpamFile').setInputFiles({ name: 'truncated.csv', mimeType: 'text/csv', buffer: Buffer.from([0x50, 0x4b, 3, 4]) });
+    const [badZip] = await Promise.all([
+      ipamPreview.waitForResponse(r => new URL(r.url()).pathname === '/api/imports/ipam/preview'),
+      ipamPreview.locator('#bulkIpamForm [type=submit]').click(),
+    ]);
+    assert.equal(badZip.status(), 400, 'ZIP signature alone is not a valid Excel workbook');
+    await ipamPreview.locator('#bulkIpamForm [type=submit]:not([disabled])').waitFor();
+    assert.equal(await ipamPreview.locator('#bulkIpamCommit').isDisabled(), true);
+    assert.deepEqual(await api('/api/spaces/test-space/data'), beforePortablePreview);
+  } finally { ipamPreview.off('request', recordImport); }
+  check('unified picker rejects empty/binary/wrong-schema input and server rejects truncated XLSX without writes');
   await ipamPreview.locator('#bulkIpamFile').setInputFiles({
-    name:'export.emsipam.json',mimeType:'application/json',
-    buffer:Buffer.from(JSON.stringify({format:'EMS-IPAM-SUBNET',formatVersion:1,
+    name:'export-without-extension',mimeType:'application/octet-stream',
+    buffer:Buffer.from('\ufeff' + ' '.repeat(1024) + JSON.stringify({format:'EMS-IPAM-SUBNET',formatVersion:1,
       source:{cidr:'192.0.2.0/24'},prefixes:[],hosts:[{ip:'192.0.2.48',name:'Portable preview'}]}))
   });
   await ipamPreview.locator('#bulkIpamForm [type=submit]').click();
@@ -1371,8 +1395,8 @@ try {
   assert.equal(await page.locator('#appView').evaluate((node)=>node.classList.contains('sidebar-collapsed')),false);
   await page.locator('#ipamExcelImport').click();
   await page.locator('#bulkIpamDialog').waitFor();
-  await page.locator('#bulkIpamFile').setInputFiles({ name:'import.csv', mimeType:'text/csv',
-    buffer:Buffer.from('IP,Name,Description\n192.0.2.82,From Panel,Created through preview') });
+  await page.locator('#bulkIpamFile').setInputFiles({ name:'csv-renamed.xlsx', mimeType:'application/octet-stream',
+    buffer:Buffer.from('\ufeffIP;Name;Description\r\n192.0.2.82;From Panel;Created through preview') });
   await page.locator('#bulkIpamForm button[type=submit]').click();
   await page.locator('#bulkIpamCommit:not([disabled])').waitFor();
   await page.locator('#bulkIpamCommit').click();
@@ -1460,7 +1484,8 @@ try {
   check('late import previews cannot authorize a changed file, destination or reopened dialog');
   await page.locator('#bulkIpamCompany').selectOption(searchSites[1].companyId);
   await page.locator('#bulkIpamSpace').selectOption(xlsxOther.id);
-  await page.locator('#bulkIpamFile').setInputFiles(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx'));
+  await page.locator('#bulkIpamFile').setInputFiles({ name: 'workbook-renamed.json', mimeType: 'application/json',
+    buffer: await fs.readFile(path.join(appDir, 'tests/fixtures/ipam-two-sheets.xlsx')) });
   const otherPreview = await previewXlsx();
   assert.equal(otherPreview.body.destinationSpaceId, xlsxOther.id);
   assert.deepEqual(otherPreview.result.summary, { total:3, valid:2, invalid:1, existing:2, newRecords:0 });
@@ -1470,7 +1495,7 @@ try {
   assert.equal(await page.locator('#bulkIpamCommit').isDisabled(), true, 'changing destination invalidates the old preview');
   const selectedPreview = await previewXlsx();
   assert.equal(selectedPreview.body.destinationSpaceId, 'test-space');
-  assert.equal(selectedPreview.body.filename, 'ipam-two-sheets.xlsx');
+  assert.equal(selectedPreview.body.filename, 'workbook-renamed.json');
   assert.deepEqual(selectedPreview.result.summary, { total:3, valid:2, invalid:1, existing:1, newRecords:1 });
   assert.deepEqual(await page.locator('#bulkIpamPreview tbody td').allTextContents(), [
     '192.0.2.50', 'سوئیچ آزمایشی', 'طبقه اول & اتاق <۱>',

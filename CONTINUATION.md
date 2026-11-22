@@ -1,3 +1,17 @@
+# Content-based unified import detection — 2026-11-22
+
+Fresh main: `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; #90 base head `9d6dccf6dcc8300de21de3a60930980bf30bfca6` passed CI 44960535711 (all four gates, 47 browser scenarios, 33 native HTTP tests). Open #83/#85 remain green, #84 failed and #12 draft; they are not changed here. Current #89 and both acceptance documents were reviewed. RADIUS remains healthy/user-accepted and frozen, with no new real RADIUS testing.
+
+A shared browser/server format classifier now uses bytes instead of filename/MIME: ZIP signature selects the existing workbook validator, UTF-8 JSON content selects Portable validation, and delimited text selects CSV validation. A ZIP signature does not assert workbook validity. The server independently classifies spreadsheet content, so renamed/missing extensions work without trusting the browser. BOM and JSON after more than 512 bytes of whitespace are recognized; CSV retains comma/semicolon/tab/single-column behavior, including blank lines before the header. Empty, unsupported binary/UTF-16/invalid UTF-8 and malformed workbook input cannot be committed. Existing 7 MiB spreadsheet and 8 MiB Portable limits remain.
+
+Tests cover the extension/content matrix, UTF-8 and size boundaries, corrupt/non-workbook ZIP rejection, authorized HTTP preview/commit for misnamed Excel and CSV, no writes on rejected input, stable host ID/MAC and unchanged sibling Space. Browser coverage adds invalid-input rejection with Commit disabled, a truncated XLSX rejected by the server, a no-extension/BOM/long-whitespace JSON, CSV named .xlsx and a real XLSX named .json. The existing preview-conflict, round-trip, late-response and Dark Mode tests remain intact.
+
+Local targeted result before publication: 38 passed, zero failures, 8 native-PostgreSQL-only skips (46 including parent). Checksums/syntax/whitespace are verified. No local browser pass is claimed because of the previously observed Chromium socket restriction; require the candidate's full CI and native HTTP/browser evidence, recorded in #90/#89. If every gate succeeds and refs remain unchanged, merge this reviewed Import work, then verify merge CI separately; no deployment is implied by merge.
+
+VM: no access/write/deployment/restart/migration/discovery/config push. Last observed older UI installation is 44948850727 / `f3995f6f75a258d63e6f93ec252825799e7a8de2`; full current deployed SHA and fresh health are unverified. The new shared module must be packaged with both frontend and backend, and the new preview endpoint needs a compatible server; do not use old UI-only rollout workflows. Next: read-only installed compatibility/identity and backup/restore planning before any protected VM rollout, or proceed with the color-conflict priority while VM acceptance is pending. No stable/DONE claim before practical acceptance. Work handles execution, Chat feedback; GitHub/#89 owns status.
+
+---
+
 # Portable JSON server preview and conflict round-trip — 2026-11-22
 
 Fresh main remains `09dbc527f6c28ceb2f964fe758b4f09ebb348bd1`; PR #90 starts from `770f5c721e6fd2c99669eaa9d421cdf6fbed802c`, whose CI 44954749978 passed all four gates and 46 browser/API scenarios. Open #83/#85 are green, #84 failed, and #12 remains draft; no color/Radio branch is changed.
