@@ -15,6 +15,9 @@ function normalizeConnections(value) {
 }
 
 function sanitizePrefix(item) {
+  if (item.inheritColorToChildren !== undefined && typeof item.inheritColorToChildren !== "boolean") {
+    throw new Error("گزینهٔ انتقال رنگ زیررنج باید روشن یا خاموش باشد.");
+  }
   return {
     cidr: clean(item.cidr, 64),
     name: clean(item.name, 160),
@@ -23,6 +26,7 @@ function sanitizePrefix(item) {
     vlan: clean(item.vlan, 40),
     gateway: clean(item.gateway, 80),
     color: clean(item.color, 7),
+    ...(item.inheritColorToChildren === undefined ? {} : { inheritColorToChildren: item.inheritColorToChildren }),
     description: clean(item.description, 2000),
   };
 }
@@ -71,7 +75,7 @@ export async function buildSubnetPackage({ pool, space, cidr, appVersion, parseC
   if (!scope || !root || !contains(root, scope)) throw new Error("رنج انتخاب‌شده داخل فضای آدرس نیست.");
   const [prefixes, hosts, devicePorts] = await Promise.all([
     pool.query(
-      `SELECT id,cidr,name,status,role,vlan,gateway,color,description
+      `SELECT id,cidr,name,status,role,vlan,gateway,color,inherit_color_to_children AS "inheritColorToChildren",description
          FROM prefixes WHERE space_id=$1 AND deleted_at IS NULL ORDER BY cidr`,
       [space.id],
     ),
@@ -213,15 +217,16 @@ export async function importSubnetPackage({ pool, user, destinationSpace, packag
       if (existing) {
         await client.query(
           `UPDATE prefixes SET name=$1,status=$2,role=$3,vlan=$4,gateway=$5,color=$6,description=$7,
+             inherit_color_to_children=COALESCE($10,inherit_color_to_children),
              deleted_at=NULL,deleted_by=NULL,updated_by=$8,updated_at=now() WHERE id=$9`,
-          [item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, id],
+          [item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, id, item.inheritColorToChildren ?? null],
         );
         result.prefixesUpdated += 1;
       } else {
         await client.query(
-          `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
-          [id, destinationSpace.id, item.cidr, item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id],
+          `INSERT INTO prefixes(id,space_id,cidr,name,status,role,vlan,gateway,color,description,created_by,updated_by,inherit_color_to_children)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,COALESCE($12,false))`,
+          [id, destinationSpace.id, item.cidr, item.name || item.cidr, item.status, item.role, item.vlan, item.gateway, item.color || "#3157d5", item.description, user.id, item.inheritColorToChildren ?? null],
         );
         result.prefixesCreated += 1;
       }

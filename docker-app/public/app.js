@@ -367,6 +367,7 @@ function effectiveSubnetColor(cidr) {
   if(nearest?.info.cidr===range.cidr)return nearest.item.color;
   if(range.cidr===parseCidr(state.data?.space?.cidr)?.cidr)return state.data.space.color||'#eef2f7';
   if(!state.showInheritedSubnetColors)return '#eef2f7';
+  if(nearest?.item.inheritColorToChildren===false)return '#eef2f7';
   return nearest?.item.color||state.data?.space?.color||'#eef2f7';
 }
 
@@ -944,7 +945,7 @@ function renderOverview() {
         const value = ipv4ToInt(ip); return value >= start && value <= start + 255;
       }).length;
       const exact = state.data.prefixes.find((item) => item.cidr === cidr);
-      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
+      grid += `<button class="subnet-tile open-tile" data-cidr="${cidr}" style="--tile-color:${escapeHtml(effectiveSubnetColor(cidr))};--stripe:${escapeHtml(effectiveSubnetColor(cidr))}" title="${escapeHtml(exact?.name || cidr)}"><i class="fill"></i><span class="octet">${third}</span>${exact && exact.name !== exact.cidr ? `<div class="tile-name">${escapeHtml(exact.name)}</div>` : ""}<div class="cidr">${cidr}</div><div class="count">${count ? `${formatNumber(count)} IP` : "—"}</div></button>`;
     }
     grid += `</div>`;
   }
@@ -1369,6 +1370,7 @@ function openPrefixDialog(cidr, id = null) {
   $("prefixDialogTitle").textContent = item ? "ویرایش رنج" : "ثبت و رنگ‌کردن رنج";
   $("prefixCidrTitle").textContent = value.cidr;
   for (const [key, field] of [["id", "prefixId"], ["cidr", "prefixCidr"], ["name", "prefixName"], ["status", "prefixStatus"], ["role", "prefixRole"], ["vlan", "prefixVlan"], ["gateway", "prefixGateway"], ["color", "prefixColor"], ["description", "prefixDescription"]]) $(field).value = value[key] || "";
+  $("prefixInheritColorToChildren").checked = item ? value.inheritColorToChildren !== false : false;
   $("deletePrefixButton").classList.toggle("hidden", !item || !canWrite());
   $("exportPrefixButton").classList.toggle("hidden", !item);
   setFormWritable($("prefixForm"), canWrite());
@@ -2387,7 +2389,7 @@ $("prefixForm").addEventListener("submit",async event=>{
   const next=current&&root&&current.end<root.end?networkAt(current.end+1,current.prefix):null;
   const oldScroll=window.scrollY;
   try {
-    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,description:$("prefixDescription").value}});
+    await request("/api/prefixes",{method:"POST",body:{id:$("prefixId").value||undefined,spaceId:state.currentSpaceId,cidr:$("prefixCidr").value,name:$("prefixName").value,status:$("prefixStatus").value,role:$("prefixRole").value,vlan:$("prefixVlan").value,gateway:$("prefixGateway").value,color:$("prefixColor").value,inheritColorToChildren:$("prefixInheritColorToChildren").checked,description:$("prefixDescription").value}});
     $("prefixDialog").close();
     state.data=await request(`/api/spaces/${encodeURIComponent(state.currentSpaceId)}/data`);
     state.selectedCidr=null;renderCurrent();window.scrollTo(0,oldScroll);

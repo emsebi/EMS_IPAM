@@ -440,3 +440,8 @@ html[data-theme="light"] #sheetSelect{
 .ipam-inheritance-toggle input{width:17px;height:17px;accent-color:var(--blue,#2581ed);margin:0}
 .ipam-inheritance-control{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:8px 12px;border:1px solid var(--line,#dce3ed);border-radius:10px;margin:9px 0;background:var(--card,transparent)}
 .ipam-inheritance-control small{color:var(--muted,#66758b);font-size:.74rem}
+/* Per-subnet color inheritance choice; respect both existing themes. */
+.prefix-inherit-setting{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;column-gap:9px;row-gap:4px;cursor:pointer;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft)}
+.prefix-inherit-setting input[type="checkbox"]{width:17px;height:17px;padding:0;min-width:17px;grid-column:1;grid-row:1;accent-color:var(--blue)}
+.prefix-inherit-setting span{grid-column:2;font-weight:700}
+.prefix-inherit-setting small{grid-column:2;line-height:1.5;font-weight:400}

@@ -644,6 +644,76 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
     assert.deepEqual(reexported.source, pkg.source);
   });
 
+  await t.test('prefix propagation defaults OFF, preserves omitted edits and round-trips Portable flags without crossing scopes', async () => {
+    const source = (await admin('POST', '/api/spaces', { companyId: north.companyId, name: 'Color source', cidr: '198.18.92.0/24' }, 201)).id;
+    const target = (await admin('POST', '/api/spaces', { companyId: south.companyId, name: 'Color target', cidr: '198.18.92.0/24' }, 201)).id;
+    const parentSpec = { spaceId: source, cidr: '198.18.92.0/25', name: 'Parent', color: '#3157d5' };
+    const parentId = (await admin('POST', '/api/prefixes', parentSpec)).id;
+    const data = id => admin('GET', '/api/spaces/' + id + '/data');
+    const sourceParent = async () => (await data(source)).prefixes.find(p => p.id === parentId);
+    assert.equal((await sourceParent()).inheritColorToChildren, false, 'new API prefix defaults OFF');
+    await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId, inheritColorToChildren: true });
+    await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId, name: 'Edited by legacy writer' });
+    assert.equal((await sourceParent()).inheritColorToChildren, true, 'omitted field preserves stored ON');
+    await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId, inheritColorToChildren: false });
+    await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId });
+    assert.equal((await sourceParent()).inheritColorToChildren, false, 'omitted field preserves stored OFF');
+    await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId, inheritColorToChildren: true });
+    await admin('POST', '/api/prefixes', { spaceId: source, cidr: '198.18.92.64/26', name: '', color: '#ffffff', inheritColorToChildren: false });
+    const beforeInvalid = await data(source);
+    assert.equal(beforeInvalid.prefixes.find(p => p.cidr === '198.18.92.64/26').name, '198.18.92.64/26', 'optional name retains existing CIDR fallback');
+    for (const invalid of ['false', 1, null, {}, []]) {
+      await admin('POST', '/api/prefixes', { ...parentSpec, id: parentId, inheritColorToChildren: invalid }, 400);
+      assert.deepEqual(await data(source), beforeInvalid);
+    }
+    const reader = await client('north-reader'), editor = await client('north-editor');
+    for (const call of [reader, editor]) {
+      await call('POST', '/api/prefixes', { ...parentSpec, id: parentId, inheritColorToChildren: false }, 403);
+    }
+    assert.deepEqual(await data(source), beforeInvalid);
+    const pkg = await admin('GET', '/api/spaces/' + source + '/export');
+    assert.deepEqual(pkg.prefixes.map(p => [p.color, p.inheritColorToChildren]), [['#3157d5', true], ['#ffffff', false]]);
+    const targetParent = (await admin('POST', '/api/prefixes', { ...parentSpec, spaceId: target, inheritColorToChildren: false })).id;
+    const targetChild = (await admin('POST', '/api/prefixes', { spaceId: target, cidr: '198.18.92.64/26', name: 'Archived', color: '#112233', inheritColorToChildren: true })).id;
+    await admin('DELETE', '/api/prefixes/' + targetChild);
+    const body = { destinationSpaceId: target, package: pkg };
+    const snapshot = async () => ({ source: await data(source), target: await data(target),
+      sibling: await data(north.spaceId), trash: await admin('GET', '/api/trash') });
+    const beforePreview = await snapshot();
+    await admin('POST', '/api/imports/subnet/preview', body);
+    assert.deepEqual(await snapshot(), beforePreview, 'preview cannot change propagation or archived rows');
+    for (const invalid of ['true', null, 0]) {
+      const malformed = structuredClone(pkg);
+      malformed.prefixes[0].inheritColorToChildren = invalid;
+      for (const endpoint of ['/api/imports/subnet/preview', '/api/imports/subnet']) {
+        await admin('POST', endpoint, { ...body, package: malformed }, 400);
+        assert.deepEqual(await snapshot(), beforePreview, 'invalid flag rejected before any write');
+      }
+    }
+    await admin('POST', '/api/imports/subnet', { ...body, mode: 'skip' });
+    assert.deepEqual((await data(target)).prefixes, beforePreview.target.prefixes, 'skip preserves conflicting choice and trash');
+    assert.deepEqual(await admin('GET', '/api/trash'), beforePreview.trash);
+    await admin('POST', '/api/imports/subnet', { ...body, mode: 'replace' });
+    const replaced = (await data(target)).prefixes;
+    assert.equal(replaced.find(p => p.id === targetParent).inheritColorToChildren, true);
+    assert.equal(replaced.find(p => p.id === targetChild).inheritColorToChildren, false);
+    assert.equal(replaced.find(p => p.id === targetChild).color, '#ffffff');
+    const roundTrip = await admin('GET', '/api/spaces/' + target + '/export');
+    assert.deepEqual(roundTrip.prefixes, pkg.prefixes, 'flags and explicit white survive export/import/export');
+    const legacy = structuredClone(pkg);
+    for (const prefix of legacy.prefixes) delete prefix.inheritColorToChildren;
+    legacy.prefixes.push({ cidr: '198.18.92.224/27', name: 'Legacy new prefix', color: '#ffffff' });
+    await admin('POST', '/api/imports/subnet', { ...body, package: legacy, mode: 'replace' });
+    const importedLegacy = (await data(target)).prefixes;
+    assert.equal(importedLegacy.find(p => p.id === targetParent).inheritColorToChildren, true, 'legacy replace preserves destination ON');
+    assert.equal(importedLegacy.find(p => p.id === targetChild).inheritColorToChildren, false, 'legacy replace preserves destination OFF');
+    assert.equal(importedLegacy.find(p => p.cidr === '198.18.92.224/27').inheritColorToChildren, false, 'legacy new record defaults OFF');
+    assert.deepEqual(await data(source), beforePreview.source);
+    assert.deepEqual(await data(north.spaceId), beforePreview.sibling);
+    await admin('DELETE', '/api/spaces/' + source);
+    await admin('DELETE', '/api/spaces/' + target);
+  });
+
   await t.test('portable preview is scoped, read-only and matches skip/replace including trash and late conflicts', async () => {
     const source = (await admin('POST', '/api/spaces', { companyId: north.companyId, name: 'Portable source', cidr: '198.18.88.0/24' }, 201)).id;
     const target = (await admin('POST', '/api/spaces', { companyId: south.companyId, name: 'Portable target', cidr: '198.18.88.0/24' }, 201)).id;

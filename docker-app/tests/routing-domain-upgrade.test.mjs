@@ -28,11 +28,70 @@ const seed = `
 async function legacyRows(db) {
   const snapshot = {};
   for (const table of ['companies', 'address_spaces', 'hosts', 'prefixes', 'users', 'user_space_access', 'user_company_access']) {
-    const result = await db.query(`SELECT to_jsonb(r) - 'routing_domain_id' AS legacy FROM ${table} r ORDER BY legacy`);
+    const result = await db.query(`SELECT to_jsonb(r) - 'routing_domain_id' - 'inherit_color_to_children' AS legacy FROM ${table} r ORDER BY legacy`);
     snapshot[table] = result.rows;
   }
   return snapshot;
 }
+
+test('IPAM color upgrade preserves old active/archived rows, rolls back on failure and defaults new prefixes OFF', async t => {
+  const connectionString = process.env.EMS_TEST_POSTGRES_URL;
+  const db = connectionString ? new pg.Client({ connectionString }) : new PGlite();
+  if (connectionString) await db.connect();
+  const schemaName = 'colors_' + randomUUID().replaceAll('-', '');
+  t.after(async () => {
+    try { await db.query('SET search_path TO public'); await db.query('DROP SCHEMA ' + schemaName + ' CASCADE'); }
+    finally { await (connectionString ? db.end() : db.close()); }
+  });
+  const exec = sql => connectionString ? db.query(sql) : db.exec(sql);
+  const rows = async sql => (await db.query(sql)).rows;
+  await exec('CREATE SCHEMA ' + schemaName + '; SET search_path TO ' + schemaName);
+  const baseline = await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8');
+  const requiredDomains = await readFile(new URL('../server/migrations/003-required-routing-domains.sql', import.meta.url), 'utf8');
+  const colorMigration = await readFile(new URL('../server/migrations/004-prefix-color-inheritance.sql', import.meta.url), 'utf8');
+  await exec('BEGIN');
+  await exec(baseline);
+  await exec(seed);
+  await exec("UPDATE prefixes SET color='#ffffff',deleted_at=now() WHERE id='pb'");
+  await exec(domainMigration);
+  await exec(requiredDomains);
+  await exec(`CREATE TABLE schema_migrations(module_id text,version text,checksum text NOT NULL,
+    applied_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(module_id,version))`);
+  for (const [version, sql] of [['001-baseline-1.7', baseline], ['002-default-routing-domains', domainMigration],
+    ['003-required-routing-domains', requiredDomains]]) {
+    await db.query('INSERT INTO schema_migrations(module_id,version,checksum) VALUES($1,$2,$3)',
+      ['core', version, createHash('sha256').update(sql).digest('hex')]);
+  }
+  await exec('COMMIT');
+  const before = await legacyRows(db);
+  let failAfterColor = true;
+  const query = async (sql, params) => {
+    const result = connectionString || params?.length ? await db.query(sql, params) : (await db.exec(sql)).at(-1);
+    if (sql === colorMigration && failAfterColor) { failAfterColor = false; throw new Error('injected after color DDL'); }
+    return { ...result, rows: result?.rows || [], rowCount: result?.rowCount ?? result?.affectedRows ?? 0 };
+  };
+  const pool = { query, connect: async () => ({ query, release() {} }) };
+  await assert.rejects(migrateDatabase(pool), /injected after color DDL/);
+  assert.deepEqual(await rows(`SELECT column_name FROM information_schema.columns
+    WHERE table_schema=current_schema() AND table_name='prefixes' AND column_name='inherit_color_to_children'`), []);
+  assert.deepEqual(await legacyRows(db), before);
+  await migrateDatabase(pool);
+  assert.deepEqual(await legacyRows(db), before, 'all legacy row fields and grants are preserved');
+  assert.deepEqual(await rows('SELECT id,inherit_color_to_children AS inherit FROM prefixes ORDER BY id'),
+    [{ id: 'pa', inherit: true }, { id: 'pb', inherit: true }]);
+  assert.deepEqual(await rows(`SELECT column_default FROM information_schema.columns
+    WHERE table_schema=current_schema() AND table_name='prefixes' AND column_name='inherit_color_to_children'`), [{ column_default: 'false' }]);
+  await exec("INSERT INTO prefixes(id,space_id,cidr,name) VALUES('new','a1','192.0.2.128/25','New default')");
+  assert.deepEqual(await rows("SELECT inherit_color_to_children AS inherit FROM prefixes WHERE id='new'"), [{ inherit: false }]);
+  await exec("UPDATE prefixes SET inherit_color_to_children=false WHERE id='pa'");
+  const changed = await rows('SELECT * FROM prefixes ORDER BY id');
+  const ledger = await rows("SELECT * FROM schema_migrations WHERE version='004-prefix-color-inheritance'");
+  assert.equal(ledger.length, 1);
+  await migrateDatabase(pool);
+  await migrateDatabase(pool);
+  assert.deepEqual(await rows('SELECT * FROM prefixes ORDER BY id'), changed, 'restart preserves explicit OFF and archived white');
+  assert.deepEqual(await rows("SELECT * FROM schema_migrations WHERE version='004-prefix-color-inheritance'"), ledger);
+});
 
 test('MS-03 additive upgrade preserves legacy Spaces, grants and old writers across rollback and retry', async t => {
   const connectionString = process.env.EMS_TEST_POSTGRES_URL;

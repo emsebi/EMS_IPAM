@@ -334,7 +334,7 @@ try {
   }, 201);
   for (const [cidr, color] of [['198.18.64.0/23', '#3157d5'], ['198.18.65.0/24', '#ffffff'],
     ['198.18.64.128/25', '#11aa55'], ['198.18.64.0/26', '#ffffff']]) {
-    await api('/api/prefixes', 'POST', { spaceId: colorSpace.id, cidr, name: 'Stored ' + cidr, color });
+    await api('/api/prefixes', 'POST', { spaceId: colorSpace.id, cidr, name: 'Stored ' + cidr, color, inheritColorToChildren: true });
   }
   const colorBefore = await api(`/api/spaces/${colorSpace.id}/data`);
   const siblingBeforeColors = await api('/api/spaces/test-space/data');
@@ -404,6 +404,47 @@ try {
     assert.deepEqual(await api(`/api/spaces/${colorSpace.id}/data`), colorBefore, 'all stored colors, names and IDs remain unchanged');
     assert.deepEqual(await api('/api/spaces/test-space/data'), siblingBeforeColors, 'sibling data remains unchanged');
     check('inherited color display defaults OFF, preserves exact/white colors and data, and persists across overview/card/table/tree views');
+    // Persisted ownership is separate from the display preference. Opting a
+    // parent out blocks distant ancestors but leaves exact child colors intact.
+    await colorToggle.check();
+    await colorPage.goto(`/#/ipam/${colorSpace.id}`);
+    await colorPage.locator('.overview-mode[data-mode="table"]').click();
+    await colorPage.locator('.range-label-action[data-cidr="198.18.64.0/23"]').click();
+    const inheritChoice = colorPage.locator('#prefixInheritColorToChildren');
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), true);
+    await inheritChoice.uncheck();
+    await colorPage.locator('#prefixForm [type=submit]').click();
+    await colorPage.locator('#prefixDialog').waitFor({ state: 'hidden' });
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), true, 'display remains ON independently');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.64.0/24"]'), '#eef2f7', 'nearest opt-out blocks Space fallback');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.65.0/24"]'), '#ffffff');
+    await colorPage.locator('.range-label-action[data-cidr="198.18.64.0/23"]').click();
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), false, 'saved per-prefix OFF survives reload');
+    await colorPage.locator('#prefixDialog [data-close]').first().click();
+    await colorPage.locator('.range-label-action[data-cidr="198.18.66.0/23"]').click();
+    await inheritChoice.waitFor({ state: 'visible' });
+    assert.equal(await inheritChoice.isChecked(), false, 'new prefix editor defaults OFF');
+    assert.equal(await colorPage.locator('#prefixName').getAttribute('required'), null, 'coloring does not require a typed name');
+    await colorPage.locator('#prefixDialog [data-close]').first().click();
+    await colorPage.goto(`/#/ipam/${colorSpace.id}/198.18.64.0%2F24`);
+    await colorPage.locator('.display-mode[data-mode="table"]').click();
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.64/26"]'), '#eef2f7');
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.128/26"]'), '#11aa55', 'nearer opted-in child still propagates');
+    assert.equal(await renderedColor('.table-prefix[data-cidr="198.18.64.0/26"]'), '#ffffff');
+    const afterChoice = await api(`/api/spaces/${colorSpace.id}/data`);
+    const parentBefore = colorBefore.prefixes.find(p => p.cidr === '198.18.64.0/23');
+    const parentAfter = afterChoice.prefixes.find(p => p.id === parentBefore.id);
+    assert.equal(parentAfter.inheritColorToChildren, false);
+    const { updatedAt: oldTime, ...oldFields } = parentBefore;
+    const { updatedAt: newTime, ...newFields } = parentAfter;
+    assert.deepEqual(newFields, { ...oldFields, inheritColorToChildren: false });
+    assert.deepEqual(afterChoice.prefixes.filter(p => p.id !== parentBefore.id), colorBefore.prefixes.filter(p => p.id !== parentBefore.id));
+    assert.deepEqual(await api('/api/spaces/test-space/data'), siblingBeforeColors);
+    check('per-prefix color propagation defaults OFF, persists independently, and preserves exact child white and nearer opt-in');
   } finally {
     await colorContext.close();
     await api(`/api/spaces/${colorSpace.id}`, 'DELETE');
