@@ -328,6 +328,87 @@ try {
   check('IPAM /24 table and graphical grid compactness with non-overlapping text');
   check('MIK link, IP-only default target, selectable fallback, client guide and ZIP download');
 
+  // Fresh browser preferences default OFF; display changes never write prefix data.
+  const colorSpace = await api('/api/spaces', 'POST', {
+    companyId: 'test-co', name: 'Inherited display fixture', cidr: '198.18.64.0/22', color: '#aabbcc',
+  }, 201);
+  for (const [cidr, color] of [['198.18.64.0/23', '#3157d5'], ['198.18.65.0/24', '#ffffff'],
+    ['198.18.64.128/25', '#11aa55'], ['198.18.64.0/26', '#ffffff']]) {
+    await api('/api/prefixes', 'POST', { spaceId: colorSpace.id, cidr, name: 'Stored ' + cidr, color });
+  }
+  const colorBefore = await api(`/api/spaces/${colorSpace.id}/data`);
+  const siblingBeforeColors = await api('/api/spaces/test-space/data');
+  const colorContext = await browser.newContext({ baseURL, viewport: { width: 1440, height: 980 },
+    storageState: { cookies: (await context.storageState()).cookies, origins: [] } });
+  const colorPage = await colorContext.newPage();
+  colorPage.setDefaultTimeout(12000);
+  colorPage.on('pageerror', error => errors.push(error.message));
+  const colorWrites = [];
+  colorPage.on('request', request => {
+    if (!['GET', 'HEAD'].includes(request.method())) colorWrites.push(request.method() + ' ' + request.url());
+  });
+  const colorToggle = colorPage.locator('.ipam-inheritance-display');
+  const renderedColor = async (selector, property = '--range-color') =>
+    colorPage.locator(selector).evaluate((element, key) => getComputedStyle(element).getPropertyValue(key).trim(), property);
+  const assertOverviewColors = async inherited => {
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.64.0/24"]'), inherited ? '#3157d5' : '#eef2f7');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.65.0/24"]'), '#ffffff', 'exact white survives either display setting');
+    assert.equal(await renderedColor('.root-row-open[data-cidr="198.18.66.0/24"]'), inherited ? '#aabbcc' : '#eef2f7');
+    assert.equal(await renderedColor('.root-prefix-open[data-cidr="198.18.64.0/22"]'), '#aabbcc', 'Space keeps its own stored color');
+    assert.equal(await renderedColor('.root-prefix-open[data-cidr="198.18.64.0/23"]'), '#3157d5', 'parent keeps its own stored color');
+  };
+  const assertDetailColors = async (mode, inherited) => {
+    const selector = mode === 'table' ? '.table-prefix' : '.tree-node';
+    for (const [cidr, expected] of [['198.18.64.128/25', '#11aa55'], ['198.18.64.0/26', '#ffffff'],
+      ['198.18.64.64/26', inherited ? '#3157d5' : '#eef2f7'],
+      ['198.18.64.128/26', inherited ? '#11aa55' : '#eef2f7'],
+      ['198.18.64.0/27', inherited ? '#ffffff' : '#eef2f7']]) {
+      assert.equal(await renderedColor(`${selector}[data-cidr="${cidr}"]`), expected, `${mode}: ${cidr}`);
+    }
+    assert.equal(await renderedColor('.sheet-banner', '--sheet-color'), inherited ? '#3157d5' : '#eef2f7');
+  };
+  try {
+    await colorPage.goto(`/#/ipam/${colorSpace.id}`);
+    await colorToggle.waitFor();
+    assert.equal(await colorPage.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')), null);
+    assert.equal(await colorToggle.isChecked(), false, 'fresh browser defaults OFF');
+    await assertOverviewColors(false);
+    await colorToggle.check();
+    await assertOverviewColors(true);
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), true, 'explicit ON survives reload');
+    await assertOverviewColors(true);
+    await colorPage.locator('.overview-mode[data-mode="cards"]').click();
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.64.0/24"]', '--tile-color'), '#3157d5');
+    await colorToggle.uncheck();
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.64.0/24"]', '--tile-color'), '#eef2f7');
+    assert.equal(await renderedColor('.subnet-tile[data-cidr="198.18.65.0/24"]', '--tile-color'), '#ffffff');
+    await colorPage.goto(`/#/ipam/${colorSpace.id}/198.18.64.0%2F24`);
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), false, 'OFF persists across navigation');
+    for (const mode of ['table', 'tree']) {
+      await colorPage.locator(`.display-mode[data-mode="${mode}"]`).click();
+      await assertDetailColors(mode, false);
+      await colorToggle.check();
+      await assertDetailColors(mode, true);
+      await colorToggle.uncheck();
+      await assertDetailColors(mode, false);
+    }
+    await colorPage.reload();
+    await colorToggle.waitFor();
+    assert.equal(await colorToggle.isChecked(), false, 'explicit OFF survives reload');
+    await assertDetailColors('tree', false);
+    assert.equal(await colorPage.evaluate(() => localStorage.getItem('ems-show-inherited-subnet-colors')), 'false');
+    assert.deepEqual(colorWrites, [], 'display-only toggle must not send any write request');
+    assert.deepEqual(await api(`/api/spaces/${colorSpace.id}/data`), colorBefore, 'all stored colors, names and IDs remain unchanged');
+    assert.deepEqual(await api('/api/spaces/test-space/data'), siblingBeforeColors, 'sibling data remains unchanged');
+    check('inherited color display defaults OFF, preserves exact/white colors and data, and persists across overview/card/table/tree views');
+  } finally {
+    await colorContext.close();
+    await api(`/api/spaces/${colorSpace.id}`, 'DELETE');
+  }
+
   await page.locator('#deviceTypesButton').click();
   const row = page.locator('#deviceTypesList .user-row').filter({ has: page.getByText('Test Device', { exact: true }) });
   await row.locator('.edit-device-type').click();

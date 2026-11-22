@@ -1,3 +1,15 @@
+# Inherited-color display defaults OFF — 2026-11-22
+
+Fresh main: `4c871ea555a33a5a6055000cbc3a89c537f6748c`, screenshot-only successor of #91 merge `1b584ac899bed2f46b599d794b372ea84aa1f7d9`; merge CI 45005886278 passed all four gates (48 browser/API scenarios and 34 native HTTP tests). #83 is now closed without merge; #84 is open with failed CI; #85 is the separate display-only option and #12 remains draft. Read #89 and both acceptance contracts before continuing.
+
+Integrate #85 with current main while preserving every unified Import change and browser scenario. A fresh browser now defaults inherited-color display OFF; only an explicitly stored `true` enables it. Existing explicit ON/OFF preferences are retained. Exact prefix colors, including white, and the Space's own stored color remain visible in either setting. Uncolored descendants use the existing neutral color when OFF, and the most-specific parent/Space fallback when ON. The sheet banner follows the selected subnet's display color too. This is a local display preference, not the still-pending per-prefix persisted propagation rule in #84. No API, schema, migration, module or RADIUS change.
+
+The browser scenario creates isolated real HTTP prefix records and uses a fresh authenticated browser context with empty local storage. It checks default OFF; ON/OFF persistence after reload/navigation; actual rendered colors in overview table/cards and detail table/tree; explicit parent/green/white colors and nearest-parent selection; unchanged full target/sibling data; and no write request from display actions. All previous Import/Dark Mode tests remain. Sixteen related local Node tests pass with zero skips; require this candidate's full CI/browser result recorded in #85/#89. No local Chromium pass is claimed under the known socket restriction.
+
+VM remains unchanged this step. Actual read-only diagnostic 45005783543 from #91 found health=200 and stable app identity, but missing shared classifier (HTTP 404) and five mismatched Import files; the diagnostic correctly returned BLOCKED/exit 2. Full deployed SHA remains unverified, and no rollout/restart/migration or new real RADIUS test is permitted by that evidence. RADIUS is healthy/user-accepted/frozen. After green candidate and merge CI, continue #84's per-prefix semantics, default-OFF persistence and Export/Import preservation without merging conflicting migrations blindly; operational acceptance and guarded deployment remain open. Work executes; Chat handles feedback; GitHub/#89 owns status.
+
+---
+
 # Installed Import compatibility evidence — 2026-11-22
 
 Fresh main: `ca4f1829695bdb1ff95bc799157bd52de3b4f96b`, a screenshot-only successor of #90 merge `24dcbaefb2410903dacec5a4f20771f54f811498`. Both candidate CI 44979017800 and merge CI 44979172804 passed all four gates (48 browser scenarios, 34 native HTTP tests, no native skips). Import code is merged, while installed/operator acceptance remains PARTIAL. Open #83/#85 are green, #84 failed and #12 is draft; none is changed here. #89 and both acceptance documents remain authoritative.
