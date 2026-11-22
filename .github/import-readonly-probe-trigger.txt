@@ -1,0 +1,4 @@
+Read-only installed Import file/asset/identity evidence for Issue #89.
+Reviewed diagnostic: be76da68513cba4ad0a48686ca0f9b8103ca75f3 (PR #91).
+Source CI: https://github.com/emsebi/EMS_IPAM/actions/runs/44983342050 — all four gates passed.
+No deployment, restart, image build, credentials, login, import, DB table or RADIUS operation.
