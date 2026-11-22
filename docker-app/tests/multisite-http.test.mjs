@@ -195,6 +195,89 @@ test('multisite HTTP: identical CIDR/IP retains identity and enforces Company/Sp
       await call('DELETE','/api/hosts/'+other.spaceId+'/'+other.host.ip,undefined,[403,404]);
     });
   }
+  await t.test('panel Company directory requires full Company scope; Space grants never widen through search or archive', async () => {
+    const companyId = (await admin('POST', '/api/companies', {
+      name: 'Scoped directory fixture', kind: 'branch', parentCompanyId: parent,
+      address: 'private-dir-address', phone: 'private-dir-phone', managerName: 'private-dir-manager',
+      description: 'private-dir-description', notes: 'private-dir-notes', latitude: 32, longitude: 51,
+      contacts: [{ fullName: 'private-dir-contact', mobile: 'private-dir-mobile' }],
+      connections: [{ title: 'private-dir-link', ip: '203.0.113.244', provider: 'private-dir-provider' }],
+    }, 201)).id;
+    const spaceIds = [];
+    for (const [name, cidr] of [['Allowed LAN', '198.18.44.0/24'], ['Hidden LAN', '198.18.45.0/24']]) {
+      spaceIds.push((await admin('POST', '/api/spaces', { companyId, name, cidr }, 201)).id);
+    }
+    await admin('PUT', '/api/hosts', { spaceId: spaceIds[0], ip: '198.18.44.9', name: 'Allowed endpoint' });
+    await admin('PUT', '/api/hosts', { spaceId: spaceIds[1], ip: '198.18.45.9', name: 'private-dir-host' });
+    const personId = (await admin('POST', '/api/personnel', { fullName: 'private-dir-person', companyId }, 201)).id;
+    const unassignedId = (await admin('POST', '/api/personnel', { fullName: 'unassigned-directory-person' }, 201)).id;
+    const makeReader = async (username, role, grants, moduleIds = ['ipam']) => {
+      const id = (await admin('POST', '/api/users', { username, password: 'Test-Password-01', role, ...grants, moduleIds }, 201)).id;
+      return { id, call: await client(username) };
+    };
+    const spaceReader = await makeReader('dir-space-reader', 'viewer', { spaceIds: [spaceIds[0]] });
+    const companyReader = await makeReader('dir-company-reader', 'helpdesk', { companyIds: [companyId] });
+    const parentReader = await makeReader('dir-parent-reader', 'branch', { companyIds: [parent] });
+    const noModule = await makeReader('dir-no-module', 'support', { companyIds: [companyId], spaceIds }, []);
+    const expectedIdentity = { id: companyId, name: 'Scoped directory fixture', kind: 'branch', companyDetailsVisible: false };
+    const url = '/api/companies/' + companyId;
+    const before = await admin('GET', url);
+    const grantsBefore = await admin('GET', '/api/users');
+    const limited = await spaceReader.call('GET', '/api/bootstrap');
+    assert.deepEqual(limited.companies, [expectedIdentity], 'Space-only bootstrap must not expose company directory fields/counts');
+    assert.deepEqual(limited.fullCompanyIds, []);
+    assert.deepEqual(limited.spaces.map(s => s.id), [spaceIds[0]]);
+    const detail = await spaceReader.call('GET', url);
+    assert.deepEqual(detail.company, expectedIdentity);
+    for (const key of ['contacts', 'connections', 'personnel']) assert.deepEqual(detail[key], []);
+    assert.deepEqual(detail.spaces.map(s => s.id), [spaceIds[0]]);
+    assert.equal(detail.stats.hosts, 1);
+    assert.ok(!JSON.stringify(detail).includes('private-dir-'));
+    assert.ok(!JSON.stringify(detail).includes(spaceIds[1]));
+    const visibleName = (await spaceReader.call('GET', '/api/search?q=Scoped%20directory%20fixture')).items;
+    assert.deepEqual(visibleName.filter(x => x.kind === 'company'), [{ kind: 'company', companyId, id: companyId, name: 'Scoped directory fixture' }]);
+    for (const q of ['private-dir-', '203.0.113.244', 'unassigned-directory-person']) {
+      assert.deepEqual((await spaceReader.call('GET', '/api/search?q=' + encodeURIComponent(q))).items, [], 'No private-field search oracle: ' + q);
+    }
+    const full = await companyReader.call('GET', url);
+    assert.deepEqual(full, before, 'An explicit Company view grant retains directory access');
+    assert.equal(full.personnel[0].id, personId);
+    assert.equal(full.contacts.length, 1); assert.equal(full.connections.length, 1);
+    assert.equal(full.stats.hosts, 2);
+    assert.equal((await companyReader.call('GET', '/api/search?q=private-dir-contact')).items[0].id, companyId);
+    assert.equal((await companyReader.call('GET', '/api/search?q=private-dir-person')).items[0].id, personId);
+    assert.deepEqual((await companyReader.call('GET', '/api/search?q=unassigned-directory-person')).items, []);
+    assert.equal((await admin('GET', '/api/search?q=unassigned-directory-person')).items[0].id, unassignedId);
+    await parentReader.call('GET', url, undefined, 404);
+    await noModule.call('GET', url, undefined, 404);
+    assert.deepEqual((await noModule.call('GET', '/api/bootstrap')).fullCompanyIds, []);
+    assert.deepEqual((await parentReader.call('GET', '/api/search?q=private-dir-')).items, []);
+    assert.deepEqual((await noModule.call('GET', '/api/search?q=private-dir-')).items, []);
+    for (const { call } of [spaceReader, companyReader, parentReader, noModule]) {
+      await call('GET', '/api/personnel', undefined, 403);
+      await call('PUT', url, { name: 'Forbidden edit' }, 403);
+      await call('PUT', '/api/hosts', { spaceId: spaceIds[0], ip: '198.18.44.9', name: 'Forbidden edit' }, 403);
+    }
+    assert.deepEqual(await admin('GET', url), before, 'Reads/rejected writes preserve directory and Space data');
+    assert.deepEqual(await admin('GET', '/api/users'), grantsBefore, 'Reads/rejected writes preserve all panel grants');
+
+    // An existing session must lose access immediately, without re-login.
+    await admin('PUT', '/api/users/' + companyReader.id, { role: 'helpdesk', companyIds: [], spaceIds: [spaceIds[0]], moduleIds: ['ipam'] });
+    assert.deepEqual((await companyReader.call('GET', url)).company, expectedIdentity);
+    assert.deepEqual((await companyReader.call('GET', '/api/search?q=private-dir-person')).items, []);
+    await admin('DELETE', '/api/spaces/' + spaceIds[0]);
+    for (const { call } of [spaceReader, companyReader]) {
+      await call('GET', url, undefined, 404);
+      assert.deepEqual((await call('GET', '/api/bootstrap')).companies, []);
+      assert.deepEqual((await call('GET', '/api/search?q=Scoped%20directory%20fixture')).items, []);
+    }
+    await admin('POST', '/api/trash/space/' + spaceIds[0]);
+    assert.deepEqual((await spaceReader.call('GET', url)).company, expectedIdentity);
+    await admin('PUT', '/api/users/' + spaceReader.id, { role: 'viewer', spaceIds: [spaceIds[0]], moduleIds: [] });
+    await spaceReader.call('GET', url, undefined, 404);
+    assert.deepEqual((await spaceReader.call('GET', '/api/search?q=Scoped%20directory%20fixture')).items, []);
+    assert.deepEqual(await admin('GET', url), before, 'Archiving/restoring a Space preserves the company directory');
+  });
   await t.test('ordinary Space edits reject a different branch without changing either branch or its grants', async () => {
     const northReader = await client('north-reader');
     const southReader = await client('south-space-reader');

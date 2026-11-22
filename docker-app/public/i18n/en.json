@@ -1,4 +1,7 @@
 {
+  "company.scopeOnly": "Your access is limited to assigned address spaces. Company contacts, personnel, connections and notes require Company access.",
+  "company.allowedSpaces": "Assigned address spaces",
+  "company.back": "Back to companies",
   "Dashboard & Companies": "Dashboard & Companies",
   "IP Management": "IP Management",
   "Inventory": "Inventory",

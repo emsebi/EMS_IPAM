@@ -355,7 +355,7 @@ async function canAccessCompany(user, companyId) {
     `SELECT 1 FROM user_company_access WHERE user_id=$1 AND company_id=$2
      UNION ALL
      SELECT 1 FROM user_space_access usa JOIN address_spaces s ON s.id=usa.space_id
-      WHERE usa.user_id=$1 AND s.company_id=$2 LIMIT 1`,
+      WHERE usa.user_id=$1 AND s.company_id=$2 AND s.deleted_at IS NULL LIMIT 1`,
     [user.id, companyId],
   );
   return found.rowCount > 0;
@@ -436,6 +436,13 @@ function broadcast(event) {
   }
 }
 
+// A Space grant reveals its Company's identity for navigation, not the whole
+// Company directory. This does not change module grants or write permissions.
+function companyForScope(company, fullCompanyAccess) {
+  if (fullCompanyAccess) return { ...company, companyDetailsVisible: true };
+  return { id: company.id, name: company.name, kind: company.kind, companyDetailsVisible: false };
+}
+
 async function listBootstrap(user, { includeEditorDomains = false } = {}) {
   const ipamAllowed = await hasModuleAccess(user, "ipam");
   const companyWhere = !ipamAllowed
@@ -487,18 +494,20 @@ async function listBootstrap(user, { includeEditorDomains = false } = {}) {
   );
   const fullCompanyIds = user.role === "admin"
     ? ids
-    : (await pool.query("SELECT company_id AS id FROM user_company_access WHERE user_id=$1", [user.id])).rows.map((item) => item.id);
+    : (await pool.query("SELECT company_id AS id FROM user_company_access WHERE user_id=$1", [user.id])).rows.map((item) => item.id).filter(id => ids.includes(id));
   const moduleIds = await moduleIdsForUser(user);
   const moduleSet = new Set(moduleIds);
   const modules = installedModules.filter((item) => user.role === "admin" || moduleSet.has(item.id)).map(({ dir, proxy, ...item }) => item);
   const catalogMap = new Map(MODULE_CATALOG.map((item) => [item.id, { ...item, installed: item.id === "ipam" || item.id === "inventory" || installedModules.some((module) => module.id === item.id) }]));
   for (const module of installedModules) if (!catalogMap.has(module.id)) catalogMap.set(module.id, { id: module.id, name: module.name || module.id, description: module.description || "افزونه نصب‌شده", installed: true });
   const moduleCatalog = [...catalogMap.values()];
-  return { ok: true, version: APP_VERSION, user: { ...user, moduleIds }, companies: companies.rows, spaces: spaces.rows, tools: tools.rows, fullCompanyIds, moduleIds, moduleCatalog, modules };
+  const fullCompanySet = new Set(fullCompanyIds);
+  return { ok: true, version: APP_VERSION, user: { ...user, moduleIds }, companies: companies.rows.map(company => companyForScope(company, fullCompanySet.has(company.id))), spaces: spaces.rows, tools: tools.rows, fullCompanyIds, moduleIds, moduleCatalog, modules };
 }
 
 async function companyData(user, companyId) {
   if (!(await canAccessCompany(user, companyId))) throw Object.assign(new Error("شرکت پیدا نشد یا دسترسی ندارید."), { status: 404 });
+  const fullCompanyAccess = await canManageCompany(user, companyId);
   const visibleSpaces = `s.company_id=$1 AND s.deleted_at IS NULL AND
     ($2::boolean OR EXISTS (SELECT 1 FROM user_company_access a WHERE a.company_id=s.company_id AND a.user_id=$3)
                  OR EXISTS (SELECT 1 FROM user_space_access a WHERE a.space_id=s.id AND a.user_id=$3))`;
@@ -510,17 +519,17 @@ async function companyData(user, companyId) {
          FROM companies WHERE id=$1 AND deleted_at IS NULL`,
       [companyId],
     ),
-    pool.query(
+    fullCompanyAccess ? pool.query(
       `SELECT id,full_name AS "fullName",job_title AS "jobTitle",phone,mobile,email,notes,is_primary AS "isPrimary"
          FROM company_contacts WHERE company_id=$1 ORDER BY is_primary DESC,full_name`,
       [companyId],
-    ),
-    pool.query(
+    ) : { rows: [] },
+    fullCompanyAccess ? pool.query(
       `SELECT id,title,ip,provider,link_role AS "linkRole",device_name AS "deviceName",username,
               connection_methods AS "connectionMethods",notes
          FROM company_connections WHERE company_id=$1 ORDER BY link_role,title`,
       [companyId],
-    ),
+    ) : { rows: [] },
     pool.query(
       `SELECT s.id,s.company_id AS "companyId",s.name,s.cidr,s.color,s.description,
               d.id AS "routingDomainId",d.name AS "routingDomainName",
@@ -531,11 +540,11 @@ async function companyData(user, companyId) {
         WHERE ${visibleSpaces} ORDER BY s.cidr`,
       spaceParams,
     ),
-    pool.query(
+    fullCompanyAccess ? pool.query(
       `SELECT id,employee_code AS "employeeCode",full_name AS "fullName",phone,mobile,email,department,job_title AS "jobTitle",notes,active
          FROM personnel WHERE company_id=$1 ORDER BY active DESC,full_name`,
       [companyId],
-    ),
+    ) : { rows: [] },
     pool.query(
       `SELECT count(DISTINCT h.id)::int AS hosts,count(DISTINCT p.id)::int AS prefixes,
               count(DISTINCT CASE WHEN h.radio_mode<>'' THEN h.id END)::int AS radios
@@ -547,7 +556,7 @@ async function companyData(user, companyId) {
     ),
   ]);
   if (!company.rowCount) throw Object.assign(new Error("شرکت پیدا نشد."), { status: 404 });
-  return { ok: true, company: company.rows[0], contacts: contacts.rows, connections: connections.rows, spaces: spaces.rows, personnel: personnel.rows, stats: stats.rows[0] };
+  return { ok: true, company: companyForScope(company.rows[0], fullCompanyAccess), contacts: contacts.rows, connections: connections.rows, spaces: spaces.rows, personnel: personnel.rows, stats: stats.rows[0] };
 }
 
 async function replaceCompanyDetails(client, companyId, body) {
@@ -757,32 +766,37 @@ async function searchData(user, query) {
   const exactIp = exactSearchIp(q);
   const compactMacQuery = q.toLowerCase().replace(/[^0-9a-f]/g, "");
   const companyIds = [...new Set(spaces.map((item) => item.companyId))];
+  const fullCompanyIds = bootstrap.fullCompanyIds;
   const [hosts, prefixes, companies, personnel] = await Promise.all([
     searchHosts(spaceIds, q, exactIp, compactMacQuery, 30),
     searchPrefixes(spaceIds, q, 20),
     companyIds.length ? pool.query(
-      `SELECT DISTINCT c.id,c.name,c.address,c.phone,c.manager_name AS "managerName"
+      `SELECT DISTINCT c.id,c.name,
+              CASE WHEN c.id=ANY($3::text[]) THEN c.address END AS address,
+              CASE WHEN c.id=ANY($3::text[]) THEN c.phone END AS phone,
+              CASE WHEN c.id=ANY($3::text[]) THEN c.manager_name END AS "managerName"
          FROM companies c
-         LEFT JOIN company_contacts cc ON cc.company_id=c.id
-         LEFT JOIN company_connections cn ON cn.company_id=c.id
+         LEFT JOIN company_contacts cc ON cc.company_id=c.id AND c.id=ANY($3::text[])
+         LEFT JOIN company_connections cn ON cn.company_id=c.id AND c.id=ANY($3::text[])
         WHERE c.id=ANY($1::text[]) AND c.deleted_at IS NULL AND
-          (translate(c.name,'كيى','کیی') ILIKE $2 OR translate(c.address,'كيى','کیی') ILIKE $2 OR
+          (translate(c.name,'كيى','کیی') ILIKE $2 OR (c.id=ANY($3::text[]) AND (translate(c.address,'كيى','کیی') ILIKE $2 OR
            c.phone ILIKE $2 OR translate(c.manager_name,'كيى','کیی') ILIKE $2 OR
            translate(cc.full_name,'كيى','کیی') ILIKE $2 OR cc.phone ILIKE $2 OR cc.mobile ILIKE $2 OR
-           cc.email ILIKE $2 OR cn.ip ILIKE $2 OR translate(cn.provider,'كيى','کیی') ILIKE $2)
+           cc.email ILIKE $2 OR cn.ip ILIKE $2 OR translate(cn.provider,'كيى','کیی') ILIKE $2)))
         ORDER BY c.name LIMIT 20`,
-      [companyIds, `%${q}%`],
+      [companyIds, `%${q}%`, fullCompanyIds],
     ) : { rows: [] },
-    companyIds.length ? pool.query(
+    fullCompanyIds.length || user.role === "admin" ? pool.query(
       `SELECT p.id,p.employee_code AS "employeeCode",p.full_name AS "fullName",p.phone,p.mobile,p.email,p.department,p.job_title AS "jobTitle",p.company_id AS "companyId",c.name AS "companyName"
          FROM personnel p LEFT JOIN companies c ON c.id=p.company_id
-        WHERE p.active=true AND (p.company_id IS NULL OR p.company_id=ANY($1::text[])) AND
+        WHERE p.active=true AND (($3::boolean AND p.company_id IS NULL) OR p.company_id=ANY($1::text[])) AND
           (p.employee_code ILIKE $2 OR translate(p.full_name,'كيى','کیی') ILIKE $2 OR p.phone ILIKE $2 OR p.mobile ILIKE $2 OR p.email ILIKE $2 OR translate(p.department,'كيى','کیی') ILIKE $2)
         ORDER BY p.full_name LIMIT 20`,
-      [companyIds, `%${q}%`],
+      [fullCompanyIds, `%${q}%`, user.role === "admin"],
     ) : { rows: [] },
   ]);
-  items.push(...companies.rows.map((item) => ({ kind: "company", companyId: item.id, ...item })));
+  items.push(...companies.rows.map((item) => ({ kind: "company", companyId: item.id,
+    ...(fullCompanyIds.includes(item.id) ? item : { id: item.id, name: item.name }) })));
   items.push(...personnel.rows.map((item) => ({ kind: "personnel", ...item })));
   items.push(...hosts.rows.map((item) => ({ kind: "host", ...item })));
   items.push(...prefixes.rows.map((item) => ({ kind: "prefix", ...item })));
