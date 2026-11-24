@@ -41,6 +41,7 @@ Management Addresses:
     IP: 192.0.2.22`,
  'show mac address-table':`  10    0011.2233.4455    DYNAMIC     Gi1/0/2`,
  'show power inline':`Gi1/0/2 auto on 15.4 Ieee PD`,
+ 'show etherchannel summary':`Group  Port-channel  Protocol    Ports\n------+-------------+-----------+----------------`,
  'show running-config':`Current configuration : 2048 bytes
 hostname FixtureSwitch
 aaa new-model
