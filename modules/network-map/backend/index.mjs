@@ -6,7 +6,7 @@ import {vault} from './vault.mjs';
 import {collectDevice,probeTcp} from '../discovery/ssh.mjs';
 
 const base='/api/network-map',uuid=/^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
-const defaults={username:'',port:22,timeout:8,concurrency:4,devices:[],scopes:[],rootId:'',saveConfig:true};
+const defaults={username:'',port:22,timeout:8,concurrency:4,devices:[],scopes:[],rootId:'',neighborOnly:false,saveConfig:true};
 export function createModule(ctx) {
   const {pool,json,readBody,requireAdmin,audit,pingMany}=ctx;
   const directory=path.join(ctx.backupDir||process.env.BACKUP_DIR||'/backups','network-map');
@@ -38,7 +38,7 @@ export function createModule(ctx) {
     const queue=deviceId?[settings.devices.find(d=>d.id===deviceId)||old.get(deviceId)]:[...settings.devices];
     if(deviceId&&(!queue[0]||!allowed.has(queue[0].address)))throw fail('Device is outside the saved scan scope.');
     const queued=new Set(queue.map(n=>n.address));
-    if(!deviceId)for(const ip of expandScopes(settings.scopes))if(!queued.has(ip)){queue.push({id:ip,address:ip,name:ip,platform:'auto',probeFirst:true});queued.add(ip);}
+    if(!deviceId&&!settings.neighborOnly)for(const ip of expandScopes(settings.scopes))if(!queued.has(ip)){queue.push({id:ip,address:ip,name:ip,platform:'auto',probeFirst:true});queued.add(ip);}
     const nodes=new Map(previous.nodes.filter(n=>!n.id.startsWith('peer:')&&allowed.has(n.address)).map(n=>[n.id,n]));
     const configs={};job.total=queue.length;let cursor=0,collected=0;
     async function worker(){while(cursor<queue.length&&!job.cancelled){
@@ -52,6 +52,14 @@ export function createModule(ctx) {
         collectedAt:['online','partial'].includes(result.status)?at:previousNode.collectedAt||null};delete node.probeFirst;
       if(node.hostname&&target.name===target.address)node.name=node.hostname;
       nodes.set(node.id,node);job.completed++;
+      if(!deviceId&&settings.neighborOnly&&['online','partial'].includes(result.status)){
+        for(const neighbor of node.neighbors||[]){
+          const ip=neighbor.address;
+          if(!allowed.has(ip)||queued.has(ip))continue;
+          if(queue.length>=500){job.limitReached=true;break;}
+          queued.add(ip);queue.push({id:ip,address:ip,name:ip,platform:'auto'});job.total=queue.length;
+        }
+      }
     }}
     await Promise.all(Array.from({length:settings.concurrency},worker));
     const aliases=new Set([...nodes.values()].flatMap(n=>[n.address,n.name,n.hostname,n.hostname?.split('.')[0]]).filter(Boolean).map(s=>s.toLowerCase()));
@@ -101,11 +109,26 @@ export function createModule(ctx) {
     if(route==='/layout'&&method==='PUT'){
       const layout=layoutInput(await readBody(req));await pool.query(`INSERT INTO network_map_state(company_id,layout) VALUES($1,$2::jsonb) ON CONFLICT(company_id) DO UPDATE SET layout=excluded.layout`,[c,JSON.stringify(layout)]);return json(res,200,{ok:true});
     }
+    if(route==='/reset'&&method==='POST'){
+      const body=await readBody(req);
+      if(body.confirm!==true)throw fail('Confirm map reset.');
+      if(busy(c))throw fail('Wait for the current scan or reachability check to finish.',409);
+      healthLocks.add(c);
+      try{
+        const topology=emptyTopology(),layout={positions:{},background:''};
+        await pool.query(`INSERT INTO network_map_state(company_id,topology,layout) VALUES($1,$2::jsonb,$3::jsonb) ON CONFLICT(company_id) DO UPDATE SET topology=excluded.topology,layout=excluded.layout`,[c,JSON.stringify(topology),JSON.stringify(layout)]);
+        jobs.delete(c);
+        await audit(user,'network-map.reset','network_map',c,{companyId:c});
+        return json(res,200,{ok:true,topology,layout,job:null});
+      }finally{healthLocks.delete(c);}
+    }
     if(route==='/scan'&&method==='POST'){
       if(busy(c))throw fail('A scan is already running.',409);
       const record=await readSettings(c);if(!record?.password_ciphertext)throw fail('Save connection settings first.');
       const body=await readBody(req),deviceId=text(body.deviceId,100);
       if(deviceId){const state=await readState(c);const allowed=new Set([...record.settings.devices.map(d=>d.address),...expandScopes(record.settings.scopes)]);if(!allowed.has(deviceId)||![...record.settings.devices,...state.topology.nodes].some(n=>n.id===deviceId))throw fail('Device is outside the saved scan scope.',404);}
+      if(busy(c))throw fail('A scan or reset is already running.',409);
+      if(!deviceId&&record.settings.neighborOnly&&!record.settings.devices.length)throw fail('Add at least one starting device.');
       const job={id:crypto.randomUUID(),status:'running',startedAt:new Date().toISOString(),completed:0,total:0};jobs.set(c,job);
       runScan(c,user,record,job,deviceId).catch(()=>{job.status='failed';job.error='Collection or archive failed; previous saved snapshots remain available.';job.finishedAt=new Date().toISOString();});
       return json(res,202,{ok:true,job});
