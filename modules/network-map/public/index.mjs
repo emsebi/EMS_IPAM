@@ -52,6 +52,7 @@ export function createUi(ctx) {
       <button type="button" class="btn" id="nmImportInventory">${L('Add registered switches and routers','افزودن سوئیچ‌ها و روترهای ثبت‌شده')}</button>
       <div class="nm-form-grid">${field(L('Additional IP ranges — optional','رنج‌های اضافی — اختیاری'),`<textarea id="nmScopes" rows="3" class="ltr mono" placeholder="192.0.2.0/24">${esc((settings.scopes||[]).join('\n'))}</textarea>`)}
       ${field(L('Root / core switch IP','IP سوئیچ مرکزی / مبنای مسیر'),input('nmRoot',settings.rootId,'text','class="ltr mono" placeholder="192.0.2.10"'))}</div>
+      <label class="nm-check"><input id="nmNeighborOnly" type="checkbox" ${settings.neighborOnly?'checked':''}>${L('Follow CDP/LLDP neighbors only (ranges are allowed boundaries, not scan targets)','فقط دنبال کردن همسایه‌ها (رنج‌ها محدوده مجاز هستند، نه هدف اسکن)')}</label>
       <p class="nm-muted">${L('Up to 4096 addresses and 500 devices. Neighbors outside these boundaries appear as unverified nodes.','حداکثر ۴۰۹۶ آدرس و ۵۰۰ تجهیز. همسایه‌های خارج از این محدوده فقط به‌عنوان تجهیز بررسی‌نشده نمایش داده می‌شوند.')}</p></section>
       <section class="panel"><h3>03 · ${L('Readable snapshots and configuration exports','فایل خوانای اطلاعات و کانفیگ')}</h3><label class="nm-check"><input id="nmSaveConfig" type="checkbox" ${settings.saveConfig?'checked':''}>${L('Save a configuration export with every manual collection','همراه هر دریافت دستی، خروجی کانفیگ هم ذخیره شود')}</label>
       <p>${L('The latest 20 snapshots are kept as JSON files. Config exports mask secrets and need those secrets for a complete restore.','۲۰ برداشت آخر به‌صورت فایل JSON نگهداری می‌شوند. سکرت‌ها در خروجی کانفیگ پوشانده می‌شوند؛ بازیابی کامل به واردکردن آن‌ها نیاز دارد.')}</p><code class="ltr">${esc(settings.archivePath||'backups/network-map/')}</code></section>
@@ -62,7 +63,7 @@ export function createUi(ctx) {
     });
     listen('#nmSettings','submit',async e=>{e.preventDefault();const previousRoot=settings.rootId,val=id=>page.querySelector('#'+id).value;
       const devices=val('nmTargets').split('\n').filter(s=>s.trim()).map(line=>{const [address,platform,name]=line.split('|').map(s=>s.trim());return {address,platform:platform||'auto',name:name||address};});
-      await api('/settings','PUT',{devices,scopes:val('nmScopes').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean),username:val('nmUsername'),password:val('nmPassword'),port:Number(val('nmSshPort')),timeout:Number(val('nmTimeout')),concurrency:Number(val('nmConcurrency')),rootId:val('nmRoot'),saveConfig:page.querySelector('#nmSaveConfig').checked});
+      await api('/settings','PUT',{devices,scopes:val('nmScopes').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean),username:val('nmUsername'),password:val('nmPassword'),port:Number(val('nmSshPort')),timeout:Number(val('nmTimeout')),concurrency:Number(val('nmConcurrency')),rootId:val('nmRoot'),neighborOnly:page.querySelector('#nmNeighborOnly').checked,saveConfig:page.querySelector('#nmSaveConfig').checked});
       page.querySelector('#nmPassword').value='';await load();
       if(settings.rootId!==previousRoot){trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedPort='';highlightLinks.clear();highlightNodes.clear();}
       tab='map';render();toast(L('Connection settings saved.','تنظیمات اتصال ذخیره شد.'));
@@ -76,7 +77,7 @@ export function createUi(ctx) {
   async function refreshHealth(){const token=generation,data=await api('/health','POST',{});if(token!==generation||!active())return;topology=data.topology;if(tab==='map'){drawGraph();renderDetail();}}
   function scheduleMonitor(){clearTimeout(timer);if(!monitor||!active())return;timer=setTimeout(async()=>{if(!active()){monitor=false;return;}try{if(job?.status!=='running')await refreshHealth();}catch(e){toast(e.message);}scheduleMonitor();},30000);}
   function renderMap(){
-    page.querySelector('#nmBody').innerHTML=`<div class="nm-toolbar"><button id="nmScan" class="btn primary" ${hasPassword?'':'disabled'}>${L('Create / refresh map','ایجاد / به‌روزرسانی نقشه')}</button><button id="nmHealth" class="btn">${L('Check reachability','بررسی اتصال تجهیزات')}</button><label class="nm-check"><input id="nmMonitor" type="checkbox" ${monitor?'checked':''}>${L('Reachability every 30s','بررسی اتصال هر ۳۰ ثانیه')}</label></div>
+    page.querySelector('#nmBody').innerHTML=`<div class="nm-toolbar"><button id="nmScan" class="btn primary" ${hasPassword?'':'disabled'}>${L('Create / refresh map','ایجاد / به‌روزرسانی نقشه')}</button><button id="nmReset" class="btn" ${!topology.nodes.length||job?.status==='running'?'disabled':''}>${L('Delete current map','حذف نقشه فعلی')}</button><button id="nmHealth" class="btn">${L('Check reachability','بررسی اتصال تجهیزات')}</button><label class="nm-check"><input id="nmMonitor" type="checkbox" ${monitor?'checked':''}>${L('Reachability every 30s','بررسی اتصال هر ۳۰ ثانیه')}</label></div>
       <p class="nm-muted">${L('Port and MAC tables update only when you explicitly refresh the map or device. Reachability checks use ICMP / TCP only.','اطلاعات پورت و MAC فقط با رفرش دستی نقشه یا دستگاه به‌روزرسانی می‌شود. پایش اتصال فقط ICMP / TCP را بررسی می‌کند.')}</p>
       <form id="nmTraceForm" class="nm-search"><span>⌕</span><select id="nmTraceKind" aria-label="${L('Search type','نوع جست‌وجو')}"><option value="mac">MAC</option><option value="ip">IPv4</option></select><input id="nmMac" class="ltr mono" list="nmSuggestions" autocomplete="off" placeholder="${L('Enter a MAC or IPv4 address','MAC یا آدرس IPv4 را وارد کنید')}"><datalist id="nmSuggestions"></datalist><button class="btn primary" type="submit">${L('Trace saved data','ردیابی اطلاعات ذخیره‌شده')}</button><button id="nmAddMac" class="btn" type="button">＋ ${L('Register MAC','ثبت MAC')}</button><button id="nmClearTrace" class="btn" type="button">${L('Clear','پاک کردن')}</button></form>
       <div id="nmTraceResult"></div><div class="nm-map-grid"><section class="panel nm-map-panel"><div class="nm-map-tools"><input id="nmFindDevice" placeholder="${L('Find a device…','یافتن تجهیز…')}" aria-label="${L('Find a device','یافتن تجهیز')}"><label class="btn nm-file">${L('Floor plan image','تصویر پس‌زمینه')}<input type="file" id="nmBackground" accept="image/png,image/jpeg,image/webp"></label><button id="nmRemoveBackground" class="btn sm">${L('Remove image','حذف تصویر')}</button><button id="nmSaveLayout" class="btn sm">${L('Save positions','ذخیره چیدمان')}</button><button id="nmZoomOut" class="btn sm" aria-label="Zoom out">−</button><button id="nmZoomIn" class="btn sm" aria-label="Zoom in">＋</button><button id="nmFit" class="btn sm">${L('Fit','نمای کامل')}</button></div>
@@ -85,6 +86,15 @@ export function createUi(ctx) {
       <div id="nmImpact" class="nm-impact"></div></section><aside id="nmDetail" class="panel nm-detail"></aside></div>
       <dialog id="nmMacDialog" class="nm-dialog"></dialog>`;
     listen('#nmScan','click',()=>startScan());listen('#nmHealth','click',refreshHealth);
+    listen('#nmReset','click',async e=>{
+      if(!window.confirm(L('Delete the current map and its layout? Saved files, MAC registry and connection settings are kept. No devices will be contacted.','نقشه فعلی و چیدمان آن حذف شود؟ فایل‌های قبلی، ثبت MAC و تنظیمات اتصال حفظ می‌شوند. هیچ ارتباطی با تجهیزات برقرار نمی‌شود.')))return;
+      e.currentTarget.disabled=true;const token=generation;monitor=false;clearTimeout(timer);
+      try{
+        const data=await api('/reset','POST',{confirm:true});if(token!==generation||!active())return;
+        generation++;clearTimeout(poll);topology=data.topology;layout=data.layout;job=null;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedPort='';highlightLinks.clear();highlightNodes.clear();zoom=1;render();
+        toast(L('Map deleted. Select Create map to start again.','نقشه حذف شد. برای شروع مجدد ایجاد نقشه را بزنید.'));
+      }catch(error){if(token===generation&&active())render();throw error;}
+    });
     listen('#nmMonitor','change',e=>{monitor=e.target.checked;scheduleMonitor();});
     listen('#nmTraceForm','submit',async e=>{e.preventDefault();const query=page.querySelector('#nmMac').value.trim();
       if(page.querySelector('#nmTraceKind').value==='mac'){ipTrace=null;return showMacTrace(query);}
