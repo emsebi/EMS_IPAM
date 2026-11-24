@@ -78,6 +78,10 @@ export function buildTopology(nodes, previous=emptyTopology()) {
     if(observations.some(([,p])=>['down','disabled','err-disabled'].includes(p.status)))l.state='down';
     else if(observations.some(([,p])=>p.status==='up')&&l.confidence!=='stale')l.state='up';
     if(a.status==='unreachable'||b.status==='unreachable')l.state='unknown';
+    const bundleFor=(n,p)=>n.bundles?.find(bundle=>normalizePort(bundle.name)===p||bundle.members.some(member=>normalizePort(member.port)===p));
+    const summarize=(bundle,p)=>bundle?{name:bundle.name,protocol:bundle.protocol,flags:bundle.flags,members:bundle.members,memberState:bundle.members.find(member=>normalizePort(member.port)===p)?.state||null}:null;
+    l.sourceBundle=summarize(bundleFor(a,l.sourcePort),l.sourcePort);
+    l.targetBundle=summarize(bundleFor(b,l.targetPort),l.targetPort);
   }
   return {nodes,links:[...links.values()],updatedAt:new Date().toISOString()};
 }
@@ -108,7 +112,7 @@ export function traceMac(topology,mac,root) {
     const uplink=topology.links.some(l=>(l.source===n.id&&l.sourcePort===normalizePort(row.port))||(l.target===n.id&&l.targetPort===normalizePort(row.port)));
     const port=n.ports?.find(p=>normalizePort(p.name)===normalizePort(row.port));
     observations.push({...row,nodeId:n.id,nodeName:n.name,observedAt:n.collectedAt,source:n.platform==='mikrotik'?'bridge-host':'mac-address-table',
-      candidate:!uplink&&port?.mode!=='trunk',stale:!['online','partial'].includes(n.status)||!Number.isFinite(Date.parse(n.collectedAt))||Date.now()-Date.parse(n.collectedAt)>300000});
+      candidate:!uplink&&port?.mode!=='trunk'&&!port?.bundle&&!n.bundles?.some(b=>normalizePort(b.name)===normalizePort(row.port)||b.members.some(m=>normalizePort(m.port)===normalizePort(row.port)))&&!/^Po\d/i.test(row.port),stale:!['online','partial'].includes(n.status)||!Number.isFinite(Date.parse(n.collectedAt))||Date.now()-Date.parse(n.collectedAt)>300000});
   }
   const candidates=observations.filter(o=>o.candidate);
   return {mac,observations,candidates,paths:candidates.map(o=>({nodeId:o.nodeId,port:o.port,links:shortest(topology,root,o.nodeId)})),
