@@ -15,7 +15,7 @@ function adapter(db){
  const query=async(sql,params)=>{const r=params?.length?await db.query(sql,params):(await db.exec(sql)).at(-1);return {...r,rows:r?.rows||[],rowCount:r?.rowCount??r?.affectedRows??r?.rows?.length??0};};
  return {query,connect:async()=>({query,release(){}})};
 }
-async function fixture(){
+async function fixture(neighborFixture={}){
  const db=new PGlite(),pool=adapter(db),backupDir=await fs.mkdtemp(path.join(os.tmpdir(),'ems-map-'));
  await migrateDatabase(pool);await pool.query("INSERT INTO companies(id,name) VALUES('map-co','Map test')");
  await migrateModuleSchemas(pool,[{id:'network-map',dir:moduleDir}]);
@@ -23,8 +23,8 @@ async function fixture(){
  const module=createModule({pool,backupDir,json:(_res,status,body)=>response={status,body},readBody:async req=>req.body,
   requireAdmin:user=>{if(user?.role!=='admin')throw Object.assign(new Error('forbidden'),{status:403});},audit:async()=>{},
   networkProbe:async()=>{probes++;return true;},collectNetworkDevice:async(target,_settings,password)=>{collects++;assert.equal(password,'map-pass');return {
-   status:'online',hostname:'core-sw',model:'C9300',os:'17.12',ports:[{name:'Gi1/0/1',status:'up',mode:'trunk'}],
-   macs:[{mac:'00:11:22:33:44:55',port:'Gi1/0/2',vlan:'10'}],neighbors:[],features:{LLDP:{enabled:true}},config:'hostname core-sw\nusername netread secret [REDACTED]'};}
+   status:'online',hostname:neighborFixture[target.address]?.hostname||'core-sw',model:'C9300',os:'17.12',ports:[{name:'Gi1/0/1',status:'up',mode:'trunk'}],
+   macs:[{mac:'00:11:22:33:44:55',port:'Gi1/0/2',vlan:'10'}],neighbors:neighborFixture[target.address]?.neighbors||[],features:{LLDP:{enabled:true}},config:'hostname core-sw\nusername netread secret [REDACTED]'};}
  });
  const call=async(method,route,body,user={role:'admin',username:'tester'})=>{const url=new URL('http://test/api/network-map'+route+(route.includes('?')?'&':'?')+'companyId=map-co');await module.handle({method,body},{writeHead(){},end(){}},url,user);return response;};
  return {db,pool,backupDir,call,getCollects:()=>collects,getProbes:()=>probes,close:async()=>{await db.close();await fs.rm(backupDir,{recursive:true,force:true});}};
@@ -139,5 +139,24 @@ test('reset clears active map and layout without touching settings, archives, re
   for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
   assert.equal((await f.call('GET','/state')).body.topology.nodes.length,1);
   assert.equal(f.getCollects(),2);
+ }finally{await f.close();}
+});
+
+test('neighbor-only discovery follows allowed management addresses without probing a range',async()=>{
+ const peer=(address,deviceId,localPort,remotePort)=>({address,deviceId,localPort,remotePort,protocol:'CDP'});
+ const f=await fixture({
+  '192.0.2.10':{hostname:'seed-2960',neighbors:[peer('192.0.2.11','next','Gi1/0/1','Gi1/0/1'),peer('198.51.100.1','outside','Gi1/0/2','Gi1/0/1')]},
+  '192.0.2.11':{hostname:'next',neighbors:[peer('192.0.2.10','seed-2960','Gi1/0/1','Gi1/0/1'),peer('192.0.2.12','last','Gi1/0/2','Gi1/0/1')]},
+  '192.0.2.12':{hostname:'last',neighbors:[peer('192.0.2.11','next','Gi1/0/1','Gi1/0/2')]}
+ });try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}],scopes:['192.0.2.0/24'],neighborOnly:true});
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  const state=(await f.call('GET','/state')).body;
+  assert.equal(state.job.status,'completed');assert.equal(state.job.total,3);
+  assert.equal(f.getCollects(),3);assert.equal(f.getProbes(),0);
+  assert.equal(state.topology.nodes.find(n=>n.address==='198.51.100.1')?.status,'unknown');
+  assert.equal(state.topology.nodes.filter(n=>n.status==='online').length,3);
+  assert.ok(state.topology.links.length>=2);
  }finally{await f.close();}
 });
