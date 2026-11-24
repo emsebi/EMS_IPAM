@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/network-map/backend/index.mjs';
-import {redactConfig} from '../../modules/network-map/discovery/device-parsers.mjs';
+import {redactConfig,parseCisco,parseCiscoBundles} from '../../modules/network-map/discovery/device-parsers.mjs';
 import {settingsInput,impact,traceMac,traceSavedIp} from '../../modules/network-map/backend/model.mjs';
 
 const moduleDir=fileURLToPath(new URL('../../modules/network-map/',import.meta.url));
@@ -159,4 +159,13 @@ test('neighbor-only discovery follows allowed management addresses without probi
   assert.equal(state.topology.nodes.filter(n=>n.status==='online').length,3);
   assert.ok(state.topology.links.length>=2);
  }finally{await f.close();}
+});
+
+test('IOS and NX-OS bundle evidence and NX-OS MAC table are parsed without guessing remote members',()=>{
+ const ios=parseCiscoBundles('2 Po2(SU) LACP Gi1/0/1(P) Gi1/0/2(D)');
+ assert.equal(ios[0].name,'Po2');assert.equal(ios[0].members[1].state,'down');
+ const nx=parseCisco({version:'Cisco Nexus Operating System (NX-OS) Software\nNXOS: version 9.3(8)',ports:'Eth1/2 uplink connected trunk full 10G SFP',bundles:'5 Po5(SU) Eth LACP Eth1/2(P) Eth1/3(s)',macs:'* 4 0011.2233.4455 dynamic 0 F F Eth1/2'});
+ assert.equal(nx.osFamily,'nx-os');assert.equal(nx.macs[0].port,'Eth1/2');assert.equal(nx.ports[0].bundle,'Po5');assert.equal(nx.bundles[0].members[1].state,'suspended');
+ const trace=traceMac({nodes:[{id:'nx',status:'online',collectedAt:new Date().toISOString(),...nx}],links:[]},'0011.2233.4455','nx');
+ assert.equal(trace.candidates.length,0);
 });
