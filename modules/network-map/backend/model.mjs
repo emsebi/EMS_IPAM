@@ -46,7 +46,8 @@ export function settingsInput(body) {
   if(!Number.isInteger(concurrency)||concurrency<1||concurrency>8)throw fail('Concurrency must be 1–8.');
   const username=text(body.username,100); if(!username||/[\x00-\x1f]/.test(username))throw fail('Username is required.');
   const rootId=text(body.rootId,64); if(rootId&&!seen.has(rootId)&&!expandScopes(scopes).includes(rootId))throw fail('Root device must be in the scan scope.');
-  return {username,port,timeout,concurrency,devices:targets,scopes,rootId,saveConfig:body.saveConfig!==false};
+  if(body.neighborOnly===true&&!targets.length)throw fail('Add at least one starting device.');
+  return {username,port,timeout,concurrency,devices:targets,scopes,rootId,neighborOnly:body.neighborOnly===true,saveConfig:body.saveConfig!==false};
 }
 export const emptyTopology=()=>({nodes:[],links:[],updatedAt:null});
 export function buildTopology(nodes, previous=emptyTopology()) {
