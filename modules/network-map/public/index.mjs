@@ -2,7 +2,7 @@ export function createUi(ctx) {
   const {state,page,request,escapeHtml:esc,toast,formatDateTime:date,openToolMenu}=ctx;
   const L=(en,fa)=>state.language==='fa'?fa:en;
   let company='',tab='settings',settings={},hasPassword=false,topology={nodes:[],links:[]},layout={positions:{},background:''},records=[],types=[],job=null;
-  let selected='',selectedPort='',trace=null,ipTrace=null,traceSequence=0,impactResult=null,highlightLinks=new Set(),highlightNodes=new Set(),monitor=false,timer=null,poll=null,generation=0,zoom=1;
+  let selected='',selectedLink='',selectedPort='',trace=null,ipTrace=null,traceSequence=0,impactResult=null,highlightLinks=new Set(),highlightNodes=new Set(),monitor=false,timer=null,poll=null,generation=0,zoom=1;
   const active=()=>state.currentModuleId==='network-map'&&state.view==='module';
   const api=(path,method='GET',body)=>request(`/api/network-map${path}${path.includes('?')?'&':'?'}companyId=${encodeURIComponent(company)}`,{method,...(body===undefined?{}:{body})});
   const status=n=>n.reachability==='unreachable'?'unreachable':n.status||'unknown';
@@ -30,7 +30,7 @@ export function createUi(ctx) {
       <div class="nm-stats"><article><b>${topology.nodes.length}</b><span>${L('Devices','تجهیزات')}</span></article><article><b>${topology.links.length}</b><span>${L('Connections','اتصالات')}</span></article><article class="nm-green"><b>${online}</b><span>${L('Collected / reachable','اطلاعات دریافت‌شده')}</span></article><article class="nm-red"><b>${down}</b><span>${L('No response','بدون پاسخ')}</span></article><article class="nm-time"><span>${L('Last map collection','آخرین دریافت نقشه')}</span><strong>${esc(when(topology.updatedAt))}</strong></article></div>
       <nav class="nm-tabs" aria-label="${L('Network map sections','بخش‌های نقشه')}">${[['settings',L('Connection settings','تنظیمات اتصال')],['map',L('Network & devices','نقشه و تجهیزات')],['archive',L('Saved files','فایل‌های ذخیره‌شده')]].map(([id,label])=>`<button class="btn ${tab===id?'primary':''}" data-nm-tab="${id}">${label}</button>`).join('')}</nav>
       <div id="nmJob"></div><div id="nmBody"></div></div>`;
-    listen('#nmCompany','change',async e=>{stop();company=e.target.value;state.currentCompanyId=company;monitor=false;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';highlightLinks.clear();highlightNodes.clear();if(await load()){tab=hasPassword?'map':'settings';render();scheduleJob();}});
+    listen('#nmCompany','change',async e=>{stop();company=e.target.value;state.currentCompanyId=company;monitor=false;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedLink='';highlightLinks.clear();highlightNodes.clear();if(await load()){tab=hasPassword?'map':'settings';render();scheduleJob();}});
     page.querySelectorAll('[data-nm-tab]').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.nmTab;render();}));jobBanner();
   }
   function jobBanner(){
@@ -65,7 +65,7 @@ export function createUi(ctx) {
       const devices=val('nmTargets').split('\n').filter(s=>s.trim()).map(line=>{const [address,platform,name]=line.split('|').map(s=>s.trim());return {address,platform:platform||'auto',name:name||address};});
       await api('/settings','PUT',{devices,scopes:val('nmScopes').split(/[\n,]+/).map(s=>s.trim()).filter(Boolean),username:val('nmUsername'),password:val('nmPassword'),port:Number(val('nmSshPort')),timeout:Number(val('nmTimeout')),concurrency:Number(val('nmConcurrency')),rootId:val('nmRoot'),neighborOnly:page.querySelector('#nmNeighborOnly').checked,saveConfig:page.querySelector('#nmSaveConfig').checked});
       page.querySelector('#nmPassword').value='';await load();
-      if(settings.rootId!==previousRoot){trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedPort='';highlightLinks.clear();highlightNodes.clear();}
+      if(settings.rootId!==previousRoot){trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedLink='';selectedPort='';highlightLinks.clear();highlightNodes.clear();}
       tab='map';render();toast(L('Connection settings saved.','تنظیمات اتصال ذخیره شد.'));
     });
   }
@@ -91,7 +91,7 @@ export function createUi(ctx) {
       e.currentTarget.disabled=true;const token=generation;monitor=false;clearTimeout(timer);
       try{
         const data=await api('/reset','POST',{confirm:true});if(token!==generation||!active())return;
-        generation++;clearTimeout(poll);topology=data.topology;layout=data.layout;job=null;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedPort='';highlightLinks.clear();highlightNodes.clear();zoom=1;render();
+        generation++;clearTimeout(poll);topology=data.topology;layout=data.layout;job=null;trace=null;ipTrace=null;traceSequence++;impactResult=null;selected='';selectedLink='';selectedPort='';highlightLinks.clear();highlightNodes.clear();zoom=1;render();
         toast(L('Map deleted. Select Create map to start again.','نقشه حذف شد. برای شروع مجدد ایجاد نقشه را بزنید.'));
       }catch(error){if(token===generation&&active())render();throw error;}
     });
@@ -100,7 +100,7 @@ export function createUi(ctx) {
       if(page.querySelector('#nmTraceKind').value==='mac'){ipTrace=null;return showMacTrace(query);}
       const token=generation,sequence=++traceSequence;trace=null;ipTrace=null;highlightLinks.clear();highlightNodes.clear();renderTrace();drawGraph();
       const result=await api('/trace-ip?ip='+encodeURIComponent(query));if(token!==generation||sequence!==traceSequence||!active())return;
-      ipTrace=result;impactResult=null;selected='';selectedPort='';
+      ipTrace=result;impactResult=null;selected='';selectedLink='';selectedPort='';
       highlightLinks=new Set(result.matches.flatMap(m=>m.trace.paths.flatMap(p=>p.links||[])));
       highlightNodes=new Set(result.matches.flatMap(m=>m.trace.observations.map(o=>o.nodeId)));renderTrace();drawGraph();renderDetail();});
     listen('#nmTraceKind','change',()=>{traceSequence++;trace=null;ipTrace=null;highlightLinks.clear();highlightNodes.clear();renderTrace();drawGraph();});
@@ -123,20 +123,30 @@ export function createUi(ctx) {
   }
   function drawGraph(){
     const svg=page.querySelector('#nmGraph');if(!svg)return;const pos=positions();svg.style.width=`${100*zoom}%`;svg.style.height=`${100*zoom}%`;
-    svg.innerHTML=`${layout.background?`<image href="${esc(layout.background)}" width="2000" height="1200" preserveAspectRatio="xMidYMid meet" opacity="0.4"/>`:''}<g class="nm-links">${topology.links.map(l=>{const a=pos[l.source],b=pos[l.target];if(!a||!b)return '';const unavailable=[l.source,l.target].some(id=>status(topology.nodes.find(n=>n.id===id)||{})==='unreachable');return `<g data-link="${esc(l.id)}" tabindex="0" role="button" aria-label="${esc(l.sourcePort+' ↔ '+l.targetPort)}"><line class="nm-link ${unavailable?'unknown':esc(l.state)} ${highlightLinks.has(l.id)?'nm-highlight':''}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><line class="nm-link-hit" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><title>${esc(l.sourcePort+' ↔ '+l.targetPort+' · '+l.protocol+' · '+when(l.observedAt))}</title><text class="nm-port-label" x="${a.x*.7+b.x*.3}" y="${a.y*.7+b.y*.3-12}">${esc(l.sourcePort)}</text><text class="nm-port-label" x="${a.x*.3+b.x*.7}" y="${a.y*.3+b.y*.7-12}">${esc(l.targetPort||'?')}</text></g>`;}).join('')}</g>
+    svg.innerHTML=`${layout.background?`<image href="${esc(layout.background)}" width="2000" height="1200" preserveAspectRatio="xMidYMid meet" opacity="0.4"/>`:''}<g class="nm-links">${topology.links.map(l=>{const a=pos[l.source],b=pos[l.target];if(!a||!b)return '';const unavailable=[l.source,l.target].some(id=>status(topology.nodes.find(n=>n.id===id)||{})==='unreachable');return `<g data-link="${esc(l.id)}" tabindex="0" role="button" aria-label="${esc(l.sourcePort+' ↔ '+l.targetPort)}"><line class="nm-link ${unavailable?'unknown':esc(l.state)} ${highlightLinks.has(l.id)?'nm-highlight':''}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><line class="nm-link-hit" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/><title>${esc(l.sourcePort+' ↔ '+l.targetPort+' · '+l.protocol+' · '+when(l.observedAt))}</title><text class="nm-port-label" x="${a.x*.7+b.x*.3}" y="${a.y*.7+b.y*.3-12}">${esc(l.sourceBundle?.name||l.sourcePort)}</text><text class="nm-port-label" x="${a.x*.3+b.x*.7}" y="${a.y*.3+b.y*.7-12}">${esc(l.targetBundle?.name||l.targetPort||'?')}</text></g>`;}).join('')}</g>
       ${topology.nodes.map(n=>{const p=pos[n.id],s=status(n),hasHighlight=highlightNodes.has(n.id);return `<g class="nm-node ${esc(s)} ${hasHighlight?'nm-selected':''} ${selected===n.id?'nm-current':''}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})" tabindex="0" role="button" aria-label="${esc(n.name+' '+statusLabel(s))}"><rect class="nm-node-body" x="-104" y="-45" width="208" height="90" rx="14"/><rect class="nm-node-light" x="-91" y="-25" width="5" height="50" rx="2"/><g class="nm-switch-icon">${Array.from({length:8},(_,i)=>`<rect x="${-70+i*17}" y="-27" width="11" height="9" rx="1"/>`).join('')}</g><text class="nm-node-name" y="7">${esc((n.name||n.address).slice(0,24))}</text><text class="nm-node-ip" y="28">${esc(n.address)}${n.id===settings.rootId?' ★':''}</text>${stale(n)?'<circle class="nm-stale-dot" cx="91" cy="-30" r="5"/>':''}<title>${esc(statusLabel(s)+' · '+when(n.collectedAt))}</title></g>`;}).join('')}`;
     svg.querySelectorAll('.nm-node').forEach(el=>{
       let moved=false,start,origin;el.addEventListener('pointerdown',e=>{if(e.button!==0)return;start={x:e.clientX,y:e.clientY};origin=pos[el.dataset.id];moved=false;el.setPointerCapture(e.pointerId);});
       el.addEventListener('pointermove',e=>{if(!start)return;const rect=svg.getBoundingClientRect(),dx=(e.clientX-start.x)*2000/rect.width,dy=(e.clientY-start.y)*1200/rect.height;if(Math.abs(dx)+Math.abs(dy)>5)moved=true;if(!moved)return;
         const p={x:Math.max(110,Math.min(1890,origin.x+dx)),y:Math.max(50,Math.min(1150,origin.y+dy))};layout.positions[el.dataset.id]=p;el.setAttribute('transform',`translate(${p.x},${p.y})`);});
-      el.addEventListener('pointerup',()=>{if(!start)return;start=null;if(moved){drawGraph();return;}selected=el.dataset.id;selectedPort='';renderDetail();drawGraph();});
-      el.addEventListener('keydown',e=>{if(e.key==='Enter'){selected=el.dataset.id;renderDetail();drawGraph();}});
+      el.addEventListener('pointerup',()=>{if(!start)return;start=null;if(moved){drawGraph();return;}selected=el.dataset.id;selectedLink='';selectedPort='';highlightLinks.clear();highlightNodes.clear();renderDetail();drawGraph();});
+      el.addEventListener('keydown',e=>{if(e.key==='Enter'){selected=el.dataset.id;selectedLink='';highlightLinks.clear();highlightNodes.clear();renderDetail();drawGraph();}});
     });
-    svg.querySelectorAll('[data-link]').forEach(el=>{const choose=async()=>{try{impactResult=await api('/impact?linkId='+encodeURIComponent(el.dataset.link));highlightNodes=new Set(impactResult.affected);highlightLinks=new Set([el.dataset.link]);renderImpact();drawGraph();}catch(e){toast(e.message);}};el.addEventListener('click',choose);el.addEventListener('keydown',e=>{if(e.key==='Enter')choose();});});renderImpact();
+    svg.querySelectorAll('[data-link]').forEach(el=>{const choose=()=>{selectedLink=el.dataset.link;selected='';selectedPort='';impactResult=null;highlightNodes.clear();highlightLinks=new Set([selectedLink]);renderDetail();drawGraph();};el.addEventListener('click',choose);el.addEventListener('keydown',e=>{if(e.key==='Enter')choose();});});renderImpact();
   }
   function renderImpact(){const el=page.querySelector('#nmImpact');if(!el)return;el.innerHTML=impactResult?`<b>${L('Estimated impact of removal','برآورد اثر قطع مسیر / تجهیز')}</b><p>${!settings.rootId?L('Select the root switch in settings.','سوئیچ مرکزی را در تنظیمات مشخص کنید.'):impactResult.affected.length?impactResult.affected.map(id=>esc(topology.nodes.find(n=>n.id===id)?.name||id)).join('، '):L('An alternate physical route is present, or this link is outside the root component.','مسیر فیزیکی جایگزین وجود دارد یا این لینک در بخش متصل به سوئیچ مرکزی نیست.')}</p><small>${L('Topology estimate only. VLAN, STP, LAG and routing behavior are not verified.','این برآورد بر اساس اتصالات فیزیکی است؛ رفتار VLAN، STP، LAG و مسیریابی تأیید نشده است.')}</small>`:'';}
   function renderDetail(){
-    const el=page.querySelector('#nmDetail');if(!el)return;const n=topology.nodes.find(n=>n.id===selected);
+    const el=page.querySelector('#nmDetail');if(!el)return;
+    const link=topology.links.find(l=>l.id===selectedLink);
+    if(link){
+      const a=topology.nodes.find(n=>n.id===link.source),b=topology.nodes.find(n=>n.id===link.target);
+      const bundleHtml=(bundle)=>bundle?'<p><b>'+esc(bundle.name)+' · '+esc(bundle.protocol)+' · '+bundle.members.filter(m=>m.state==='bundled').length+'/'+bundle.members.length+'</b></p>'+bundle.members.map(m=>'<div class="ltr">'+esc(m.port)+' — '+esc(m.state)+'</div>').join(''):'';
+      el.innerHTML='<h3>'+L('Connection details','جزئیات ارتباط')+'</h3>'+[[a,link.sourcePort,link.sourceBundle],[b,link.targetPort,link.targetBundle]].map(([n,p,bundle],i)=>'<section class="panel"><b>'+esc(n?.name||'—')+'</b><div class="ltr">'+esc(n?.address||'')+' · '+esc(p||'?')+'</div>'+bundleHtml(bundle)+'<button class="btn sm" id="nmLinkDevice'+i+'">'+L('Open device','نمایش تجهیز')+'</button></section>').join('')+'<p>'+esc(link.state)+' · '+esc(link.protocol)+' · '+esc(when(link.observedAt))+'</p><small>'+L('Bundle members are local observations, not inferred remote cable pairs.','اعضای تجمیع در هر سمت مستقل مشاهده شده‌اند؛ جفت کابل‌های نامشخص حدس زده نمی‌شود.')+'</small><button id="nmLinkImpact" class="btn sm">'+L('Outage impact','اثر قطعی')+'</button>';
+      [a,b].forEach((n,i)=>listen('#nmLinkDevice'+i,'click',()=>{selected=n?.id||'';selectedLink='';highlightLinks.clear();renderDetail();drawGraph();}));
+      listen('#nmLinkImpact','click',async()=>{impactResult=await api('/impact?linkId='+encodeURIComponent(link.id));highlightNodes=new Set(impactResult.affected);drawGraph();});
+      return;
+    }
+    const n=topology.nodes.find(n=>n.id===selected);
     if(!n){el.innerHTML=`<div class="nm-detail-placeholder"><div>◇</div><h3>${L('Device 360','نمای کامل تجهیز')}</h3><p>${L('Select a switch to see ports, capabilities and connection tools.','یک سوئیچ را انتخاب کنید تا پورت‌ها، قابلیت‌ها و ابزار اتصال نمایش داده شود.')}</p></div>`;return;}
     const features={MAB:{enabled:null},SNMP:{enabled:null},PoE:{enabled:null},AAA:{enabled:null},...n.features};
     el.innerHTML=`<div class="nm-detail-head"><div><h3>${esc(n.name)}</h3><code>${esc(n.address)}</code></div><span class="nm-pill ${esc(status(n))}">${esc(statusLabel(status(n)))}</span></div><div class="nm-actions"><button id="nmConnect" class="btn sm" ${n.address?'':'disabled'}>${L('Connect · SSH / MIK','اتصال · SSH / MIK')}</button><button id="nmDeviceRefresh" class="btn primary sm" ${n.id.startsWith('peer:')?'disabled':''}>${L('Refresh device','رفرش دستگاه')}</button><button id="nmDeviceImpact" class="btn sm">${L('Outage impact','اثر قطعی')}</button></div>
