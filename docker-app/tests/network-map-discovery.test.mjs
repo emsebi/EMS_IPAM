@@ -115,3 +115,29 @@ test('configuration redaction removes values instead of retaining the matching l
  const raw=`username netread password ${sentinels[0]}\nradius server EMS key ${sentinels[1]}\nsnmp-server community ${sentinels[2]} RO\n/user add name=netread password=${sentinels[3]} group=read\nsnmp-server user monitor EMS v3 auth sha ${sentinels[4]} priv aes 128 ${sentinels[5]}\nwpa-psk ascii ${sentinels[6]}`;
  const output=redactConfig(raw);for(const value of sentinels)assert.equal(output.includes(value),false);assert.match(output,/\[REDACTED\]/);assert.match(output,/username netread password/);
 });
+
+test('reset clears active map and layout without touching settings, archives, registry or network',async()=>{
+ const f=await fixture();try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}]});
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal((await f.call('GET','/state')).body.job.status,'completed');
+  await f.call('PUT','/layout',{positions:{'192.0.2.10':{x:200,y:300}},background:''});
+  await f.call('POST','/macs',{mac:'00:11:22:33:44:55',name:'Test endpoint'});
+  const before=(await f.call('GET','/settings')).body;
+  await assert.rejects(f.call('POST','/reset',{}),/Confirm/);
+  await assert.rejects(f.call('POST','/reset',{confirm:true},{role:'viewer'}),/forbidden/);
+  const result=(await f.call('POST','/reset',{confirm:true})).body;
+  assert.deepEqual(result.topology,{nodes:[],links:[],updatedAt:null});
+  assert.deepEqual(result.layout,{positions:{},background:''});
+  assert.equal((await f.call('GET','/state')).body.job,null);
+  assert.deepEqual((await f.call('GET','/settings')).body,before);
+  assert.equal((await f.call('GET','/snapshots')).body.items.length,1);
+  assert.equal((await f.call('GET','/macs')).body.items.length,1);
+  assert.equal(f.getCollects(),1);assert.equal(f.getProbes(),0);
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal((await f.call('GET','/state')).body.topology.nodes.length,1);
+  assert.equal(f.getCollects(),2);
+ }finally{await f.close();}
+});
