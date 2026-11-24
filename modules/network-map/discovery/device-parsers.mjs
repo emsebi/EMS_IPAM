@@ -4,6 +4,20 @@ import {normalizeMac} from '../backend/model.mjs';
 export const commandFailed=s=>!s||/(?:%\s*(?:Invalid|Incomplete|Ambiguous|Authorization|Error)|not enough permissions|bad command name|syntax error|permission denied)/i.test(s);
 const mac=s=>{try{return normalizeMac(s);}catch{return null;}};
 const capability=(enabled,source,supported='unknown')=>({enabled,supported,source});
+export function parseCiscoBundles(raw) {
+  const bundles=[];
+  if(commandFailed(raw))return bundles;
+  for(const line of String(raw).split(/\r?\n/)){
+    const row=line.match(/^\s*(\d+)\s+(Po\d+)\s*\(([A-Za-z]+)\)\s+(?:(?:Eth|FC)\s+)?(\S+)\s*(.*)$/i);
+    if(row)bundles.push({name:normalizePort(row[2]),flags:row[3],protocol:row[4],members:[]});
+    else if(!bundles.length||!/^\s+(?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe)\S+\s*\(/i.test(line))continue;
+    const tail=row?row[5]:line;
+    for(const member of tail.matchAll(/((?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe)[\d/.:]+)\s*\(([A-Za-z]+)\)/gi)){
+      bundles.at(-1).members.push({port:normalizePort(member[1]),flags:member[2],state:member[2]==='P'?'bundled':member[2]==='D'?'down':member[2]==='s'?'suspended':member[2]==='H'?'standby':'unknown'});
+    }
+  }
+  return bundles;
+}
 export function parseCisco(outputs) {
   const ports=[];
   for(const line of (outputs.ports||'').split(/\r?\n/)) {
@@ -21,10 +35,18 @@ export function parseCisco(outputs) {
     p.allowedVlans=block.match(/^Trunking VLANs Enabled:\s*(.+)/m)?.[1]||'';
     p.voiceVlan=block.match(/^Voice VLAN:\s*(.+)/m)?.[1]||'';
   }
+  const bundles=parseCiscoBundles(outputs.bundles);
+  for(const bundle of bundles)for(const member of bundle.members){
+    const port=ports.find(p=>p.name===member.port);
+    if(port){port.bundle=bundle.name;port.bundleState=member.state;}
+  }
   const macs=[];
   for(const line of (outputs.macs||'').split(/\r?\n/)){
     const m=line.match(/^\s*\*?\s*(\d+)\s+([0-9a-f.:-]+)\s+(DYNAMIC|STATIC|SECURE)\s+(\S+)/i);
-    if(m&&mac(m[2])&&m[4]!=='CPU')macs.push({mac:mac(m[2]),vlan:m[1],port:normalizePort(m[4]),kind:m[3].toLowerCase()});
+    if(m&&mac(m[2])){
+      const tokens=line.trim().split(/\s+/),port=tokens.at(-1);
+      if(/^(?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe|Po|vEth)[\d/.:]+$/i.test(port))macs.push({mac:mac(m[2]),vlan:m[1],port:normalizePort(port),kind:m[3].toLowerCase()});
+    }
   }
   const config=outputs.config||'',configOk=!commandFailed(config)&&/(?:^hostname |^interface |Current configuration)/m.test(config);
   const features={};
@@ -32,10 +54,10 @@ export function parseCisco(outputs) {
   features.PoE=capability(commandFailed(outputs.poe)?null:/\s(?:auto|on|static)\s+on\s/i.test(outputs.poe),'show power inline',commandFailed(outputs.poe)?'unknown':'yes');
   const version=outputs.version||'';
   return {hostname:config.match(/^hostname\s+(\S+)/m)?.[1]||version.match(/^(\S+) uptime is/m)?.[1]||'',
-    model:version.match(/Model [Nn]umber\s*:\s*(\S+)/)?.[1]||version.match(/^cisco\s+(\S+)\s+\(/im)?.[1]||'',
+    model:version.match(/Model [Nn]umber\s*:\s*(\S+)/)?.[1]||version.match(/cisco\s+Nexus[^\r\n]*?\b(N[235679]K-[A-Z0-9-]+)\b/i)?.[1]||version.match(/^\s*cisco\s+(\S+)\s+\(/im)?.[1]||'',
     os:version.match(/(?:Cisco IOS.*?Version|NXOS:\s*version)\s+([^,\r\n]+)/i)?.[1]||'',
     serial:version.match(/(?:System [Ss]erial [Nn]umber\s*:|Processor board ID)\s*(\S+)/)?.[1]||'',
-    uptime:version.match(/uptime is (.+)/)?.[1]||'',ports,macs,features,
+    uptime:version.match(/uptime is (.+)/)?.[1]||'',ports,macs,features,bundles,osFamily:/NX-OS|NXOS|Nexus Operating System/i.test(version)?'nx-os':'ios',
     neighbors:[...parseCdpNeighborsDetail(outputs.cdp),...parseLldpNeighborsDetail(outputs.lldp)]};
 }
 export function rosRows(raw) {
