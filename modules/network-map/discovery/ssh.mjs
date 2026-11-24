@@ -7,6 +7,8 @@ export function probeTcp(host,port,timeout=1500){return new Promise(resolve=>{
   socket.setTimeout(timeout,()=>finish(false));socket.once('connect',()=>finish(true));socket.once('error',()=>finish(false));
 });}
 const ciscoCommands={version:'show version',ports:'show interfaces status',switchports:'show interfaces switchport',cdp:'show cdp neighbors detail',lldp:'show lldp neighbors detail',macs:'show mac address-table',poe:'show power inline',config:'show running-config'};
+const iosCommands={...ciscoCommands,bundles:'show etherchannel summary'};
+const nxosCommands={...ciscoCommands,bundles:'show port-channel summary'};
 const rosCommands={version:'/system resource print',identity:'/system identity print',ports:'/interface print detail without-paging',bridgePorts:'/interface bridge port print detail without-paging',neighbors:'/ip neighbor print detail without-paging',macs:'/interface bridge host print detail without-paging',snmp:'/snmp print',aaa:'/user aaa print',poe:'/interface ethernet poe print detail without-paging',config:'/export'};
 const strip=s=>s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g,'').replace(/\r/g,'');
 
@@ -41,8 +43,14 @@ export async function collectDevice(target,settings,password,{createSshClient,ve
     if(platform==='auto')platform=/\[[^\]]+@/.test(greeting.prompt)?'mikrotik':'cisco';
     const run=async command=>{const result=readPrompt();stream.write(command+'\n');const {output}=await result;return output.replace(new RegExp('^'+command.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\n?'),'').trim();};
     if(platform==='cisco'){await run('terminal length 0');await run('terminal width 512');}
-    const outputs={},errors=[];const commands=platform==='mikrotik'?rosCommands:ciscoCommands;
+    const outputs={},errors=[];
+    if(platform==='cisco'){
+      outputs.version=await run('show version');
+      if(commandFailed(outputs.version))throw new Error('NO_READ_ACCESS');
+    }
+    const commands=platform==='mikrotik'?rosCommands:/NX-OS|NXOS|Nexus Operating System/i.test(outputs.version)?nxosCommands:iosCommands;
     for(const [key,original] of Object.entries(commands)) {
+      if(key==='version'&&platform==='cisco')continue;
       // Running config also supplies capability evidence. It never enters the topology JSON.
       const command=platform==='mikrotik'&&key==='config'&&/version:\s*6\./.test(outputs.version)?'/export hide-sensitive':original;
       try{outputs[key]=await run(command);if(commandFailed(outputs[key]))errors.push(key);}catch{errors.push(key);break;}
