@@ -1,0 +1,105 @@
+name: EMS-IPAM isolated VM preview
+on:
+  push:
+    branches: [ops/app-only-preview-20261125]
+    paths: [.github/workflows/isolated-vm-preview.yml]
+permissions:
+  contents: read
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: github.repository == 'emsebi/EMS_IPAM' && github.ref == 'refs/heads/ops/app-only-preview-20261125'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 613c217f95da105e928d8959dd140f7c227742fe
+          path: isolated-vm-preview-source
+          clean: false
+          persist-credentials: false
+      - name: Start verified candidate on separate private LAN port and empty database
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          SRC="$GITHUB_WORKSPACE/isolated-vm-preview-source"
+          SHA=613c217f95da105e928d8959dd140f7c227742fe
+          LIVEAPP=ems-ipam-app-1
+          LIVEDB=ems-ipam-db-1
+          RAD=ems-ipam-radius_ops-1
+          ROOT="$HOME/ems-ipam-lab/isolated-preview-$GITHUB_RUN_ID"
+          APP="ems-preview-$GITHUB_RUN_ID-app"
+          DB="ems-preview-$GITHUB_RUN_ID-db"
+          NET="ems-preview-$GITHUB_RUN_ID"
+          IMG="ems-ipam-preview:$GITHUB_RUN_ID"
+          identity(){ docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.RestartCount}}' "$1"; }
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$SHA"
+          (cd "$SRC" && python3 scripts/checksums.py --check)
+          for c in "$LIVEAPP" "$LIVEDB" "$RAD"; do
+            test "$(docker inspect --format '{{.State.Running}}' "$c")" = true
+          done
+          mkdir -m 700 "$ROOT"
+          identity "$LIVEAPP" > "$ROOT/live-app-before"
+          identity "$LIVEDB" > "$ROOT/live-db-before"
+          identity "$RAD" > "$ROOT/live-radius-before"
+          curl -fsS --max-time 5 http://127.0.0.1:8888/health >/dev/null
+          IFACE="$(ip -4 route show default | awk 'NR==1{print $5}')"
+          BIND="$(ip -4 -o addr show dev "$IFACE" scope global | awk 'NR==1{split($4,a,"/");print a[1]}')"
+          python3 -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); assert any(a in ipaddress.ip_network(n) for n in ("10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"))' "$BIND"
+          test -z "$(ss -H -ltn 'sport = :8889')"
+          cp -a "$SRC/modules" "$ROOT/modules"
+          docker build -t "$IMG" "$SRC/docker-app"
+          # Independent secrets, database, network and backups. No RADIUS service.
+          export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          export PGPASSWORD="$POSTGRES_PASSWORD"
+          export EMS_ADMIN_USERNAME=preview
+          export EMS_ADMIN_PASSWORD="$(openssl rand -hex 16)"
+          printf '%s\n' "$EMS_ADMIN_PASSWORD" > "$ROOT/preview-password"
+          chmod 600 "$ROOT/preview-password"
+          # Store only on the user's VM; never put credentials in Actions logs.
+          printf '%s\n' "$ROOT/preview-password" > "$HOME/ems-ipam-lab/preview-password-path"
+          done_ok=0
+          cleanup(){
+            rc=$?
+            if test "$done_ok" = 0; then
+              docker rm -f "$APP" "$DB" >/dev/null 2>&1 || true
+              docker network rm "$NET" >/dev/null 2>&1 || true
+            fi
+            return "$rc"
+          }
+          trap cleanup EXIT
+          docker network create --internal "$NET" >/dev/null
+          docker run -d --name "$DB" --network "$NET" --network-alias db --restart unless-stopped \
+            -e POSTGRES_USER=ems_preview -e POSTGRES_DB=ems_preview -e POSTGRES_PASSWORD \
+            --mount "type=volume,source=$NET-db,target=/var/lib/postgresql/data" postgres:16-alpine >/dev/null
+          ready=0
+          for i in $(seq 1 45); do
+            if docker exec "$DB" pg_isready -U ems_preview -d ems_preview >/dev/null 2>&1; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          # Dedicated bridge for the preview HTTP port; no membership of live network.
+          docker network create "$NET-web" >/dev/null
+          docker run -d --name "$APP" --network "$NET" --restart unless-stopped \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:size=64m,mode=1777 --tmpfs /backups:size=64m,mode=1777 \
+            -e PGHOST=db -e PGDATABASE=ems_preview -e PGUSER=ems_preview -e PGPASSWORD \
+            -e EMS_ADMIN_USERNAME -e EMS_ADMIN_PASSWORD -e EMS_MODULES_DIR=/modules -e BACKUP_DIR=/backups \
+            -v "$ROOT/modules:/modules:ro" -p "$BIND:8889:8080" "$IMG" >/dev/null
+          docker network connect "$NET-web" "$APP"
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 "http://$BIND:8889/health" > "$ROOT/health.json"; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"] and d["database"]=="ready" and {"ipam","network-map"}<=set(d["modules"])' "$ROOT/health.json"
+          curl -fsS "http://$BIND:8889/ipam-import-format.mjs" >/dev/null
+          test "$(identity "$LIVEAPP")" = "$(cat "$ROOT/live-app-before")"
+          test "$(identity "$LIVEDB")" = "$(cat "$ROOT/live-db-before")"
+          test "$(identity "$RAD")" = "$(cat "$ROOT/live-radius-before")"
+          done_ok=1
+          echo "PASS ISOLATED_PREVIEW port=8889 source=$SHA; original app, DB and RADIUS unchanged."
