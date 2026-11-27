@@ -1,0 +1,156 @@
+name: EMS-IPAM main panel guarded update
+on:
+  push:
+    branches: [ops/app-only-preview-20261125]
+    paths: [.github/workflows/main-panel-guarded-update.yml]
+permissions:
+  contents: read
+concurrency:
+  group: ems-ipam-lab-deploy
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 613c217f95da105e928d8959dd140f7c227742fe
+          path: main-panel-candidate
+          persist-credentials: false
+          clean: false
+      - uses: actions/checkout@v4
+        with:
+          ref: f3995f6f75a258d63e6f93ec252825799e7a8de2
+          path: main-panel-baseline
+          persist-credentials: false
+          clean: false
+      - name: Guard, backup and install previously tested candidate on port 8888
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          SRC="$GITHUB_WORKSPACE/main-panel-candidate"
+          BASE="$GITHUB_WORKSPACE/main-panel-baseline"
+          LIVE="$HOME/ems-ipam-lab/current"
+          ENVFILE="$HOME/.ems-ipam-lab.env"
+          BACK="$HOME/ems-ipam-lab/main-panel-updates/$GITHUB_RUN_ID"
+          APP=ems-ipam-app-1
+          DB=ems-ipam-db-1
+          RAD=ems-ipam-radius_ops-1
+          PREVIEW=ems-preview-45652142411-app
+          NEW=ems-ipam-preview:45652142411
+          OLD="ems-ipam-main-rollback:$GITHUB_RUN_ID"
+          SHA=613c217f95da105e928d8959dd140f7c227742fe
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$SHA"
+          (cd "$SRC" && python3 scripts/checksums.py --check)
+          test -s "$ENVFILE"
+          grep -qx 'EMS_HTTP_PORT=8888' "$ENVFILE"
+          test -f "$LIVE/compose.yml"
+          test -f "$LIVE/modules/radius-ops/compose.module.yml"
+          mkdir -p "$BACK"
+          identity(){ docker inspect --format '{{.Id}} {{.Image}} {{.State.StartedAt}} {{.RestartCount}}' "$1"; }
+          for c in "$APP" "$DB" "$RAD" "$PREVIEW"; do
+            test "$(docker inspect --format '{{.State.Running}}' "$c")" = true
+          done
+          test "$(docker inspect --format '{{.Image}}' "$PREVIEW")" = "$(docker image inspect --format '{{.Id}}' "$NEW")"
+          for c in "$APP" "$DB" "$RAD"; do identity "$c" > "$BACK/$c.before"; done
+          curl -fsS --max-time 5 http://127.0.0.1:8888/health > "$BACK/health-before.json"
+          docker image tag "$(docker inspect --format '{{.Image}}' "$APP")" "$OLD"
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/modules"}}{{.Source}}{{end}}{{end}}' "$APP")" = "$LIVE/modules"
+          # Compare all live core runtime files against known baseline and tested candidate.
+          python3 - "$BASE" "$SRC" "$APP" "$PREVIEW" <<'PY'
+          import hashlib,pathlib,subprocess,sys
+          base,src=[pathlib.Path(x)/"docker-app" for x in sys.argv[1:3]]
+          def inventory(root):
+              return {str(p.relative_to(root)) for d in ("public","server") for p in (root/d).rglob("*") if p.is_file()}|{"package.json","package-lock.json"}
+          def installed(c):
+              raw=subprocess.check_output(["docker","exec",c,"find","/app/public","/app/server","-type","f","-print0"])
+              return {p.decode().removeprefix("/app/") for p in raw.split(b"\0") if p}|{"package.json","package-lock.json"}
+          def digest(c,p):
+              return subprocess.check_output(["docker","exec",c,"sha256sum","--","/app/"+p],text=True).split()[0]
+          def local(root,p): return hashlib.sha256((root/p).read_bytes()).hexdigest()
+          bp,sp=inventory(base),inventory(src)
+          lp,pp=installed(sys.argv[3]),installed(sys.argv[4])
+          assert pp==sp, "Preview image inventory differs"
+          assert not(lp-(bp|sp)) and not((bp&sp)-lp), "Live file inventory differs"
+          for p in sorted(lp):
+              if digest(sys.argv[3],p) not in {local(r,p) for r in (base,src) if (r/p).is_file()}:
+                  raise SystemExit("Unreviewed live core file: "+p)
+          for p in sorted(sp):
+              if digest(sys.argv[4],p)!=local(src,p): raise SystemExit("Preview file mismatch: "+p)
+          print("PASS exact candidate and reviewed live core")
+          PY
+          # Keep installed modules, including RADIUS, byte-for-byte as they are.
+          # Stage only network-map in a separate full copy, retaining the original mount for rollback.
+          cp -a "$LIVE/modules" "$BACK/modules"
+          for m in radius radius-ops; do
+            if test -d "$LIVE/modules/$m"; then diff -qr "$LIVE/modules/$m" "$BACK/modules/$m" >/dev/null; fi
+          done
+          test -d "$BACK/modules/network-map"
+          rm -rf "$BACK/modules/network-map"
+          cp -a "$SRC/modules/network-map" "$BACK/modules/network-map"
+          docker exec "$DB" sh -c 'exec psql -XAt -F "|" -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT module_id,version,checksum FROM schema_migrations"' > "$BACK/ledger"
+          python3 - "$SRC" "$BACK" <<'PY'
+          import pathlib,hashlib,sys
+          src,back=map(pathlib.Path,sys.argv[1:])
+          ledger={(m,v):h for m,v,h in (l.split("|") for l in (back/"ledger").read_text().splitlines() if l)}
+          files={("core","001-baseline-1.7"):src/"docker-app/server/schema.sql"}
+          for p in (src/"docker-app/server/migrations").glob("*.sql"): files["core",p.stem]=p
+          for p in (back/"modules").glob("*/migrations/*.sql"): files[p.parent.parent.name,p.stem]=p
+          for key,p in files.items():
+              if key==("core","004-prefix-color-inheritance") and key not in ledger: continue
+              if ledger.get(key)!=hashlib.sha256(p.read_bytes()).hexdigest(): raise SystemExit("Unreviewed migration: "+"/".join(key))
+          print("PASS only additive core color migration may be new; no module migration")
+          PY
+          docker exec "$DB" sh -c 'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$BACK/db-before.dump"
+          test -s "$BACK/db-before.dump"
+          docker exec -i "$DB" pg_restore --list < "$BACK/db-before.dump" >/dev/null
+          printf 'services:\n  app:\n    image: %s\n    volumes:\n      - "%s/modules:/modules:ro"\n' "$NEW" "$BACK" > "$BACK/new.yml"
+          printf 'services:\n  app:\n    image: %s\n' "$OLD" > "$BACK/old.yml"
+          compose(){ docker compose --project-name ems-ipam --env-file "$ENVFILE" -f "$LIVE/compose.yml" -f "$LIVE/modules/radius-ops/compose.module.yml" "$@"; }
+          compose -f "$BACK/new.yml" config >/dev/null
+          compose -f "$BACK/old.yml" config >/dev/null
+          for c in "$APP" "$DB" "$RAD"; do test "$(identity "$c")" = "$(cat "$BACK/$c.before")"; done
+          changed=0
+          rollback(){
+            rc=$?
+            trap - EXIT
+            if test "$rc" != 0 && test "$changed" = 1; then
+              echo "::error::Candidate failed; restoring original app only. No database restore."
+              compose -f "$BACK/old.yml" up -d --no-deps --no-build --pull never --force-recreate app || true
+              for i in $(seq 1 40); do
+                if curl -fsS --max-time 3 http://127.0.0.1:8888/health >/dev/null; then echo "Rollback health OK"; break; fi
+                sleep 2
+              done
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          changed=1
+          compose -f "$BACK/new.yml" up -d --no-deps --no-build --pull never --force-recreate app
+          healthy=0
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8888/health > "$BACK/health-after.json"; then healthy=1; break; fi
+            sleep 2
+          done
+          test "$healthy" = 1
+          python3 - "$BACK/health-before.json" "$BACK/health-after.json" <<'PY'
+          import json,sys
+          a,b=[json.load(open(p)) for p in sys.argv[1:]]
+          assert b["ok"] and b["database"]=="ready"
+          assert set(a["modules"])==set(b["modules"])
+          assert {"ipam","network-map"}<=set(b["modules"])
+          PY
+          curl -fsS http://127.0.0.1:8888/ipam-import-format.mjs >/dev/null
+          for p in public/app.js public/index.html public/ipam-import-format.mjs server/main.mjs server/migrations.mjs; do
+            test "$(sha256sum "$SRC/docker-app/$p" | cut -d' ' -f1)" = "$(docker exec "$APP" sha256sum "/app/$p" | cut -d' ' -f1)"
+          done
+          for p in backend/index.mjs backend/model.mjs discovery/ssh.mjs public/index.mjs; do
+            test "$(sha256sum "$SRC/modules/network-map/$p" | cut -d' ' -f1)" = "$(docker exec "$APP" sha256sum "/modules/network-map/$p" | cut -d' ' -f1)"
+          done
+          for c in "$DB" "$RAD"; do test "$(identity "$c")" = "$(cat "$BACK/$c.before")"; done
+          changed=0
+          printf '%s\n' "$SHA" > "$BACK/deployed-sha"
+          echo "PASS MAIN_PANEL_UPDATE source=$SHA port=8888; original DB and RADIUS container unchanged"
