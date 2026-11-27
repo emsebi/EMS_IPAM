@@ -1,3 +1,11 @@
+# Company-scope browser language recovery — 2026-11-28
+
+PR #92 candidate 8bfe2a4 failed only its new Persian assertion in CI 45064360707; test/PostgreSQL/Docker were green, including 36 native HTTP tests and 8 upgrade tests. The browser initialization forcibly wrote English again on every reload. Preserve an existing language preference and exercise the real language selector with navigation/language assertions. Production permission code and all prior assertions remain unchanged. Require green CI for the new SHA in #92/#89 before merge. No VM/RADIUS changes or new real RADIUS tests.
+
+Fresh main remains e5194af; #93 head 613c217 passed CI 45493900587. Later operational runs 45652142411 (isolated preview) and 46016912440 (main panel app-only update, source 613c217 on 8888) succeeded, including unchanged DB/RADIUS container identity checks. These are historical workflow observations, not proof of present live UI acceptance, full uniform deployed tree or tested rollback. Do not repeat the rollout. All #89 requirements remain active; next priority is isolated guarded-rollout/rollback evidence and #93 completion, while independent RBAC work continues. Work executes; Chat feedback; #89 is authoritative.
+
+---
+
 # Panel Company/Space directory isolation — 2026-11-22
 
 Fresh main `e5194af2109889b1a60c3b420e5dd0f8bd0300d6` is the screenshot-only successor of #84 merge `45c45f7b93bf074a511bf6b215c3f22a7f935d38`. CI 45036488701 passed all four gates (50 browser/API scenarios, 35 native HTTP tests, 8 upgrade tests). #90 Import and #84/#85 colors are merged; #83 closed unmerged; only inactive draft #12 was open. Issue #89 and both acceptance contracts were read. Rechecked main/PRs/CI before publication; do not restart those completed code steps.

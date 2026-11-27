@@ -1773,7 +1773,9 @@ try {
   const directoryBefore = await api('/api/companies/' + directoryCompany.id);
   const directoryViewer = await browser.newContext({ baseURL });
   try {
-    await directoryViewer.addInitScript(() => localStorage.setItem('ems-language', 'en'));
+    await directoryViewer.addInitScript(() => {
+      if (!localStorage.getItem('ems-language')) localStorage.setItem('ems-language', 'en');
+    });
     await api('/api/auth/login', 'POST', { username: 'directory-space-reader', password: 'ReadOnly-Test-123' }, 200, directoryViewer.request);
     const tab = await directoryViewer.newPage();
     tab.on('pageerror', error => errors.push(error.message));
@@ -1799,9 +1801,9 @@ try {
     await tab.locator('.open-space').click();
     await tab.waitForURL('**/#/ipam/' + directorySpaces[0].id);
     assert.ok((await tab.locator('#page').innerText()).includes('198.18.94.0/24'));
-    await tab.evaluate(() => localStorage.setItem('ems-language', 'fa'));
     await tab.goto('/#/company/' + directoryCompany.id);
-    await tab.reload();
+    await Promise.all([tab.waitForEvent('load'), tab.locator('#languageSelect').selectOption('fa')]);
+    assert.equal(await tab.locator('#languageSelect').inputValue(), 'fa');
     await tab.locator('.company-scope-notice').waitFor();
     assert.ok((await tab.locator('.company-scope-notice').innerText()).includes('محدود به رنج‌های تخصیص‌یافته'));
     await tab.screenshot({ path: path.join(outputDir, 'panel-company-scope-fa.png'), fullPage: true });
