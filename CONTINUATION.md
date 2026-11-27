@@ -1,3 +1,25 @@
+# Company-scope browser language recovery — 2026-11-28
+
+PR #92 candidate 8bfe2a4 failed only its new Persian assertion in CI 45064360707; test/PostgreSQL/Docker were green, including 36 native HTTP tests and 8 upgrade tests. The browser initialization forcibly wrote English again on every reload. Preserve an existing language preference and exercise the real language selector with navigation/language assertions. Production permission code and all prior assertions remain unchanged. Require green CI for the new SHA in #92/#89 before merge. No VM/RADIUS changes or new real RADIUS tests.
+
+Fresh main remains e5194af; #93 head 613c217 passed CI 45493900587. Later operational runs 45652142411 (isolated preview) and 46016912440 (main panel app-only update, source 613c217 on 8888) succeeded, including unchanged DB/RADIUS container identity checks. These are historical workflow observations, not proof of present live UI acceptance, full uniform deployed tree or tested rollback. Do not repeat the rollout. All #89 requirements remain active; next priority is isolated guarded-rollout/rollback evidence and #93 completion, while independent RBAC work continues. Work executes; Chat feedback; #89 is authoritative.
+
+---
+
+# Panel Company/Space directory isolation — 2026-11-22
+
+Fresh main `e5194af2109889b1a60c3b420e5dd0f8bd0300d6` is the screenshot-only successor of #84 merge `45c45f7b93bf074a511bf6b215c3f22a7f935d38`. CI 45036488701 passed all four gates (50 browser/API scenarios, 35 native HTTP tests, 8 upgrade tests). #90 Import and #84/#85 colors are merged; #83 closed unmerged; only inactive draft #12 was open. Issue #89 and both acceptance contracts were read. Rechecked main/PRs/CI before publication; do not restart those completed code steps.
+
+The panel-scope audit found a real read leak: a single Space grant exposed Company-wide contacts, connections, personnel and metadata through bootstrap/detail/search; search also exposed unassigned personnel to restricted users. An archived-only Space grant could retain direct Company access. The new real HTTP case fails on the original main bootstrap with private directory fields, then passes after this fix. Company-level view grants retain directory access, while Space-only grants expose only Company id/name/kind for navigation plus authorized Spaces and their counts. Search may match the visible Company name but never private directory fields for these users. Unassigned personnel search is admin-only. Parent Company grants do not implicitly grant child Branch access. Deleted-Space grants no longer authorize Company reads; module/scope revocation is re-evaluated in existing sessions. Existing write policy is unchanged: this is not yet independently configurable module view/edit.
+
+The scoped Company UI explains restricted access in Persian/English, rather than showing misleading empty directory counts. Assigned Spaces remain navigable; the full Company view remains intact for authorized readers/admins. New browser coverage checks both languages, a private-contact search, denied edit, unchanged data and screenshots in the normal CI artifact. This is a small existing-layout adjustment, not acceptance of all reference-image UI work. The manual topology node/link reads already filter by authorized Space; their behavior is unchanged.
+
+Local HTTP: 28 pass, 0 fail, 8 native-only skips (36 including parent). UI/i18n regression: 22 pass, zero failures/skips. Full core npm test: 278 pass, zero failures, 9 native-only skips. Require the candidate's native PostgreSQL and full browser CI before merging; record exact candidate/merge SHA, gates and screenshot artifact in #89. The known local Chromium socket limitation is not a browser pass. No schema/migration, shared module grant/write policy, module files or RADIUS code/config/users/NAS/secret/credential/container/image changes; no new real RADIUS test. All data are synthetic in disposable test databases.
+
+VM: no access, deployment, restart, migration, scan or push. Last read-only VM evidence remains 45005783543 (Import module 404/five mismatched files; then-observed health 200/identity stable); current full deployed SHA is unverified. Acceptance stays PARTIAL. Before any permitted rollout require a compatible package, backup/restore and identity capture, then health/regression with stop/rollback on RADIUS risk. Next: independent non-RADIUS panel module view/edit with Company/Branch/Space scopes and unchanged RADIUS grants/behavior; remaining endpoint/event scope coverage and guarded installed acceptance remain open. Work executes; Chat decides/feeds back; GitHub/#89 owns status.
+
+---
+
 # Persisted prefix-color propagation and Portable round-trip — 2026-11-22
 
 Fresh main: `247c16b836ce8e41a7a48b40158054b9368469ec`, screenshot-only successor of #85 merge `453dc60ae08347445f41f52bf06b18ba23f494ad`; candidate/merge CI 45010407406/45010598436 passed all four gates, 49 browser/API scenarios and 34 native HTTP tests. #83 is closed without merge; only #84 and inactive draft #12 remain open. #89 and both acceptance documents remain authoritative.
