@@ -27,6 +27,25 @@ class CheckFailed(Exception):
     pass
 
 
+def canonical_environment(entries):
+    """Compare named values, not Docker's incidental environment-array order.
+
+    Duplicate keys are ambiguous and rejected rather than choosing first/last.
+    No value is exposed by errors, including malformed credential entries.
+    """
+    if not isinstance(entries, list):
+        raise ValueError('Invalid environment inventory')
+    result = {}
+    for entry in entries:
+        if not isinstance(entry, str) or '=' not in entry:
+            raise ValueError('Invalid environment entry')
+        name, value = entry.split('=', 1)
+        if not name or name in result:
+            raise ValueError('Invalid or duplicate environment key')
+        result[name] = value
+    return dict(sorted(result.items()))
+
+
 def protected_snapshot(adapter):
     snapshot = deepcopy(adapter.protected_identity())
     fields = {'id', 'image', 'started_at', 'restarts', 'running'}

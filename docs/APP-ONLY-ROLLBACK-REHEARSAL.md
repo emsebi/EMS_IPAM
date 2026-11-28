@@ -32,6 +32,8 @@ Each mutable Docker case takes a fresh backup, restores it in the separate test 
 
 The baseline comes from the currently installed test app's immutable image ID and a hash of its reproducible launch configuration, not a hard-coded old tag. The fixture hash covers command/entrypoint, environment, user, work directory, volume/bind/tmpfs declarations, network mode, port bindings, capabilities, security options, labels and restart policy. It excludes generated hostname/container ID/IP/start time; raw environment and credentials never enter evidence. This fingerprint is a fixture contract, not a complete VM mount/Compose compatibility proof.
 
+The first Docker run correctly refused to certify recovery because the configuration fingerprint differed. Value-free diagnostics identified only `config.Env`, with identical entries in a different order. Environment comparison now canonicalizes unique names and their complete values; missing/changed values still fail and duplicate/malformed keys are rejected. Command/entrypoint order is not normalized. Diagnostics list differing field names only, never environment values or their individual hashes.
+
 An apply failure always raises `TransitionFailure`, including when recovery succeeds. The report distinguishes `blocked` (no mutation), `applied`, `rolled_back` and `rollback_failed`. Recovery independently requires recreation, captured image/configuration, health, preserved data and unchanged protected identities. All recovery checks run even when recreation fails; a later healthy endpoint cannot hide a failed restore command. Only fixed phase/error categories enter the report, not exception text or inspect/row data.
 
 | Disposable Docker case | Required outcome |

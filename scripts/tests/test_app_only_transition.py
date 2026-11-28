@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app_only_transition import AppBaseline, TransitionFailure, execute_app_transition
+from app_only_transition import AppBaseline, TransitionFailure, canonical_environment, execute_app_transition
 
 
 OLD = AppBaseline('sha256:' + '1' * 64, '2' * 64)
@@ -61,6 +61,22 @@ class Adapter:
 
 
 class TransitionTests(unittest.TestCase):
+    def test_environment_order_is_irrelevant_but_names_and_values_must_match(self):
+        before = canonical_environment(['PORT=8080', 'TOKEN=synthetic=a=b', 'EMPTY='])
+        after = canonical_environment(['EMPTY=', 'TOKEN=synthetic=a=b', 'PORT=8080'])
+        self.assertEqual(before, after)
+        self.assertEqual(before['TOKEN'], 'synthetic=a=b')
+        self.assertNotEqual(before, canonical_environment(['EMPTY=', 'TOKEN=changed', 'PORT=8080']))
+        self.assertNotEqual(before, canonical_environment(['TOKEN=synthetic=a=b', 'PORT=8080']))
+        self.assertNotEqual(before, canonical_environment(['EMPTY=', 'OTHER=synthetic=a=b', 'PORT=8080']))
+
+    def test_ambiguous_environment_is_rejected_without_leaking_values(self):
+        for entries in (None, ['A=secret-value', 'A=other'], ['A=secret-value', 'A=secret-value'],
+                        ['secret-value'], ['=secret-value'], [None]):
+            with self.assertRaises(ValueError) as raised:
+                canonical_environment(entries)
+            self.assertNotIn('secret-value', str(raised.exception))
+
     def failed(self, adapter, status):
         with self.assertRaises(TransitionFailure) as raised:
             execute_app_transition(adapter)

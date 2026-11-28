@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 import uuid
-from app_only_transition import AppBaseline, TransitionFailure, execute_app_transition
+from app_only_transition import AppBaseline, TransitionFailure, canonical_environment, execute_app_transition
 
 BASELINE_SHA = 'f3995f6f75a258d63e6f93ec252825799e7a8de2'
 LABEL = 'ems.app-only-rehearsal'
@@ -86,6 +86,7 @@ class Rehearsal:
         # Hash only reproducible launch configuration, never emit Env/credentials.
         # Hostname, assigned IP, container ID and start time change on recreation.
         config = {k: obj['Config'].get(k) for k in ('Cmd', 'Entrypoint', 'Env', 'User', 'WorkingDir', 'ExposedPorts', 'Volumes', 'Labels')}
+        config['Env'] = canonical_environment(config['Env'])
         host = {k: obj['HostConfig'].get(k) for k in ('Binds', 'Mounts', 'Tmpfs', 'ReadonlyRootfs', 'CapDrop',
                 'CapAdd', 'SecurityOpt', 'NetworkMode', 'PortBindings', 'RestartPolicy')}
         fields = {**{'config.' + k: v for k, v in config.items()}, **{'host.' + k: v for k, v in host.items()}}
