@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import pg from 'pg';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/network-map/backend/index.mjs';
+import {assertSavedBundleReads} from '../../modules/network-map/tests/saved-bundle-check.mjs';
 
 const connectionString=process.env.EMS_TEST_POSTGRES_URL;
 if(!connectionString)throw new Error('EMS_TEST_POSTGRES_URL is required for the PostgreSQL network-map gate.');
@@ -76,6 +77,11 @@ test('network-map migration and manual discovery persist on PostgreSQL 16',async
   assert.equal(state.body.topology.nodes[0].hostname,'pg-core');
   const archive=await fs.readdir(path.join(backupDir,'network-map'),{recursive:true});
   assert.ok(archive.some(name=>name.endsWith('.json')));
+  await assertSavedBundleReads({pool,call:(...args)=>call(module,...args),companyId:'map-pg-co'});
+  assert.equal(collects,1,'saved LAG reads must not start any additional collection');
+  module=createModule(context);
+  state=await call(module,'GET','/state');
+  assert.equal(state.body.topology.links.find(l=>l.sourcePort==='Eth1/2').state,'down','derived LAG state survives module restart');
  }finally{
   await pool.end();
   await fs.rm(backupDir,{recursive:true,force:true});

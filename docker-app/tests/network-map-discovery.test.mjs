@@ -7,15 +7,16 @@ import {fileURLToPath} from 'node:url';
 import {PGlite} from '@electric-sql/pglite';
 import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/network-map/backend/index.mjs';
-import {redactConfig} from '../../modules/network-map/discovery/device-parsers.mjs';
+import {redactConfig,parseCisco,parseCiscoBundles} from '../../modules/network-map/discovery/device-parsers.mjs';
 import {settingsInput,impact,traceMac,traceSavedIp} from '../../modules/network-map/backend/model.mjs';
+import {assertSavedBundleReads} from '../../modules/network-map/tests/saved-bundle-check.mjs';
 
 const moduleDir=fileURLToPath(new URL('../../modules/network-map/',import.meta.url));
 function adapter(db){
  const query=async(sql,params)=>{const r=params?.length?await db.query(sql,params):(await db.exec(sql)).at(-1);return {...r,rows:r?.rows||[],rowCount:r?.rowCount??r?.affectedRows??r?.rows?.length??0};};
  return {query,connect:async()=>({query,release(){}})};
 }
-async function fixture(){
+async function fixture(neighborFixture={}){
  const db=new PGlite(),pool=adapter(db),backupDir=await fs.mkdtemp(path.join(os.tmpdir(),'ems-map-'));
  await migrateDatabase(pool);await pool.query("INSERT INTO companies(id,name) VALUES('map-co','Map test')");
  await migrateModuleSchemas(pool,[{id:'network-map',dir:moduleDir}]);
@@ -23,8 +24,8 @@ async function fixture(){
  const module=createModule({pool,backupDir,json:(_res,status,body)=>response={status,body},readBody:async req=>req.body,
   requireAdmin:user=>{if(user?.role!=='admin')throw Object.assign(new Error('forbidden'),{status:403});},audit:async()=>{},
   networkProbe:async()=>{probes++;return true;},collectNetworkDevice:async(target,_settings,password)=>{collects++;assert.equal(password,'map-pass');return {
-   status:'online',hostname:'core-sw',model:'C9300',os:'17.12',ports:[{name:'Gi1/0/1',status:'up',mode:'trunk'}],
-   macs:[{mac:'00:11:22:33:44:55',port:'Gi1/0/2',vlan:'10'}],neighbors:[],features:{LLDP:{enabled:true}},config:'hostname core-sw\nusername netread secret [REDACTED]'};}
+   status:'online',hostname:neighborFixture[target.address]?.hostname||'core-sw',model:'C9300',os:'17.12',ports:[{name:'Gi1/0/1',status:'up',mode:'trunk'}],
+   macs:[{mac:'00:11:22:33:44:55',port:'Gi1/0/2',vlan:'10'}],neighbors:neighborFixture[target.address]?.neighbors||[],features:{LLDP:{enabled:true}},config:'hostname core-sw\nusername netread secret [REDACTED]'};}
  });
  const call=async(method,route,body,user={role:'admin',username:'tester'})=>{const url=new URL('http://test/api/network-map'+route+(route.includes('?')?'&':'?')+'companyId=map-co');await module.handle({method,body},{writeHead(){},end(){}},url,user);return response;};
  return {db,pool,backupDir,call,getCollects:()=>collects,getProbes:()=>probes,close:async()=>{await db.close();await fs.rm(backupDir,{recursive:true,force:true});}};
@@ -114,4 +115,71 @@ test('configuration redaction removes values instead of retaining the matching l
  const sentinels=['ios-password-value','radius-secret-value','snmp-community-value','routeros-password-value','snmp-auth-value','snmp-priv-value','wifi-psk-value'];
  const raw=`username netread password ${sentinels[0]}\nradius server EMS key ${sentinels[1]}\nsnmp-server community ${sentinels[2]} RO\n/user add name=netread password=${sentinels[3]} group=read\nsnmp-server user monitor EMS v3 auth sha ${sentinels[4]} priv aes 128 ${sentinels[5]}\nwpa-psk ascii ${sentinels[6]}`;
  const output=redactConfig(raw);for(const value of sentinels)assert.equal(output.includes(value),false);assert.match(output,/\[REDACTED\]/);assert.match(output,/username netread password/);
+});
+
+test('reset clears active map and layout without touching settings, archives, registry or network',async()=>{
+ const f=await fixture();try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}]});
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal((await f.call('GET','/state')).body.job.status,'completed');
+  await f.call('PUT','/layout',{positions:{'192.0.2.10':{x:200,y:300}},background:''});
+  await f.call('POST','/macs',{mac:'00:11:22:33:44:55',name:'Test endpoint'});
+  const before=(await f.call('GET','/settings')).body;
+  await assert.rejects(f.call('POST','/reset',{}),/Confirm/);
+  await assert.rejects(f.call('POST','/reset',{confirm:true},{role:'viewer'}),/forbidden/);
+  const result=(await f.call('POST','/reset',{confirm:true})).body;
+  assert.deepEqual(result.topology,{nodes:[],links:[],updatedAt:null});
+  assert.deepEqual(result.layout,{positions:{},background:''});
+  assert.equal((await f.call('GET','/state')).body.job,null);
+  assert.deepEqual((await f.call('GET','/settings')).body,before);
+  assert.equal((await f.call('GET','/snapshots')).body.items.length,1);
+  assert.equal((await f.call('GET','/macs')).body.items.length,1);
+  assert.equal(f.getCollects(),1);assert.equal(f.getProbes(),0);
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal((await f.call('GET','/state')).body.topology.nodes.length,1);
+  assert.equal(f.getCollects(),2);
+ }finally{await f.close();}
+});
+
+test('neighbor-only discovery follows allowed management addresses without probing a range',async()=>{
+ const peer=(address,deviceId,localPort,remotePort)=>({address,deviceId,localPort,remotePort,protocol:'CDP'});
+ const f=await fixture({
+  '192.0.2.10':{hostname:'seed-2960',neighbors:[peer('192.0.2.11','next','Gi1/0/1','Gi1/0/1'),peer('198.51.100.1','outside','Gi1/0/2','Gi1/0/1')]},
+  '192.0.2.11':{hostname:'next',neighbors:[peer('192.0.2.10','seed-2960','Gi1/0/1','Gi1/0/1'),peer('192.0.2.12','last','Gi1/0/2','Gi1/0/1')]},
+  '192.0.2.12':{hostname:'last',neighbors:[peer('192.0.2.11','next','Gi1/0/1','Gi1/0/2')]}
+ });try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}],scopes:['192.0.2.0/24'],neighborOnly:true});
+  await f.call('POST','/scan',{});
+  for(let i=0;i<100;i++){if((await f.call('GET','/state')).body.job?.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  const state=(await f.call('GET','/state')).body;
+  assert.equal(state.job.status,'completed');assert.equal(state.job.total,3);
+  assert.equal(f.getCollects(),3);assert.equal(f.getProbes(),0);
+  assert.equal(state.topology.nodes.find(n=>n.address==='198.51.100.1')?.status,'unknown');
+  assert.equal(state.topology.nodes.filter(n=>n.status==='online').length,3);
+  assert.ok(state.topology.links.length>=2);
+ }finally{await f.close();}
+});
+
+test('IOS and NX-OS bundle evidence and NX-OS MAC table are parsed without guessing remote members',()=>{
+ const ios=parseCiscoBundles('2 Po2(SU) LACP Gi1/0/1(P) Gi1/0/2(D)');
+ assert.equal(ios[0].name,'Po2');assert.equal(ios[0].members[1].state,'down');
+ const nx=parseCisco({version:'Cisco Nexus Operating System (NX-OS) Software\nNXOS: version 9.3(8)',ports:'Eth1/2 uplink connected trunk full 10G SFP',bundles:'5 Po5(SU) Eth LACP Eth1/2(P) Eth1/3(s)',macs:'* 4 0011.2233.4455 dynamic 0 F F Eth1/2'});
+ assert.equal(nx.osFamily,'nx-os');assert.equal(nx.macs[0].port,'Eth1/2');assert.equal(nx.ports[0].bundle,'Po5');assert.equal(nx.bundles[0].members[1].state,'suspended');
+ const trace=traceMac({nodes:[{id:'nx',status:'online',collectedAt:new Date().toISOString(),...nx}],links:[]},'0011.2233.4455','nx');
+ assert.equal(trace.candidates.length,0);
+});
+
+test('saved bundle reads correct legacy states without discovery, writes or cross-company evidence',async()=>{
+ const f=await fixture();try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}]});
+  await f.pool.query("INSERT INTO network_map_state(company_id) VALUES('map-co')");
+  await f.pool.query("INSERT INTO companies(id,name) VALUES('other-map','Other map')");
+  await f.pool.query("INSERT INTO network_map_state(company_id,topology) VALUES('other-map',$1::jsonb)",[JSON.stringify({nodes:[{id:'private-other-node',name:'Private other evidence'}],links:[],updatedAt:null})]);
+  const state=await assertSavedBundleReads({pool:f.pool,call:f.call,companyId:'map-co'});
+  assert.equal(JSON.stringify(state).includes('private-other-node'),false);
+  await assert.rejects(f.call('GET','/state',null,{role:'viewer'}),/forbidden/);
+  assert.equal(f.getCollects(),0);assert.equal(f.getProbes(),0);
+ }finally{await f.close();}
 });

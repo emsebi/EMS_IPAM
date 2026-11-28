@@ -96,6 +96,13 @@ node -e '
  if(!x.topology.links.some(l=>l.sourcePort==="Gi1/0/1"&&l.targetPort==="Gi0/24"&&/cdp|lldp/.test(l.protocol)))process.exit(1);
 ' "$STATE" || fail "Synthetic LLDP/CDP, port/VLAN or MAC evidence is missing from the topology."
 pass "manual Create Map collected synthetic port, VLAN, MAC and LLDP/CDP topology"
+node -e '
+ const x=JSON.parse(process.argv[1]),link=x.topology.links.find(l=>l.sourcePort==="Gi1/0/3");
+ if(!link||link.state!=="down"||link.sourceEvidence?.physicalState!=="up"||link.sourceEvidence?.reason!=="member-suspended")process.exit(1);
+ if(link.sourceBundle?.name!=="Po7"||!link.sourceBundle.members.some(m=>m.port==="Gi1/0/4"&&m.state==="standby"))process.exit(1);
+ if(x.topology.links.some(l=>l.sourcePort==="Gi1/0/4"))process.exit(1);
+' "$STATE" || fail "Connected suspended member was misreported as a path, or an unobserved standby cable was invented."
+pass "SSH bundle evidence preserves suspended/standby members without inventing remote cables"
 
 SNAPSHOTS="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots?companyId=${COMPANY_ID}")"
 SNAPSHOT_ID="$(node -e 'const x=JSON.parse(process.argv[1]);if(!x.ok||x.items.length!==1)process.exit(1);process.stdout.write(x.items[0].id)' "$SNAPSHOTS")" || fail "Exactly one manual snapshot was not stored."
@@ -108,6 +115,49 @@ node -e '
  if(!raw.includes("[REDACTED]"))process.exit(1);
 ' "$SNAPSHOT_FILE" || fail "Readable snapshot is missing or contains a synthetic secret."
 pass "readable snapshot stored with configuration secrets removed"
+
+# A second disposable company reaches only the explicit synthetic RouterOS container.
+# Auto platform detection and both monitor commands use the real SSH transport.
+ROS_CONTAINER="$(compose ps -q routeros_fixture)"
+ROS_IP="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$ROS_CONTAINER")"
+[[ "$ROS_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Synthetic RouterOS fixture has no isolated IPv4 address."
+ROS_COMPANY="$(curl -fsS -b "$COOKIE_JAR" -H 'Content-Type: application/json' -H 'X-EMS-CSRF: 1' \
+  --data '{"name":"Synthetic RouterOS Bonds","kind":"company","contacts":[],"connections":[]}' \
+  "http://127.0.0.1:${EMS_HTTP_PORT}/api/companies")"
+ROS_COMPANY_ID="$(node -e 'const x=JSON.parse(process.argv[1]);if(!x.ok||!x.id)process.exit(1);process.stdout.write(x.id)' "$ROS_COMPANY")" || fail "RouterOS company fixture creation failed."
+ROS_SETTINGS="$(node -e 'process.stdout.write(JSON.stringify({username:"map-readonly",password:"Synthetic-Map-Password",devices:[{address:process.argv[1],platform:"auto"}],scopes:[],rootId:process.argv[1],port:2222,timeout:8,concurrency:1,saveConfig:false}))' "$ROS_IP")"
+curl -fsS -X PUT -b "$COOKIE_JAR" -H 'Content-Type: application/json' -H 'X-EMS-CSRF: 1' \
+  --data "$ROS_SETTINGS" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/settings?companyId=${ROS_COMPANY_ID}" >/dev/null
+ROS_BEFORE="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots?companyId=${ROS_COMPANY_ID}")"
+node -e 'const x=JSON.parse(process.argv[1]);if(!x.ok||x.items.length!==0)process.exit(1)' "$ROS_BEFORE" || fail "RouterOS settings unexpectedly triggered discovery."
+curl -fsS -X POST -b "$COOKIE_JAR" -H 'Content-Type: application/json' -H 'X-EMS-CSRF: 1' \
+  --data '{}' "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/scan?companyId=${ROS_COMPANY_ID}" >/dev/null
+for _ in $(seq 1 60); do
+  ROS_STATE="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/state?companyId=${ROS_COMPANY_ID}")"
+  ROS_STATUS="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).job?.status||"")' "$ROS_STATE")"
+  [[ "$ROS_STATUS" == "completed" ]] && break
+  [[ "$ROS_STATUS" == "failed" ]] && fail "Synthetic RouterOS collection failed."
+  sleep 1
+done
+[[ "$ROS_STATUS" == "completed" ]] || fail "Synthetic RouterOS collection did not complete."
+check_routeros_state(){
+  node -e '
+    const assert=require("node:assert/strict"),x=JSON.parse(process.argv[1]),node=x.topology.nodes.find(n=>n.hostname==="SyntheticRouterOS");
+    assert.equal(node?.status,"online");assert.equal(node.osFamily,"routeros");assert.equal(node.bundles.length,2);
+    assert.equal(node.bundles[0].protocol,"802.3ad");assert.equal(node.bundles[1].protocol,"active-backup");
+    assert.deepEqual(node.bundles.map(b=>b.members.map(m=>m.state)),[["bundled","inactive"],["bundled","inactive"]]);
+    assert.equal(node.ports.find(p=>p.name==="ether2").status,"up");
+    const link=x.topology.links.find(l=>l.sourcePort==="ether2"||l.targetPort==="ether2");
+    assert.equal(link?.state,"down");
+    const bundle=link.source===node.id?link.sourceBundle:link.targetBundle;
+    assert.equal(bundle.kind,"routeros-bond");assert.equal(bundle.name,"bond-lacp");assert.equal(bundle.memberState,"inactive");
+    assert.equal(x.topology.nodes.some(n=>n.hostname==="FixtureSwitch"),false);
+  ' "$1"
+}
+check_routeros_state "$ROS_STATE" || fail "RouterOS SSH bond/member evidence is missing or fabricated."
+ROS_TRACE="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/trace?companyId=${ROS_COMPANY_ID}&mac=02%3A00%3A00%3A00%3A00%3A73")"
+node -e 'const x=JSON.parse(process.argv[1]);if(x.observations.length!==1||x.candidates.length!==0)process.exit(1)' "$ROS_TRACE" || fail "MAC Finder nominated a RouterOS aggregate as an access port."
+pass "RouterOS SSH auto-detection, independent LACP/active-backup evidence and MAC Finder passed"
 
 compose restart app >/dev/null
 for _ in $(seq 1 45); do
@@ -124,9 +174,16 @@ AFTER_SNAPSHOTS="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}
 node -e '
  const state=JSON.parse(process.argv[1]),settings=JSON.parse(process.argv[2]),snapshots=JSON.parse(process.argv[3]);
  if(!state.topology.nodes.some(n=>n.hostname==="FixtureSwitch")||!settings.hasPassword||snapshots.items.length!==1)process.exit(1);
+ if(state.topology.links.find(l=>l.sourcePort==="Gi1/0/3")?.state!=="down")process.exit(1);
 ' "$AFTER" "$AFTER_SETTINGS" "$AFTER_SNAPSHOTS" || fail "Network Map state did not persist after application restart."
 curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots/${SNAPSHOT_ID}/download?companyId=${COMPANY_ID}" >/dev/null || fail "Snapshot file did not persist after restart."
 pass "settings, topology and snapshot persisted after application restart"
+
+ROS_AFTER="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/state?companyId=${ROS_COMPANY_ID}")"
+check_routeros_state "$ROS_AFTER" || fail "RouterOS evidence did not survive application restart."
+ROS_AFTER_SNAPSHOTS="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots?companyId=${ROS_COMPANY_ID}")"
+node -e 'const x=JSON.parse(process.argv[1]);if(!x.ok||x.items.length!==1)process.exit(1)' "$ROS_AFTER_SNAPSHOTS" || fail "RouterOS archive was lost or restart triggered discovery."
+pass "RouterOS independent bond states and one manual archive persisted across app restart"
 
 compose ps
 printf 'Network Map full Docker Compose smoke completed successfully.\n'

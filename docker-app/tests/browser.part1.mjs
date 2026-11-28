@@ -841,6 +841,58 @@ try {
   check('Smart Network Map saves encrypted read-only settings without starting discovery');
   await page.screenshot({path:path.join(outputDir,'network-map-settings.png'),fullPage:true});
 
+  const bundleBefore=await api('/api/network-map/state?companyId=test-co'),bundleWrites=[];
+  const onBundleRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')bundleWrites.push(req.url());};
+  page.on('request',onBundleRequest);
+  const downBundle=bundleBefore.topology.links.find(l=>l.sourcePort==='Eth1/2');
+  assert.equal(downBundle.state,'down');
+  const chooseBundle=async()=>{
+    const link=page.locator(`[data-link="${downBundle.id}"]`);
+    await link.focus();await link.press('Enter');
+    await page.locator('.nm-link-state[data-state="down"]').waitFor();
+  };
+  await chooseBundle();
+  assert.equal(await page.locator(`[data-link="${downBundle.id}"] .nm-link.down.nm-highlight`).count(),1);
+  const sourceBundle=page.locator('.nm-link-endpoint[data-endpoint="source"]');
+  const targetBundle=page.locator('.nm-link-endpoint[data-endpoint="target"]');
+  assert.equal(await sourceBundle.locator('[data-bundle="Po50"]').count(),1);
+  assert.equal(await targetBundle.locator('[data-bundle="Po2"]').count(),1);
+  assert.equal(await sourceBundle.locator('.nm-bundle-member').count(),3);
+  assert.equal(await targetBundle.locator('.nm-bundle-member').count(),2);
+  assert.match(await sourceBundle.locator('[data-member-state="suspended"]').textContent(),/Eth1\/2.*تعلیق‌شده/);
+  assert.match(await sourceBundle.locator('[data-member-state="standby"]').textContent(),/Eth1\/3.*آماده‌به‌کار/);
+  assert.match(await page.locator('#nmDetail').textContent(),/نه تست زنده/);
+  await page.screenshot({path:path.join(outputDir,'network-map-bundle-detail.png'),fullPage:true});
+  await page.locator('#nmLinkDevice1').click();
+  assert.match(await page.locator('.nm-detail-head').textContent(),/Synthetic IOS/);
+  await chooseBundle();
+  const bundleAfter=await api('/api/network-map/state?companyId=test-co');
+  assert.deepEqual(bundleAfter,bundleBefore,'opening and highlighting bundle evidence must not change map/layout/time');
+  page.off('request',onBundleRequest);assert.deepEqual(bundleWrites,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('Saved LAG detail distinguishes suspended and standby members, independent endpoint bundles and highlight without discovery');
+
+  const rosWrites=[];
+  const onRosRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')rosWrites.push(req.url());};
+  page.on('request',onRosRequest);
+  for(const [port,name,protocol] of [['ether2','bond-lacp','802.3ad'],['ether4','bond backup','active-backup']]){
+    const savedLink=bundleBefore.topology.links.find(l=>l.targetPort===port);
+    assert.equal(savedLink.state,'down');assert.equal(savedLink.targetBundle.kind,'routeros-bond');
+    const element=page.locator(`[data-link="${savedLink.id}"]`);
+    await element.focus();await element.press('Enter');
+    const detail=page.locator(`.nm-link-endpoint[data-endpoint="target"] [data-bundle="${name}"]`);
+    await detail.waitFor();assert.match(await detail.textContent(),new RegExp(protocol));
+    assert.equal(await detail.locator('.nm-bundle-member').count(),2);
+    assert.match(await detail.locator('[data-member-state="inactive"]').textContent(),/غیرفعال \(قطع یا پشتیبان\)/);
+    assert.equal(await element.locator('.nm-link.down.nm-highlight').count(),1);
+    assert.match(await page.locator('#nmDetail').textContent(),/نه تست زنده/);
+  }
+  await page.screenshot({path:path.join(outputDir,'network-map-routeros-bonding.png'),fullPage:true});
+  assert.deepEqual(await api('/api/network-map/state?companyId=test-co'),bundleBefore);
+  page.off('request',onRosRequest);assert.deepEqual(rosWrites,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('Saved RouterOS LACP and active-backup details retain independent members and inactive evidence without a scan or write');
+
   const traceMutations=[];
   const traceRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')traceMutations.push(req.url());};
   page.on('request',traceRequest);
