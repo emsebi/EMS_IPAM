@@ -48,6 +48,13 @@ jobs:
               print('RouterOS REST API:', 'SUCCESS' if isinstance(result,dict) else 'RESPONDED')
           except Exception as e:
               print('RouterOS REST API FAILED:', type(e).__name__,str(e)[:180])
+          for endpoint in ('ppp/active','ip/hotspot/active','ip/firewall/address-list'):
+              try:
+                  rows=app.router_request('GET',endpoint)
+                  print('REST GET /rest/'+endpoint+': OK; count='+str(len(rows) if isinstance(rows,list) else 'n/a'))
+              except Exception as exc:
+                  print('REST GET /rest/'+endpoint+': FAILED; '+type(exc).__name__+' '+str(exc)[:160])
+          print('Diagnostic complete; RouterOS records were not modified.')
           for api_port in (8728,8729,22):
               try:
                   with socket.create_connection((host,api_port),timeout=2):
