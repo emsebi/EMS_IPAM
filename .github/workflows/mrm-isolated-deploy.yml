@@ -40,7 +40,16 @@ jobs:
             chmod 600 "$ROOT/.env"
           fi
           cd "$ROOT"
-          docker compose --project-name mikrotik-route-manager up -d --build --no-deps
+          # Reuse the already cached, working runtime image when Docker Hub is blocked.
+          # Only app.py changes; Python, UID, Compose, environment and the /data volume are retained.
+          if docker image inspect mikrotik-route-manager:0.2 >/dev/null 2>&1; then
+            docker tag mikrotik-route-manager:0.2 mikrotik-route-manager:lab-base
+            printf 'FROM mikrotik-route-manager:lab-base\nCOPY --chown=10001:10001 app.py /app/app.py\n' > .Dockerfile.lab-offline
+            docker build --network=none --pull=false -t mikrotik-route-manager:0.2 -f .Dockerfile.lab-offline .
+            docker compose --project-name mikrotik-route-manager up -d --no-build --no-deps --force-recreate
+          else
+            docker compose --project-name mikrotik-route-manager up -d --build --no-deps
+          fi
           for i in $(seq 1 15); do
             if curl --noproxy '*' -fsS --max-time 3 http://10.1.1.5:8088/healthz >/dev/null; then
               echo "MRM isolated deployment healthy: http://10.1.1.5:8088/login"
