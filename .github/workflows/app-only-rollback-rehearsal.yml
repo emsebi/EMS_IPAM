@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - scripts/app-only-rollback-rehearsal.py
+      - scripts/app_only_transition.py
+      - scripts/tests/test_app_only_transition.py
       - .github/workflows/app-only-rollback-rehearsal.yml
       - docker-app/server/**
       - docker-app/public/**
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - scripts/app-only-rollback-rehearsal.py
+      - scripts/app_only_transition.py
+      - scripts/tests/test_app_only_transition.py
       - .github/workflows/app-only-rollback-rehearsal.yml
       - docker-app/server/**
       - docker-app/public/**
@@ -34,9 +38,12 @@ jobs:
           ref: f3995f6f75a258d63e6f93ec252825799e7a8de2
           path: baseline
           persist-credentials: false
-      - name: Verify source, restore backup and inject rollback failure in disposable Docker
+      - name: Verify source and test app transition failures
         run: |
           python3 candidate/scripts/checksums.py --check
+          python3 -m unittest discover -s candidate/scripts/tests -p 'test_app_only_transition.py' -v
+      - name: Restore backup and exercise app transition failures in disposable Docker
+        run: |
           python3 candidate/scripts/app-only-rollback-rehearsal.py --baseline baseline --candidate candidate --evidence evidence/app-only-rollback.json
       - uses: actions/upload-artifact@v4
         if: always()

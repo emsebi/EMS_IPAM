@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from app_only_transition import AppBaseline, TransitionFailure, canonical_environment, execute_app_transition
 
 BASELINE_SHA = 'f3995f6f75a258d63e6f93ec252825799e7a8de2'
 LABEL = 'ems.app-only-rehearsal'
@@ -49,6 +50,14 @@ class Rehearsal:
                        'deployed_sha': None, 'vm_acceptance': 'not tested', 'checks': []}
         self.phase = 'initialization'
         self.protected = None
+        self.backup_verified = False
+        self.backup_state = None
+        self.expected_rows = self.expected_ledger = None
+        self.expect_colors_off = False
+        self.report['transitions'] = []
+        self.report['backups'] = []
+        self.app_configurations = {}
+        self.report['baseline_identity_mismatches'] = []
 
     def check(self, name):
         self.report['checks'].append(name)
@@ -67,6 +76,29 @@ class Rehearsal:
         self.owned('container', self.app)
         command('docker', 'rm', '-f', '-v', self.app)
 
+    def remove_app_if_present(self):
+        if subprocess.run(['docker', 'container', 'inspect', self.app],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            self.remove_app()
+
+    def app_baseline(self):
+        obj = self.owned('container', self.app)
+        # Hash only reproducible launch configuration, never emit Env/credentials.
+        # Hostname, assigned IP, container ID and start time change on recreation.
+        config = {k: obj['Config'].get(k) for k in ('Cmd', 'Entrypoint', 'Env', 'User', 'WorkingDir', 'ExposedPorts', 'Volumes', 'Labels')}
+        config['Env'] = canonical_environment(config['Env'])
+        host = {k: obj['HostConfig'].get(k) for k in ('Binds', 'Mounts', 'Tmpfs', 'ReadonlyRootfs', 'CapDrop',
+                'CapAdd', 'SecurityOpt', 'NetworkMode', 'PortBindings', 'RestartPolicy')}
+        fields = {**{'config.' + k: v for k, v in config.items()}, **{'host.' + k: v for k, v in host.items()}}
+        digest = hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+        self.app_configurations[digest] = fields
+        return AppBaseline(obj['Image'], digest)
+
+    def preserved_data(self):
+        return (self.snapshot() == self.expected_rows and self.ledger() == self.expected_ledger
+                and (not self.expect_colors_off
+                     or self.sql('SELECT bool_and(NOT inherit_color_to_children) FROM prefixes;') == 't'))
+
     def identity(self, name):
         obj = self.owned('container', name)
         return {k: v for k, v in [('id', obj['Id']), ('image', obj['Image']),
@@ -81,17 +113,43 @@ class Rehearsal:
         return command('docker', 'exec', '-i', self.db, 'psql', '-XAt', '-v', 'ON_ERROR_STOP=1',
                        '-U', 'rehearsal', '-d', database, data=sql.encode()).decode().strip()
 
-    def snapshot(self, database='rehearsal'):
+    def snapshot(self, database='rehearsal', include_additive=False):
         # Preserve full rows (including archived values, hashes, IDs and timestamps).
         # Only the explicitly additive IPAM column is excluded from old-row comparison.
         pairs = ','.join("'%s',(SELECT COALESCE(jsonb_agg(r ORDER BY r::text),'[]'::jsonb) FROM "
                          "(SELECT to_jsonb(t)%s AS r FROM %s t) q)" %
-                         (table, "-'inherit_color_to_children'" if table == 'prefixes' else '', table)
+                         (table, "-'inherit_color_to_children'" if table == 'prefixes' and not include_additive else '', table)
                          for table in TABLES)
         return json.loads(self.sql('SELECT jsonb_build_object(' + pairs + ');', database))
 
     def ledger(self, database='rehearsal'):
         return json.loads(self.sql("SELECT jsonb_object_agg(module_id || '/' || version, checksum) FROM schema_migrations;", database))
+
+    def current_backup_state(self, database='rehearsal'):
+        return {'rows': self.snapshot(database, include_additive=True), 'ledger': self.ledger(database)}
+
+    def prepare_backup(self, case):
+        self.phase = 'backup and isolated restore before ' + case
+        self.backup_verified = False
+        self.assert_protected()
+        before = self.current_backup_state()
+        dump = self.temp / 'baseline.dump'
+        dump.write_bytes(command('docker', 'exec', self.db, 'pg_dump', '-Fc', '-U', 'rehearsal', '-d', 'rehearsal'))
+        require(dump.stat().st_size > 0, 'Empty backup')
+        digest = hashlib.sha256(dump.read_bytes()).hexdigest()
+        # Both databases belong to this disposable owned test container. The
+        # running app database is never restored, dropped or replaced.
+        self.owned('container', self.db)
+        command('docker', 'exec', self.db, 'dropdb', '--if-exists', '-U', 'rehearsal', 'restored')
+        command('docker', 'exec', self.db, 'createdb', '-U', 'rehearsal', 'restored')
+        command('docker', 'exec', '-i', self.db, 'pg_restore', '--exit-on-error', '-U', 'rehearsal', '-d', 'restored', data=dump.read_bytes())
+        require(self.current_backup_state('restored') == before, 'Restored complete rows or ledger differs')
+        require(self.current_backup_state() == before, 'Data changed while preparing backup')
+        self.assert_protected()
+        self.backup_state, self.backup_verified = before, True
+        self.report['backup_sha256'] = digest
+        self.report['backups'].append({'case': case, 'sha256': digest, 'restored_and_compared': True})
+        self.check('current backup restored with complete rows, grants, color values and ledger before ' + case)
 
     def health(self):
         try:
@@ -111,14 +169,17 @@ class Rehearsal:
             time.sleep(1)
         return False
 
-    def start_app(self, image, broken=False):
+    def start_app(self, image, broken=False, wrong_config=False):
         args = ['docker', 'run', '-d', '--name', self.app, '--label', LABEL + '=' + self.owner,
                 '--network', self.net, '--read-only', '--cap-drop', 'ALL',
                 '--security-opt', 'no-new-privileges:true', '--tmpfs', '/tmp:size=64m,mode=1777',
                 '--tmpfs', '/backups:size=64m,mode=1777', '-e', 'PGHOST=' + self.db,
                 '-e', 'PGUSER=rehearsal', '-e', 'PGPASSWORD=Synthetic-Database-Only', '-e', 'PGDATABASE=rehearsal',
                 '-e', 'EMS_ADMIN_USERNAME=rehearsal-admin', '-e', 'EMS_ADMIN_PASSWORD=Synthetic-Admin-Only',
-                '-e', 'EMS_MODULES_DIR=/empty-modules', '-e', 'BACKUP_DIR=/backups', image]
+                '-e', 'EMS_MODULES_DIR=/empty-modules', '-e', 'BACKUP_DIR=/backups']
+        if wrong_config:
+            args += ['-e', 'EMS_REHEARSAL_RUNTIME_MARKER=wrong']
+        args += [image]
         if broken:
             # Real unhealthy process in the candidate image; no synthetic success stub.
             args += ['node', '-e', "require('http').createServer((q,r)=>{r.writeHead(503);r.end('unhealthy')}).listen(8080)"]
@@ -143,6 +204,7 @@ class Rehearsal:
         self.report['verified_candidate_files'] = len(paths)
 
     def run(self, temp):
+        self.temp = temp
         require(command('git', '-C', str(self.baseline), 'rev-parse', 'HEAD').decode().strip() == BASELINE_SHA,
                 'Baseline must be the explicitly pinned former app source')
         command('docker', 'info')
@@ -155,7 +217,7 @@ class Rehearsal:
         command('docker', 'pull', 'postgres:16-alpine')
         command('docker', 'network', 'create', '--internal', '--label', LABEL + '=' + self.owner, self.net)
         command('docker', 'run', '-d', '--name', self.db, '--label', LABEL + '=' + self.owner, '--network', self.net,
-                '--tmpfs', '/var/lib/postgresql/data:rw,size=256m', '-e', 'POSTGRES_USER=rehearsal',
+                '--tmpfs', '/var/lib/postgresql/data:rw,size=512m', '-e', 'POSTGRES_USER=rehearsal',
                 '-e', 'POSTGRES_DB=rehearsal', '-e', 'POSTGRES_PASSWORD=Synthetic-Database-Only', 'postgres:16-alpine')
         command('docker', 'run', '-d', '--name', self.frozen, '--label', LABEL + '=' + self.owner, '--network', 'none',
                 '--read-only', '--cap-drop', 'ALL', '--entrypoint', 'sh', 'postgres:16-alpine',
@@ -178,53 +240,83 @@ class Rehearsal:
         self.protected = {n: self.identity(n) for n in (self.db, self.frozen)}
         require(all(v['running'] and v['restarts'] == 0 for v in self.protected.values()), 'Fixture is not stable')
         self.check('baseline running with synthetic data and isolated protected sentinel')
-        self.phase = 'backup and actual restore to a separate database'
-        dump = temp / 'baseline.dump'
-        dump.write_bytes(command('docker', 'exec', self.db, 'pg_dump', '-Fc', '-U', 'rehearsal', '-d', 'rehearsal'))
-        require(dump.stat().st_size > 0, 'Empty backup')
-        self.report['backup_sha256'] = hashlib.sha256(dump.read_bytes()).hexdigest()
-        command('docker', 'exec', self.db, 'createdb', '-U', 'rehearsal', 'restored')
-        command('docker', 'exec', '-i', self.db, 'pg_restore', '--exit-on-error', '-U', 'rehearsal', '-d', 'restored', data=dump.read_bytes())
-        require(self.snapshot('restored') == before and self.ledger('restored') == old_ledger, 'Restored data or ledger differs')
-        self.assert_protected()
-        self.check('backup restored into separate database; complete fixture rows, grants and ledger match')
-        self.phase = 'replace only app with candidate'
-        self.remove_app()
-        self.start_app(self.new_image)
-        require(self.wait_health(), 'Candidate health failed')
-        self.verify_candidate_files()
-        require(self.snapshot() == before, 'Upgrade changed legacy fixture rows or grants')
-        new_ledger = self.ledger()
-        require({k: v for k, v in new_ledger.items() if k != 'core/004-prefix-color-inheritance'} == old_ledger,
-                'Unexpected migration or changed old checksum')
-        require(new_ledger.get('core/004-prefix-color-inheritance') == hashlib.sha256(
-            (self.candidate / 'docker-app/server/migrations/004-prefix-color-inheritance.sql').read_bytes()).hexdigest(), 'Missing expected migration')
-        require(self.sql("SELECT inherit_color_to_children FROM prefixes WHERE id='test-prefix';") == 't', 'Legacy color backfill lost')
-        require(self.sql("SELECT column_default FROM information_schema.columns WHERE table_name='prefixes' AND column_name='inherit_color_to_children';") == 'false', 'New prefix default is not OFF')
-        self.assert_protected()
-        self.check('candidate healthy; complete runtime files and served Import asset match; additive upgrade preserves data')
-        self.sql("""INSERT INTO prefixes(id,space_id,cidr,name,color)
-          VALUES('new-prefix','test-space','192.0.2.128/26','Created after upgrade','#ffffff');
-          UPDATE prefixes SET inherit_color_to_children=false WHERE id='test-prefix';
-          INSERT INTO hosts(id,space_id,ip,name) VALUES('new-host','test-space','192.0.2.8','Created after upgrade');""")
-        after_writes = self.snapshot()
-        require(self.sql('SELECT bool_and(NOT inherit_color_to_children) FROM prefixes;') == 't', 'New default or saved opt-out failed')
-        self.phase = 'inject unhealthy candidate and automatically roll back app'
-        self.remove_app()
-        self.start_app(self.new_image, broken=True)
-        if self.wait_health(attempts=3):
-            raise RuntimeError('Injected health failure was not detected')
-        self.remove_app()
-        self.start_app(self.old_image)
-        require(self.wait_health(), 'App rollback health failed')
-        require(self.identity(self.app)['image'] == self.owned('image', self.old_image)['Id'], 'Rollback used wrong image')
-        require(self.snapshot() == after_writes and self.ledger() == new_ledger, 'App rollback changed data or migration ledger')
-        require(self.sql('SELECT bool_and(NOT inherit_color_to_children) FROM prefixes;') == 't', 'Rollback changed persisted color choices')
+        self.expected_rows, self.expected_ledger = before, old_ledger
+
+        def upgraded_writes():
+            require(self.snapshot() == before, 'Upgrade changed legacy fixture rows or grants')
+            new_ledger = self.ledger()
+            require({k: v for k, v in new_ledger.items() if k != 'core/004-prefix-color-inheritance'} == old_ledger,
+                    'Unexpected migration or changed old checksum')
+            require(new_ledger.get('core/004-prefix-color-inheritance') == hashlib.sha256(
+                (self.candidate / 'docker-app/server/migrations/004-prefix-color-inheritance.sql').read_bytes()).hexdigest(), 'Missing expected migration')
+            require(self.sql("SELECT inherit_color_to_children FROM prefixes WHERE id='test-prefix';") == 't', 'Legacy color backfill lost')
+            require(self.sql("SELECT column_default FROM information_schema.columns WHERE table_name='prefixes' AND column_name='inherit_color_to_children';") == 'false', 'New prefix default is not OFF')
+            self.assert_protected()
+            self.check('candidate healthy; complete runtime files and served Import asset match; additive upgrade preserves data')
+            self.sql("""INSERT INTO prefixes(id,space_id,cidr,name,color)
+              VALUES('new-prefix','test-space','192.0.2.128/26','Created after upgrade','#ffffff');
+              UPDATE prefixes SET inherit_color_to_children=false WHERE id='test-prefix';
+              INSERT INTO hosts(id,space_id,ip,name) VALUES('new-host','test-space','192.0.2.8','Created after upgrade');""")
+            self.expected_rows, self.expected_ledger = self.snapshot(), new_ledger
+            self.expect_colors_off = True
+            require(self.preserved_data(), 'New default or saved opt-out failed')
+
+        self.transition_case('candidate-health-failure', 'rolled_back', on_candidate=upgraded_writes)
+        self.transition_case('stale-backup-blocked', 'blocked', skip_backup=True)
+        self.transition_case('candidate-creation-failure', 'rolled_back')
+        for fault, failed_check in (
+            ('rollback-command-failure', 'restore-baseline'),
+            ('rollback-unhealthy', 'rollback-health'),
+            ('rollback-wrong-image', 'rollback-identity'),
+            ('rollback-wrong-config', 'rollback-identity'),
+            ('protected-inspection-failure', 'protected-after-rollback'),
+        ):
+            self.transition_case(fault, 'rollback_failed', failed_check=failed_check)
+        self.transition_case('successful-apply', 'applied')
+        require(self.identity(self.app)['image'] == self.owned('image', self.new_image)['Id'], 'Successful candidate not installed in fixture')
+        # The current baseline is now the new image, not the historical pinned old one.
+        self.transition_case('repeat-candidate-health-failure', 'rolled_back')
+        require(self.identity(self.app)['image'] == self.owned('image', self.new_image)['Id'], 'Repeated rollback did not retain current fixture baseline')
         self.assert_protected()
         self.report['protected_identity_unchanged'] = True
         self.report['data_preserved'] = True
-        self.check('injected health failure detected; original app healthy again; new writes and color choices retained without DB restore or protected restart')
+        self.check('all transition cases preserve acknowledged writes, color choices and protected identities without DB restore')
         self.report['status'] = 'passed'
+
+    def transition_case(self, fault, expected, on_candidate=None, failed_check=None, skip_backup=False):
+        if not skip_backup:
+            self.prepare_backup(fault)
+        self.phase = 'transition: ' + fault
+        adapter = RehearsalTransitionAdapter(self, fault, on_candidate)
+        baseline = adapter.capture_baseline()
+        app_identity = self.identity(self.app)
+        try:
+            result = execute_app_transition(adapter)
+        except TransitionFailure as error:
+            result = error.report
+        # Persist the actual result even when the test's expected outcome differs.
+        self.report['transitions'].append({'case': fault, 'expected': expected, 'result': result})
+        require(result['status'] == expected, 'Unexpected transition outcome: ' + fault)
+        if expected == 'blocked':
+            require(self.identity(self.app) == app_identity and not result['rollback']['attempted'],
+                    'Blocked preflight mutated the app')
+        if failed_check:
+            require(failed_check in [item['phase'] for item in result['rollback']['errors']],
+                    'Injected rollback failure was not explicitly detected')
+        if expected == 'rolled_back':
+            require(self.app_baseline() == baseline, 'Rollback differs from captured current baseline')
+            require(all(name in result['checks'] for name in ('rollback-identity', 'rollback-health', 'rollback-data', 'protected-after-rollback')),
+                    'Rollback was accepted without all recovery evidence')
+        self.assert_protected()
+        require(self.preserved_data(), 'Transition changed acknowledged data')
+        self.check(fault + ': ' + expected + ' with explicit evidence')
+        if expected == 'rollback_failed':
+            # Test-harness reset only, AFTER asserting failed recovery. This is
+            # never an implicit retry/repair in the controller or a VM operation.
+            recovery = RehearsalTransitionAdapter(self)
+            require(recovery.restore_baseline(baseline) and recovery.verify_baseline_identity(baseline)
+                    and recovery.baseline_healthy() and recovery.verify_preserved_data(), 'Isolated fixture recovery failed')
+            self.assert_protected()
 
     def cleanup(self):
         failures = []
@@ -243,6 +335,78 @@ class Rehearsal:
             self.report['status'] = 'failed'
         self.evidence.parent.mkdir(parents=True, exist_ok=True)
         self.evidence.write_text(json.dumps(self.report, indent=2) + '\n')
+
+
+class RehearsalTransitionAdapter:
+    """Disposable owned resources only; deliberately not a VM/Compose adapter."""
+    def __init__(self, rehearsal, fault=None, on_candidate=None):
+        self.r, self.fault, self.on_candidate = rehearsal, fault, on_candidate
+        self.mutated = self.restoring = False
+
+    def capture_baseline(self):
+        return self.r.app_baseline()
+
+    def protected_identity(self):
+        if self.mutated and self.fault == 'protected-inspection-failure':
+            raise RuntimeError('Injected unreadable protected evidence; no protected mutation')
+        return {n: self.r.identity(n) for n in (self.r.db, self.r.frozen)}
+
+    def verify_preconditions(self, baseline):
+        self.r.assert_protected()
+        self.r.owned('image', baseline.image_id)
+        self.r.owned('image', self.r.new_image)
+        require(self.r.owned('network', self.r.net)['Internal'], 'Fixture network must be internal')
+        return (self.r.backup_verified and self.r.backup_state == self.r.current_backup_state()
+                and self.r.preserved_data())
+
+    def verify_baseline_identity(self, baseline):
+        current = self.r.app_baseline()
+        if current != baseline:
+            old = self.r.app_configurations[baseline.configuration_sha256]
+            new = self.r.app_configurations[current.configuration_sha256]
+            changed = [key for key in old if old[key] != new[key]]
+            # Field names and order-equivalence only, never values or Env hashes.
+            order_only = [key for key in changed if isinstance(old[key], list) and isinstance(new[key], list)
+                          and sorted(map(repr, old[key])) == sorted(map(repr, new[key]))]
+            self.r.report['baseline_identity_mismatches'].append({'case': self.fault,
+                'image_matches': current.image_id == baseline.image_id, 'changed_fields': changed, 'order_only_fields': order_only})
+        return current == baseline
+
+    def baseline_healthy(self):
+        short = self.restoring and self.fault in ('rollback-command-failure', 'rollback-unhealthy')
+        return self.r.wait_health(attempts=3 if short else 45)
+
+    def verify_preserved_data(self):
+        return self.r.preserved_data()
+
+    def install_candidate(self):
+        self.mutated = True
+        self.r.remove_app_if_present()
+        if self.fault == 'candidate-creation-failure':
+            raise RuntimeError('Injected create failure after removing only the owned app')
+        self.r.start_app(self.r.new_image)
+        return True
+
+    def verify_candidate(self):
+        require(self.r.wait_health(), 'Candidate health failed before injection')
+        require(self.r.identity(self.r.app)['image'] == self.r.owned('image', self.r.new_image)['Id'], 'Wrong candidate image')
+        self.r.verify_candidate_files()
+        if self.on_candidate:
+            self.on_candidate()
+        if self.fault != 'successful-apply':
+            self.r.remove_app()
+            self.r.start_app(self.r.new_image, broken=True)
+            return self.r.wait_health(attempts=3)
+        return True
+
+    def restore_baseline(self, baseline):
+        self.restoring = True
+        if self.fault == 'rollback-command-failure':
+            raise RuntimeError('Injected restore command failure')
+        self.r.remove_app_if_present()
+        image = self.r.new_image if self.fault == 'rollback-wrong-image' else baseline.image_id
+        self.r.start_app(image, broken=self.fault == 'rollback-unhealthy', wrong_config=self.fault == 'rollback-wrong-config')
+        return True
 
 
 def main():
