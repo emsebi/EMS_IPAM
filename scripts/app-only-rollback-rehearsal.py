@@ -56,6 +56,8 @@ class Rehearsal:
         self.expect_colors_off = False
         self.report['transitions'] = []
         self.report['backups'] = []
+        self.app_configurations = {}
+        self.report['baseline_identity_mismatches'] = []
 
     def check(self, name):
         self.report['checks'].append(name)
@@ -86,7 +88,9 @@ class Rehearsal:
         config = {k: obj['Config'].get(k) for k in ('Cmd', 'Entrypoint', 'Env', 'User', 'WorkingDir', 'ExposedPorts', 'Volumes', 'Labels')}
         host = {k: obj['HostConfig'].get(k) for k in ('Binds', 'Mounts', 'Tmpfs', 'ReadonlyRootfs', 'CapDrop',
                 'CapAdd', 'SecurityOpt', 'NetworkMode', 'PortBindings', 'RestartPolicy')}
-        digest = hashlib.sha256(json.dumps({'config': config, 'host': host}, sort_keys=True).encode()).hexdigest()
+        fields = {**{'config.' + k: v for k, v in config.items()}, **{'host.' + k: v for k, v in host.items()}}
+        digest = hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+        self.app_configurations[digest] = fields
         return AppBaseline(obj['Image'], digest)
 
     def preserved_data(self):
@@ -355,7 +359,17 @@ class RehearsalTransitionAdapter:
                 and self.r.preserved_data())
 
     def verify_baseline_identity(self, baseline):
-        return self.r.app_baseline() == baseline
+        current = self.r.app_baseline()
+        if current != baseline:
+            old = self.r.app_configurations[baseline.configuration_sha256]
+            new = self.r.app_configurations[current.configuration_sha256]
+            changed = [key for key in old if old[key] != new[key]]
+            # Field names and order-equivalence only, never values or Env hashes.
+            order_only = [key for key in changed if isinstance(old[key], list) and isinstance(new[key], list)
+                          and sorted(map(repr, old[key])) == sorted(map(repr, new[key]))]
+            self.r.report['baseline_identity_mismatches'].append({'case': self.fault,
+                'image_matches': current.image_id == baseline.image_id, 'changed_fields': changed, 'order_only_fields': order_only})
+        return current == baseline
 
     def baseline_healthy(self):
         short = self.restoring and self.fault in ('rollback-command-failure', 'rollback-unhealthy')
