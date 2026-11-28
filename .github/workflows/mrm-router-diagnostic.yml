@@ -1,0 +1,37 @@
+name: MikroTik Route Manager isolated REST connection check
+on:
+  push:
+    branches: [ops/mrm-host-access-20261128]
+    paths: [.github/workflows/mrm-router-diagnostic.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 4
+    steps:
+      - name: Check configured RouterOS endpoint from Route Manager container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec -i mikrotik-route-manager python - <<'PY'
+          import sys, socket
+          sys.path.insert(0, '/app')
+          import app
+          host,port = app.get_router_config()
+          print('Router host still default placeholder:',host=='192.168.88.1')
+          print('Configured RouterOS port:',port)
+          print('API username configured:',bool(app.setting('router_user')))
+          print('API password configured:',bool(app.setting('router_pass')))
+          for p in sorted({port,443,80}):
+              try:
+                  c=socket.create_connection((host,p),timeout=3)
+                  c.close()
+                  print('TCP connection to RouterOS port',p,'OPEN')
+              except OSError as e:
+                  print('TCP connection to RouterOS port',p,'FAILED',type(e).__name__,getattr(e,'errno',None))
+          PY
