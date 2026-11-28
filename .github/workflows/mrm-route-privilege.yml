@@ -1,0 +1,33 @@
+name: MRM minimal route privilege preflight
+on:
+  push:
+    branches: [ops/mrm-host-access-20261128]
+    paths: [.github/workflows/mrm-route-privilege.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 4
+    steps:
+      - name: Read-only check ability to set a single host route
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner user: $(id -un)"
+          if sudo -n true >/dev/null 2>&1; then
+            echo "Passwordless sudo: yes"
+          else
+            echo "Passwordless sudo: no"
+          fi
+          if docker info >/dev/null 2>&1; then
+            echo "Docker socket available: yes"
+          else
+            echo "Docker socket available: no"
+          fi
+          echo "Current host route:"
+          ip -4 route get 100.100.1.97
