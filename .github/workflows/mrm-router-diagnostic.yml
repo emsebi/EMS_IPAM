@@ -27,11 +27,22 @@ jobs:
           print('Configured RouterOS port:',port)
           print('API username configured:',bool(app.setting('router_user')))
           print('API password configured:',bool(app.setting('router_pass')))
-          for p in sorted({port,443,80}):
-              try:
-                  c=socket.create_connection((host,p),timeout=3)
-                  c.close()
-                  print('TCP connection to RouterOS port',p,'OPEN')
-              except OSError as e:
-                  print('TCP connection to RouterOS port',p,'FAILED',type(e).__name__,getattr(e,'errno',None))
+          try:
+              c=socket.create_connection((host,port),timeout=4)
+              c.close()
+              print('Configured REST TCP port',port,'OPEN')
+          except OSError as e:
+              print('Configured REST TCP port',port,'FAILED',type(e).__name__,getattr(e,'errno',None))
+          import ssl
+          try:
+              with socket.create_connection((host,port),timeout=4) as raw:
+                  with ssl._create_unverified_context().wrap_socket(raw,server_hostname=host) as tls:
+                      print('HTTPS handshake SUCCESS; TLS:',tls.version())
+          except Exception as e:
+              print('HTTPS handshake FAILED:',type(e).__name__,str(e)[:180])
+          try:
+              result = app.router_request('GET','system/resource')
+              print('RouterOS REST API:', 'SUCCESS' if isinstance(result,dict) else 'RESPONDED')
+          except Exception as e:
+              print('RouterOS REST API FAILED:', type(e).__name__,str(e)[:180])
           PY
