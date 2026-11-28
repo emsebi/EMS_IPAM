@@ -1,5 +1,6 @@
 import net from 'node:net';
 import {normalizePort} from '../discovery/parsers.mjs';
+import {ciscoMemberState,ciscoBundleState,inactiveMember} from '../discovery/bundle-state.mjs';
 
 export const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export const text=(v,n=160)=>String(v??'').trim().slice(0,n);
@@ -50,6 +51,50 @@ export function settingsInput(body) {
   return {username,port,timeout,concurrency,devices:targets,scopes,rootId,neighborOnly:body.neighborOnly===true,saveConfig:body.saveConfig!==false};
 }
 export const emptyTopology=()=>({nodes:[],links:[],updatedAt:null});
+const freshCollection=n=>{
+  const age=Date.now()-Date.parse(n?.collectedAt);
+  return ['online','partial'].includes(n?.status)&&age>=0&&age<=300000&&n.collectedAt===n.checkedAt;
+};
+function bundleAt(n,port) {
+  const bundle=n?.bundles?.find(b=>normalizePort(b.name)===port||b.members?.some(m=>normalizePort(m.port)===port));
+  if(!bundle)return null;
+  const members=(bundle.members||[]).map(m=>({...m,state:ciscoMemberState(m.flags)}));
+  return {name:bundle.name,protocol:bundle.protocol,flags:bundle.flags,state:ciscoBundleState(bundle.flags),members,
+    memberState:members.find(m=>normalizePort(m.port)===port)?.state||null,
+    observedAt:n.collectedAt||null,fresh:freshCollection(n)};
+}
+function endpointEvidence(n,port,bundle) {
+  const physical=n?.ports?.find(p=>normalizePort(p.name)===port)?.status||'unknown';
+  const evidence={physicalState:physical,observedAt:n?.collectedAt||null,fresh:freshCollection(n)};
+  const result=(state,reason)=>({...evidence,state,reason});
+  if(!evidence.fresh)return result('unknown','not-current');
+  if(['down','disabled','err-disabled'].includes(physical))return result('down','interface-'+physical);
+  if(bundle){
+    if(inactiveMember(bundle.memberState))return result('down','member-'+bundle.memberState);
+    // Individual/default/unknown members may have carrier but are not known LAG paths.
+    if(bundle.memberState&&!['bundled','delay-lacp'].includes(bundle.memberState))return result('unknown','member-'+bundle.memberState);
+    if(bundle.state!=='up')return result(bundle.state,'bundle-'+bundle.state);
+    return result('up',bundle.memberState?'member-'+bundle.memberState:'bundle-up');
+  }
+  return result(physical==='up'?'up':'unknown','interface-'+physical);
+}
+function linkEvidence(link,byId) {
+  const l={...link},a=byId.get(l.source),b=byId.get(l.target);
+  l.sourceBundle=bundleAt(a,l.sourcePort);l.targetBundle=bundleAt(b,l.targetPort);
+  l.sourceEvidence=endpointEvidence(a,l.sourcePort,l.sourceBundle);
+  l.targetEvidence=endpointEvidence(b,l.targetPort,l.targetBundle);
+  const ends=[l.sourceEvidence,l.targetEvidence],bundled=l.sourceBundle||l.targetBundle;
+  l.state=ends.some(e=>e.state==='down')?'down'
+    : (bundled?ends.every(e=>e.state==='up'):ends.some(e=>e.state==='up'))?'up':'unknown';
+  if(l.confidence==='stale'||[a,b].some(n=>n?.status==='unreachable'||n?.reachability==='unreachable'))l.state='unknown';
+  return l;
+}
+// Re-evaluate saved LAG evidence without writing, refreshing timestamps or collecting.
+// Old maps remain usable; no pairing is inferred from the order of bundle members.
+export function withBundleEvidence(topology) {
+  const byId=new Map(topology.nodes.map(n=>[n.id,n]));
+  return {...topology,links:topology.links.map(l=>l.sourceBundle||l.targetBundle||byId.get(l.source)?.bundles?.length||byId.get(l.target)?.bundles?.length?linkEvidence(l,byId):l)};
+}
 export function buildTopology(nodes, previous=emptyTopology()) {
   const byId=new Map(nodes.map(n=>[n.id,n]));
   const aliases=new Map();
@@ -70,20 +115,7 @@ export function buildTopology(nodes, previous=emptyTopology()) {
   }
   // Keep a previous cable visible when an endpoint fails; never invent a disconnect.
   for(const l of previous.links||[])if(!links.has(l.id)&&byId.has(l.source)&&byId.has(l.target))links.set(l.id,{...l,confidence:'stale',state:'unknown'});
-  for(const l of links.values()) {
-    const a=byId.get(l.source),b=byId.get(l.target);
-    const ap=a.ports?.find(p=>normalizePort(p.name)===l.sourcePort),bp=b.ports?.find(p=>normalizePort(p.name)===l.targetPort);
-    const fresh=n=>['online','partial'].includes(n.status)&&n.collectedAt===n.checkedAt;
-    const observations=[[a,ap],[b,bp]].filter(([n,p])=>fresh(n)&&p);
-    if(observations.some(([,p])=>['down','disabled','err-disabled'].includes(p.status)))l.state='down';
-    else if(observations.some(([,p])=>p.status==='up')&&l.confidence!=='stale')l.state='up';
-    if(a.status==='unreachable'||b.status==='unreachable')l.state='unknown';
-    const bundleFor=(n,p)=>n.bundles?.find(bundle=>normalizePort(bundle.name)===p||bundle.members.some(member=>normalizePort(member.port)===p));
-    const summarize=(bundle,p)=>bundle?{name:bundle.name,protocol:bundle.protocol,flags:bundle.flags,members:bundle.members,memberState:bundle.members.find(member=>normalizePort(member.port)===p)?.state||null}:null;
-    l.sourceBundle=summarize(bundleFor(a,l.sourcePort),l.sourcePort);
-    l.targetBundle=summarize(bundleFor(b,l.targetPort),l.targetPort);
-  }
-  return {nodes,links:[...links.values()],updatedAt:new Date().toISOString()};
+  return {nodes,links:[...links.values()].map(l=>linkEvidence(l,byId)),updatedAt:new Date().toISOString()};
 }
 function reachable(topology,root,omitNode,omitLink) {
   if(!root||root===omitNode||!topology.nodes.some(n=>n.id===root))return new Set();

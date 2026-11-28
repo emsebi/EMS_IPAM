@@ -1,0 +1,47 @@
+name: EMS-IPAM isolated app rollback rehearsal
+on:
+  pull_request:
+    paths:
+      - scripts/app-only-rollback-rehearsal.py
+      - .github/workflows/app-only-rollback-rehearsal.yml
+      - docker-app/server/**
+      - docker-app/public/**
+      - docker-app/Dockerfile
+      - docker-app/package*.json
+  push:
+    branches: [main]
+    paths:
+      - scripts/app-only-rollback-rehearsal.py
+      - .github/workflows/app-only-rollback-rehearsal.yml
+      - docker-app/server/**
+      - docker-app/public/**
+      - docker-app/Dockerfile
+      - docker-app/package*.json
+permissions:
+  contents: read
+jobs:
+  rehearse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: f3995f6f75a258d63e6f93ec252825799e7a8de2
+          path: baseline
+          persist-credentials: false
+      - name: Verify source, restore backup and inject rollback failure in disposable Docker
+        run: |
+          python3 candidate/scripts/checksums.py --check
+          python3 candidate/scripts/app-only-rollback-rehearsal.py --baseline baseline --candidate candidate --evidence evidence/app-only-rollback.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-only-rollback-evidence
+          path: evidence/app-only-rollback.json
+          if-no-files-found: error
+          retention-days: 14

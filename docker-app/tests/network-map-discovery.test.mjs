@@ -9,6 +9,7 @@ import {migrateDatabase,migrateModuleSchemas} from '../server/migrations.mjs';
 import {createModule} from '../../modules/network-map/backend/index.mjs';
 import {redactConfig,parseCisco,parseCiscoBundles} from '../../modules/network-map/discovery/device-parsers.mjs';
 import {settingsInput,impact,traceMac,traceSavedIp} from '../../modules/network-map/backend/model.mjs';
+import {assertSavedBundleReads} from '../../modules/network-map/tests/saved-bundle-check.mjs';
 
 const moduleDir=fileURLToPath(new URL('../../modules/network-map/',import.meta.url));
 function adapter(db){
@@ -168,4 +169,17 @@ test('IOS and NX-OS bundle evidence and NX-OS MAC table are parsed without guess
  assert.equal(nx.osFamily,'nx-os');assert.equal(nx.macs[0].port,'Eth1/2');assert.equal(nx.ports[0].bundle,'Po5');assert.equal(nx.bundles[0].members[1].state,'suspended');
  const trace=traceMac({nodes:[{id:'nx',status:'online',collectedAt:new Date().toISOString(),...nx}],links:[]},'0011.2233.4455','nx');
  assert.equal(trace.candidates.length,0);
+});
+
+test('saved bundle reads correct legacy states without discovery, writes or cross-company evidence',async()=>{
+ const f=await fixture();try{
+  await f.call('PUT','/settings',{username:'netread',password:'map-pass',devices:[{address:'192.0.2.10'}]});
+  await f.pool.query("INSERT INTO network_map_state(company_id) VALUES('map-co')");
+  await f.pool.query("INSERT INTO companies(id,name) VALUES('other-map','Other map')");
+  await f.pool.query("INSERT INTO network_map_state(company_id,topology) VALUES('other-map',$1::jsonb)",[JSON.stringify({nodes:[{id:'private-other-node',name:'Private other evidence'}],links:[],updatedAt:null})]);
+  const state=await assertSavedBundleReads({pool:f.pool,call:f.call,companyId:'map-co'});
+  assert.equal(JSON.stringify(state).includes('private-other-node'),false);
+  await assert.rejects(f.call('GET','/state',null,{role:'viewer'}),/forbidden/);
+  assert.equal(f.getCollects(),0);assert.equal(f.getProbes(),0);
+ }finally{await f.close();}
 });

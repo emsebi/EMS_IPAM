@@ -1,5 +1,6 @@
 import {parseCdpNeighborsDetail,parseLldpNeighborsDetail,normalizePort} from './parsers.mjs';
 import {normalizeMac} from '../backend/model.mjs';
+import {ciscoMemberState,ciscoBundleState} from './bundle-state.mjs';
 
 export const commandFailed=s=>!s||/(?:%\s*(?:Invalid|Incomplete|Ambiguous|Authorization|Error)|not enough permissions|bad command name|syntax error|permission denied)/i.test(s);
 const mac=s=>{try{return normalizeMac(s);}catch{return null;}};
@@ -9,11 +10,11 @@ export function parseCiscoBundles(raw) {
   if(commandFailed(raw))return bundles;
   for(const line of String(raw).split(/\r?\n/)){
     const row=line.match(/^\s*(\d+)\s+(Po\d+)\s*\(([A-Za-z]+)\)\s+(?:(?:Eth|FC)\s+)?(\S+)\s*(.*)$/i);
-    if(row)bundles.push({name:normalizePort(row[2]),flags:row[3],protocol:row[4],members:[]});
+    if(row)bundles.push({name:normalizePort(row[2]),flags:row[3],state:ciscoBundleState(row[3]),protocol:row[4],members:[]});
     else if(!bundles.length||!/^\s+(?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe)\S+\s*\(/i.test(line))continue;
     const tail=row?row[5]:line;
     for(const member of tail.matchAll(/((?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe)[\d/.:]+)\s*\(([A-Za-z]+)\)/gi)){
-      bundles.at(-1).members.push({port:normalizePort(member[1]),flags:member[2],state:member[2]==='P'?'bundled':member[2]==='D'?'down':member[2]==='s'?'suspended':member[2]==='H'?'standby':'unknown'});
+      bundles.at(-1).members.push({port:normalizePort(member[1]),flags:member[2],state:ciscoMemberState(member[2])});
     }
   }
   return bundles;

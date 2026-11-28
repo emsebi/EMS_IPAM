@@ -841,6 +841,37 @@ try {
   check('Smart Network Map saves encrypted read-only settings without starting discovery');
   await page.screenshot({path:path.join(outputDir,'network-map-settings.png'),fullPage:true});
 
+  const bundleBefore=await api('/api/network-map/state?companyId=test-co'),bundleWrites=[];
+  const onBundleRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')bundleWrites.push(req.url());};
+  page.on('request',onBundleRequest);
+  const downBundle=bundleBefore.topology.links.find(l=>l.sourcePort==='Eth1/2');
+  assert.equal(downBundle.state,'down');
+  const chooseBundle=async()=>{
+    const link=page.locator(`[data-link="${downBundle.id}"]`);
+    await link.focus();await link.press('Enter');
+    await page.locator('.nm-link-state[data-state="down"]').waitFor();
+  };
+  await chooseBundle();
+  assert.equal(await page.locator(`[data-link="${downBundle.id}"] .nm-link.down.nm-highlight`).count(),1);
+  const sourceBundle=page.locator('.nm-link-endpoint[data-endpoint="source"]');
+  const targetBundle=page.locator('.nm-link-endpoint[data-endpoint="target"]');
+  assert.equal(await sourceBundle.locator('[data-bundle="Po50"]').count(),1);
+  assert.equal(await targetBundle.locator('[data-bundle="Po2"]').count(),1);
+  assert.equal(await sourceBundle.locator('.nm-bundle-member').count(),3);
+  assert.equal(await targetBundle.locator('.nm-bundle-member').count(),2);
+  assert.match(await sourceBundle.locator('[data-member-state="suspended"]').textContent(),/Eth1\/2.*تعلیق‌شده/);
+  assert.match(await sourceBundle.locator('[data-member-state="standby"]').textContent(),/Eth1\/3.*آماده‌به‌کار/);
+  assert.match(await page.locator('#nmDetail').textContent(),/نه تست زنده/);
+  await page.screenshot({path:path.join(outputDir,'network-map-bundle-detail.png'),fullPage:true});
+  await page.locator('#nmLinkDevice1').click();
+  assert.match(await page.locator('.nm-detail-head').textContent(),/Synthetic IOS/);
+  await chooseBundle();
+  const bundleAfter=await api('/api/network-map/state?companyId=test-co');
+  assert.deepEqual(bundleAfter,bundleBefore,'opening and highlighting bundle evidence must not change map/layout/time');
+  page.off('request',onBundleRequest);assert.deepEqual(bundleWrites,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('Saved LAG detail distinguishes suspended and standby members, independent endpoint bundles and highlight without discovery');
+
   const traceMutations=[];
   const traceRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')traceMutations.push(req.url());};
   page.on('request',traceRequest);
@@ -1756,6 +1787,70 @@ try {
     assert.deepEqual(await api('/api/spaces/' + portableSource.id + '/data'), sourceBefore);
   }
   check('Portable JSON server preview rejects invalid content and round-trips exported records with skip/replace and stable destination IDs');
+
+  // Company directory is a separate scope from an individual address Space.
+  const directoryCompany = await api('/api/companies', 'POST', {
+    name: 'Directory scope browser', phone: 'private-browser-phone', notes: 'private-browser-notes',
+    contacts: [{ fullName: 'private-browser-contact' }],
+    connections: [{ title: 'private-browser-link', ip: '203.0.113.242' }],
+  }, 201);
+  const directorySpaces = [];
+  for (const [name, cidr] of [['Assigned LAN', '198.18.94.0/24'], ['Other LAN', '198.18.95.0/24']]) {
+    directorySpaces.push(await api('/api/spaces', 'POST', { companyId: directoryCompany.id, name, cidr }, 201));
+  }
+  await api('/api/personnel', 'POST', { companyId: directoryCompany.id, fullName: 'private-browser-person' }, 201);
+  await api('/api/users', 'POST', { username: 'directory-space-reader', password: 'ReadOnly-Test-123', role: 'viewer',
+    spaceIds: [directorySpaces[0].id], moduleIds: ['ipam'] }, 201);
+  const directoryBefore = await api('/api/companies/' + directoryCompany.id);
+  const directoryViewer = await browser.newContext({ baseURL });
+  try {
+    await directoryViewer.addInitScript(() => {
+      if (!localStorage.getItem('ems-language')) localStorage.setItem('ems-language', 'en');
+    });
+    await api('/api/auth/login', 'POST', { username: 'directory-space-reader', password: 'ReadOnly-Test-123' }, 200, directoryViewer.request);
+    const tab = await directoryViewer.newPage();
+    tab.on('pageerror', error => errors.push(error.message));
+    await tab.goto('/#/companies');
+    const openCompany = tab.locator('.open-company[data-company="' + directoryCompany.id + '"]');
+    await openCompany.waitFor();
+    assert.equal(await tab.locator('.company-card').count(), 1);
+    assert.ok(!(await tab.locator('.company-card').innerText()).includes('private-browser-'));
+    await openCompany.click();
+    await tab.locator('.company-scope-notice').waitFor();
+    assert.ok((await tab.locator('.company-scope-notice').innerText()).includes('assigned address spaces'));
+    assert.deepEqual(await tab.locator('.open-space').evaluateAll(nodes => nodes.map(n => n.dataset.space)), [directorySpaces[0].id]);
+    assert.equal(await tab.locator('.contact-card, .connection-card, .company-notes, #editCurrentCompany, #addCurrentSpace').count(), 0);
+    assert.ok(!(await tab.locator('#page').innerText()).includes('private-browser-'));
+    await tab.screenshot({ path: path.join(outputDir, 'panel-company-scope-en.png'), fullPage: true });
+    await Promise.all([
+      tab.waitForResponse(r => new URL(r.url()).pathname === '/api/search' && new URL(r.url()).searchParams.get('q') === 'private-browser-contact'),
+      tab.locator('#searchInput').fill('private-browser-contact'),
+    ]);
+    await tab.locator('#searchResults .empty-state').waitFor();
+    assert.equal(await tab.locator('#searchResults .search-item').count(), 0);
+    await tab.locator('#searchInput').fill('');
+    await tab.locator('.open-space').click();
+    await tab.waitForURL('**/#/ipam/' + directorySpaces[0].id);
+    assert.ok((await tab.locator('#page').innerText()).includes('198.18.94.0/24'));
+    await tab.goto('/#/company/' + directoryCompany.id);
+    await Promise.all([tab.waitForEvent('load'), tab.locator('#languageSelect').selectOption('fa')]);
+    assert.equal(await tab.locator('#languageSelect').inputValue(), 'fa');
+    await tab.locator('.company-scope-notice').waitFor();
+    assert.ok((await tab.locator('.company-scope-notice').innerText()).includes('محدود به رنج‌های تخصیص‌یافته'));
+    await tab.screenshot({ path: path.join(outputDir, 'panel-company-scope-fa.png'), fullPage: true });
+    await api('/api/companies/' + directoryCompany.id, 'PUT', { name: 'Forbidden edit' }, 403, directoryViewer.request);
+    const managerTab = await context.newPage();
+    try {
+      managerTab.on('pageerror', error => errors.push(error.message));
+      await managerTab.goto('/#/company/' + directoryCompany.id);
+      await managerTab.locator('#editCurrentCompany').waitFor();
+      assert.equal(await managerTab.locator('.open-space').count(), 2);
+      assert.equal(await managerTab.locator('.company-scope-notice').count(), 0);
+      assert.ok((await managerTab.locator('#page').innerText()).includes('private-browser-person'));
+    } finally { await managerTab.close(); }
+    assert.deepEqual(await api('/api/companies/' + directoryCompany.id), directoryBefore);
+  } finally { await directoryViewer.close(); }
+  check('Space-only Company UI explains restricted directory in both languages; search hides private contacts while admin view and data stay intact');
 
   assert.deepEqual(errors, []);
   check('no uncaught browser errors throughout tested flows');

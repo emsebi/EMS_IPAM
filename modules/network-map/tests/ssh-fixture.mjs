@@ -14,6 +14,7 @@ cisco C9300-24T (X86) processor
 Processor board ID FOC0000TEST
 Model Number : C9300-24T`,
  'show interfaces status':`Gi1/0/1 Synthetic-Uplink connected trunk a-full a-1000 1000BaseSX
+Gi1/0/3 Synthetic-Suspended connected trunk a-full a-1000 1000BaseSX
 Gi1/0/2 Synthetic-Client connected 10 a-full a-1000 10/100/1000BaseTX`,
  'show interfaces switchport':`Name: Gi1/0/1
 Administrative Mode: trunk
@@ -32,6 +33,12 @@ Entry address(es):
   IP address: 192.0.2.22
 Platform: cisco WS-C2960, Capabilities: Switch
 Interface: GigabitEthernet1/0/1, Port ID (outgoing port): GigabitEthernet0/24
+Holdtime : 122 sec
+Device ID: SyntheticEdge
+Entry address(es):
+  IP address: 192.0.2.22
+Platform: cisco WS-C2960, Capabilities: Switch
+Interface: GigabitEthernet1/0/3, Port ID (outgoing port): GigabitEthernet0/23
 Holdtime : 122 sec`,
  'show lldp neighbors detail':`Local Intf: Gi1/0/1
 Chassis id: 00:aa:bb:cc:dd:ee
@@ -41,7 +48,7 @@ Management Addresses:
     IP: 192.0.2.22`,
  'show mac address-table':`  10    0011.2233.4455    DYNAMIC     Gi1/0/2`,
  'show power inline':`Gi1/0/2 auto on 15.4 Ieee PD`,
- 'show etherchannel summary':`Group  Port-channel  Protocol    Ports\n------+-------------+-----------+----------------`,
+ 'show etherchannel summary':`Group  Port-channel  Protocol    Ports\n------+-------------+-----------+----------------\n7 Po7(SU) LACP Gi1/0/1(P) Gi1/0/3(s) Gi1/0/4(H)`,
  'show running-config':`Current configuration : 2048 bytes
 hostname FixtureSwitch
 aaa new-model

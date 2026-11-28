@@ -4,6 +4,8 @@ import pg from 'pg';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {buildTopology} from '../../../modules/network-map/backend/model.mjs';
+import {bundleFixtureNodes} from '../../../modules/network-map/tests/bundle-fixture.mjs';
 const db=new PGlite();
 const query=async(sql,params)=>{
   const result=params?.length ? await db.query(sql,params) : (await db.exec(sql)).at(-1);
@@ -34,12 +36,15 @@ INSERT INTO hosts(id,space_id,ip,name,type,radio_mode,radio_parent_host_id,ssid)
  ('st2','test-space','192.0.2.21','Station Two','Radio','station','ap2','Warehouse'),
  ('st3','test-space','192.0.2.31','Station Three','Radio','station','ap3','Remote');`);
 
+const bundleMap=buildTopology(bundleFixtureNodes());
+// Simulate a pre-fix saved map. GET /state must correct derived LAG states without a scan/write.
+bundleMap.links.forEach(l=>{l.state='up';delete l.sourceEvidence;delete l.targetEvidence;});
 await db.query('INSERT INTO network_map_state(company_id,topology) VALUES($1,$2::jsonb)', ['test-co',JSON.stringify({
  nodes:[{id:'192.0.2.10',address:'192.0.2.10',name:'Saved fixture switch',platform:'cisco',status:'online',collectedAt:'2020-01-01T00:00:00Z',
   ports:[{name:'Gi1',status:'up',mode:'access',vlan:'10'},{name:'Gi2',status:'up',mode:'access',vlan:'20'}],
   macs:[{mac:'02:00:00:00:00:60',port:'Gi1',vlan:'10'},{mac:'02:00:00:00:00:61',port:'Gi2',vlan:'20'}]},
  {id:'192.0.2.12',address:'192.0.2.12',name:'Disconnected fixture switch',platform:'cisco',status:'online',collectedAt:'2020-01-01T00:00:00Z',
-  ports:[{name:'Gi9',status:'up',mode:'access',vlan:'30'}],macs:[{mac:'02:00:00:00:00:62',port:'Gi9',vlan:'30'}]}],links:[],updatedAt:'2020-01-01T00:00:00Z'
+  ports:[{name:'Gi9',status:'up',mode:'access',vlan:'30'}],macs:[{mac:'02:00:00:00:00:62',port:'Gi9',vlan:'30'}]},...bundleMap.nodes],links:bundleMap.links,updatedAt:'2020-01-01T00:00:00Z'
 })]);
 if (process.send) {
   process.once('message', async message => {

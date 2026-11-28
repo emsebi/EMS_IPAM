@@ -96,6 +96,13 @@ node -e '
  if(!x.topology.links.some(l=>l.sourcePort==="Gi1/0/1"&&l.targetPort==="Gi0/24"&&/cdp|lldp/.test(l.protocol)))process.exit(1);
 ' "$STATE" || fail "Synthetic LLDP/CDP, port/VLAN or MAC evidence is missing from the topology."
 pass "manual Create Map collected synthetic port, VLAN, MAC and LLDP/CDP topology"
+node -e '
+ const x=JSON.parse(process.argv[1]),link=x.topology.links.find(l=>l.sourcePort==="Gi1/0/3");
+ if(!link||link.state!=="down"||link.sourceEvidence?.physicalState!=="up"||link.sourceEvidence?.reason!=="member-suspended")process.exit(1);
+ if(link.sourceBundle?.name!=="Po7"||!link.sourceBundle.members.some(m=>m.port==="Gi1/0/4"&&m.state==="standby"))process.exit(1);
+ if(x.topology.links.some(l=>l.sourcePort==="Gi1/0/4"))process.exit(1);
+' "$STATE" || fail "Connected suspended member was misreported as a path, or an unobserved standby cable was invented."
+pass "SSH bundle evidence preserves suspended/standby members without inventing remote cables"
 
 SNAPSHOTS="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots?companyId=${COMPANY_ID}")"
 SNAPSHOT_ID="$(node -e 'const x=JSON.parse(process.argv[1]);if(!x.ok||x.items.length!==1)process.exit(1);process.stdout.write(x.items[0].id)' "$SNAPSHOTS")" || fail "Exactly one manual snapshot was not stored."
@@ -124,6 +131,7 @@ AFTER_SNAPSHOTS="$(curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}
 node -e '
  const state=JSON.parse(process.argv[1]),settings=JSON.parse(process.argv[2]),snapshots=JSON.parse(process.argv[3]);
  if(!state.topology.nodes.some(n=>n.hostname==="FixtureSwitch")||!settings.hasPassword||snapshots.items.length!==1)process.exit(1);
+ if(state.topology.links.find(l=>l.sourcePort==="Gi1/0/3")?.state!=="down")process.exit(1);
 ' "$AFTER" "$AFTER_SETTINGS" "$AFTER_SNAPSHOTS" || fail "Network Map state did not persist after application restart."
 curl -fsS -b "$COOKIE_JAR" "http://127.0.0.1:${EMS_HTTP_PORT}/api/network-map/snapshots/${SNAPSHOT_ID}/download?companyId=${COMPANY_ID}" >/dev/null || fail "Snapshot file did not persist after restart."
 pass "settings, topology and snapshot persisted after application restart"

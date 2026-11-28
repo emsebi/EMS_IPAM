@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {fail,text,normalizeMac,settingsInput,expandScopes,emptyTopology,buildTopology,impact,traceMac,lookupIp,traceSavedIp,layoutInput} from './model.mjs';
+import {fail,text,normalizeMac,settingsInput,expandScopes,emptyTopology,buildTopology,withBundleEvidence,impact,traceMac,lookupIp,traceSavedIp,layoutInput} from './model.mjs';
 import {vault} from './vault.mjs';
 import {collectDevice,probeTcp} from '../discovery/ssh.mjs';
 
@@ -14,7 +14,10 @@ export function createModule(ctx) {
   const collector=ctx.collectNetworkDevice||collectDevice,probe=ctx.networkProbe||probeTcp;
   const folder=c=>path.join(directory,crypto.createHash('sha256').update(c).digest('hex').slice(0,24));
   const readSettings=async c=>(await pool.query('SELECT settings,password_ciphertext FROM network_map_settings WHERE company_id=$1',[c])).rows[0];
-  const readState=async c=>(await pool.query('SELECT topology,layout FROM network_map_state WHERE company_id=$1',[c])).rows[0]||{topology:emptyTopology(),layout:{positions:{},background:''}};
+  const readState=async c=>{
+    const state=(await pool.query('SELECT topology,layout FROM network_map_state WHERE company_id=$1',[c])).rows[0]||{topology:emptyTopology(),layout:{positions:{},background:''}};
+    return {...state,topology:withBundleEvidence(state.topology)};
+  };
   const saveTopology=async(c,topology)=>pool.query(`INSERT INTO network_map_state(company_id,topology) VALUES($1,$2::jsonb) ON CONFLICT(company_id) DO UPDATE SET topology=excluded.topology`,[c,JSON.stringify(topology)]);
   const busy=c=>jobs.get(c)?.status==='running'||healthLocks.has(c);
   async function verifyHostKey(c,address,port,fingerprint){
