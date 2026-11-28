@@ -1,0 +1,54 @@
+name: MikroTik Route Manager isolated VM deployment
+on:
+  push:
+    branches:
+      - ops/mrm-host-access-20261128
+    paths:
+      - .github/workflows/mrm-isolated-deploy.yml
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout independent MikroTik Route Manager repo
+        uses: actions/checkout@v4
+        with:
+          repository: emsebi/MikroTik-Route-Manager
+          ref: 118c9e976c4f2224e71f32de33118bb4cbac7835
+          path: independent-mrm-source
+          persist-credentials: false
+          clean: true
+      - name: Deploy isolated app and verify HTTP health only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ROOT="$HOME/mikrotik-route-manager-lab"
+          mkdir -p "$ROOT"
+          chmod 700 "$ROOT"
+          # Only app-owned files are installed. No EMS_IPAM paths, containers or volumes are touched.
+          for file in app.py Dockerfile compose.yaml .dockerignore .env.example build-archive.sh README_FA.md; do
+            cp "independent-mrm-source/$file" "$ROOT/$file"
+          done
+          if [ ! -f "$ROOT/.env" ]; then
+            printf 'MIKROTIK_HOST=192.168.88.1\nPANEL_BIND=10.1.1.5\n' > "$ROOT/.env"
+            chmod 600 "$ROOT/.env"
+          fi
+          cd "$ROOT"
+          docker compose --project-name mikrotik-route-manager up -d --build --no-deps
+          for i in $(seq 1 15); do
+            if curl --noproxy '*' -fsS --max-time 3 http://10.1.1.5:8088/healthz >/dev/null; then
+              echo "MRM isolated deployment healthy: http://10.1.1.5:8088/login"
+              echo "First-run admin password is available ONLY in local container logs/Portainer."
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          echo "::error::Route Manager did not pass HTTP health check"
+          exit 1
