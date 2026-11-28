@@ -22,8 +22,10 @@ export function parseCiscoBundles(raw) {
 export function parseCisco(outputs) {
   const ports=[];
   for(const line of (outputs.ports||'').split(/\r?\n/)) {
-    const m=line.match(/^\s*((?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe|Po)\S+)\s+(.*?)\s*(connected|notconnect|disabled|err-disabled|inactive|suspended|monitoring)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/i);
-    if(m)ports.push({name:normalizePort(m[1]),description:m[2].trim(),status:m[3]==='connected'?'up':m[3]==='disabled'?'disabled':m[3]==='err-disabled'?'err-disabled':'down',
+    // Descriptions can contain status words. Use the final full status token,
+    // not a suffix such as "Suspended" inside the interface description.
+    const m=line.match(/^\s*((?:Gi|Te|Fa|Eth|Et|Fo|Hu|Twe|Po)\S+)\s+(?:(.*)\s+)?(connected|notconnect|disabled|err-disabled|inactive|suspended|monitoring)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$/i);
+    if(m)ports.push({name:normalizePort(m[1]),description:(m[2]||'').trim(),status:m[3]==='connected'?'up':m[3]==='disabled'?'disabled':m[3]==='err-disabled'?'err-disabled':'down',
       mode:m[4]==='trunk'?'trunk':/^\d+$/.test(m[4])?'access':m[4]==='routed'?'routed':'unknown',vlan:m[4],duplex:m[5],speed:m[6],media:m[7]});
   }
   for(const block of (outputs.switchports||'').split(/(?=^Name:)/m)){

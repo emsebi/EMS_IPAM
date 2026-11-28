@@ -1,13 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildTopology, withBundleEvidence, impact, traceMac} from '../backend/model.mjs';
-import {parseCiscoBundles} from '../discovery/device-parsers.mjs';
+import {parseCisco,parseCiscoBundles} from '../discovery/device-parsers.mjs';
 import {bundleFixtureNodes} from './bundle-fixture.mjs';
 
 // Flag semantics: Cisco's IOS command reference and NX-OS 9.3 summary example.
 // https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst4500/XE3-11-0E/command/reference/xe-311-cmd/show1.html
 // https://developer.cisco.com/docs/cisco-nexus-9000-series-nx-api-cli-reference/latest/port-channel-commands/
 const memberLink = (map, port) => map.links.find(l => l.sourcePort === port);
+
+test('interface descriptions containing status words cannot shift the carrier and VLAN columns', () => {
+  const ports=parseCisco({ports:'Gi1/1 Synthetic-Suspended connected trunk a-full a-1000 1000BaseSX\nGi1/2 connected connected 10 full 1000 1000BaseTX\nGi1/3 notconnect 20 auto auto unknown\nGi1/4 disabled spare notconnect 30 auto auto unknown'}).ports;
+  assert.deepEqual(ports.map(p=>[p.name,p.description,p.status,p.vlan,p.duplex,p.speed]),[
+    ['Gi1/1','Synthetic-Suspended','up','trunk','a-full','a-1000'],
+    ['Gi1/2','connected','up','10','full','1000'],
+    ['Gi1/3','','down','20','auto','auto'],
+    ['Gi1/4','disabled spare','down','30','auto','auto'],
+  ]);
+});
 
 test('suspended bundle member cannot become a green path merely because its interface is connected', () => {
   const nodes = bundleFixtureNodes(), before = structuredClone(nodes), map = buildTopology(nodes);
