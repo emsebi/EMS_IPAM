@@ -1,0 +1,46 @@
+name: MRM VPN source-IP diagnosis
+on:
+  push:
+    branches: [ops/mrm-host-access-20261128]
+    paths: [.github/workflows/mrm-vpn-source-diagnostic.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 5
+    steps:
+      - name: Read-only host return route and RouterOS session/NAT summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Linux return route to the VPN client:"
+          ip -4 route get 100.100.1.97
+          echo "Linux route to MikroTik:"
+          ip -4 route get 10.1.1.240
+          docker exec -i mikrotik-route-manager python - <<'PY'
+          import sys
+          sys.path.insert(0, '/app')
+          import app
+          sessions=app.active_sessions()
+          matches=[s for s in sessions if s['ip']=='100.100.1.97']
+          print('VPN sessions found:',len(sessions))
+          print('User VPN address 100.100.1.97 present:',bool(matches))
+          print('VPN interface identity for this IP:', matches[0]['principal'] if matches else '<none>')
+          rules=app.router_request('GET','ip/firewall/nat') or []
+          candidates=[]
+          for i,r in enumerate(rules):
+              if r.get('chain') != 'srcnat' or str(r.get('disabled','false')).lower() == 'true':
+                  continue
+              candidates.append((i,r))
+          print('Enabled srcnat rules:',len(candidates))
+          for i,r in candidates[:20]:
+              print('srcnat rule index',i,'action',r.get('action',''),'source',r.get('src-address','any'),
+                    'destination',r.get('dst-address','any'),'out-if',r.get('out-interface',''),
+                    'out-list',r.get('out-interface-list',''))
+          print('No RouterOS settings were modified.')
+          PY
