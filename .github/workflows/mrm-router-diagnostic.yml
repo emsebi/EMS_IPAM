@@ -23,7 +23,10 @@ jobs:
           sys.path.insert(0, '/app')
           import app
           host,port = app.get_router_config()
-          print('Router host still default placeholder:',host=='192.168.88.1')
+          print('Configured RouterOS host:', host)
+          print('Router host matches user PC 10.1.1.240:', host=='10.1.1.240')
+          print('TLS certificate verification enabled:', app.setting('router_verify_tls','true'))
+          print('Router username matches api:', app.setting('router_user')=='api')
           print('Configured RouterOS port:',port)
           print('API username configured:',bool(app.setting('router_user')))
           print('API password configured:',bool(app.setting('router_pass')))
