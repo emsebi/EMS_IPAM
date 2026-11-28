@@ -13,7 +13,7 @@ The result contains bounded inventory `records` (up to 100) and `matches` with a
 This increment adds an isolated, administrator-only **manual read-only discovery** flow. It does not push configuration and does not poll automatically.
 
 - The administrator saves an SSH read account, explicit device list and/or bounded IPv4 ranges. The password is AES-256-GCM encrypted with a file key outside PostgreSQL and is never returned by the API.
-- **Create Map** is the only full discovery trigger. It runs a fixed allowlist of Cisco or MikroTik read commands; no arbitrary CLI endpoint exists.
+- **Create Map** is the only full discovery trigger. It runs allowlisted Cisco or MikroTik read commands, including bounded, validated one-shot bond monitors; no arbitrary CLI endpoint exists.
 - The first SSH host key is remembered per company/address/port. A changed key blocks collection.
 - LLDP/CDP/MikroTik neighbors produce port-to-port links. Device status distinguishes unreachable, login failure, changed host key and incomplete reads.
 - Saved node data includes ports, VLAN/trunk evidence, selected capabilities and MAC forwarding observations. MAC trace includes source and collection time and marks uncertainty/staleness.
@@ -25,4 +25,10 @@ Validation includes offline parser fixtures and a PGlite-backed API scan with an
 
 CI also runs the module migration, encrypted settings, explicit manual scan, snapshot archive and restart persistence against an isolated PostgreSQL 16 service. This validates the production database driver and SQL types without contacting network equipment. These checks and the full Docker Compose gate passed for the released SHA; the deployment separately verified installed module readiness and data preservation.
 
-The full Compose gate adds an isolated synthetic Cisco-like SSH service on the temporary project network. It verifies that the production app image loads the module, stores a read-only account without starting discovery, runs only after the explicit Create Map request, records port/VLAN/MAC and LLDP/CDP evidence, removes configuration secrets from the readable snapshot and preserves settings, topology and files after an app-container restart. The fixture has no host port and never contacts a real device.
+The full Compose gate adds isolated synthetic Cisco-like and RouterOS-like SSH services on the temporary project network. It verifies that the production app image loads the module, stores a read-only account without starting discovery, runs only after the explicit Create Map request, records port/VLAN/MAC and LLDP/CDP evidence, removes configuration secrets from the readable snapshot and preserves settings, topology and files after an app-container restart. The fixtures have no host port and never contact a real device.
+
+## RouterOS bonding evidence
+
+An explicitly requested collection reads `/interface bonding print detail without-paging`, then at most 32 `/interface bonding monitor [find where name="..."] once` commands on the same SSH session. Selectors accept only bounded literal ASCII names; CLI metacharacters, unsupported commands, incomplete monitors and excess bonds stay unverified. No automatic polling, additional session, configuration write or new scan trigger is added. RouterOS 6 keeps the existing `export hide-sensitive` behavior; RouterOS 7 keeps `export` with the existing archive redaction.
+
+Each bond retains its own mode and active/inactive member list. An inactive port can be down **or a backup**, so the panel does not invent its cause. Carrier alone never certifies aggregate forwarding; a known aggregate without bonding read access remains unknown and is not a MAC Finder access-port candidate. Saved evidence still expires, and link reads do not renew timestamps or change stored data. The labels follow [MikroTik's Bonding documentation](https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding); synthetic 6/7 session, browser, database and Docker checks do not constitute real hardware or PNETLab acceptance. Require an explicitly authorized scope before any real collection.

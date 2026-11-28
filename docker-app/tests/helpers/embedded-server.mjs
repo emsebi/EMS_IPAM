@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {buildTopology} from '../../../modules/network-map/backend/model.mjs';
 import {bundleFixtureNodes} from '../../../modules/network-map/tests/bundle-fixture.mjs';
+import {routerosFixtureNode} from '../../../modules/network-map/tests/routeros-fixture.mjs';
 const db=new PGlite();
 const query=async(sql,params)=>{
   const result=params?.length ? await db.query(sql,params) : (await db.exec(sql)).at(-1);
@@ -36,7 +37,7 @@ INSERT INTO hosts(id,space_id,ip,name,type,radio_mode,radio_parent_host_id,ssid)
  ('st2','test-space','192.0.2.21','Station Two','Radio','station','ap2','Warehouse'),
  ('st3','test-space','192.0.2.31','Station Three','Radio','station','ap3','Remote');`);
 
-const bundleMap=buildTopology(bundleFixtureNodes());
+const bundleMap=buildTopology([...bundleFixtureNodes(),routerosFixtureNode()]);
 // Simulate a pre-fix saved map. GET /state must correct derived LAG states without a scan/write.
 bundleMap.links.forEach(l=>{l.state='up';delete l.sourceEvidence;delete l.targetEvidence;});
 await db.query('INSERT INTO network_map_state(company_id,topology) VALUES($1,$2::jsonb)', ['test-co',JSON.stringify({

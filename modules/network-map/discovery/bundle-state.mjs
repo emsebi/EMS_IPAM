@@ -9,5 +9,5 @@ export const ciscoMemberState = flags => Object.hasOwn(memberStates, flags) ? me
 export const ciscoBundleState = flags => /[DMN]/.test(flags || '') ? 'down'
   : /U/.test(flags || '') ? 'up' : 'unknown';
 
-export const inactiveMember = state => ['down', 'suspended', 'standby', 'removed',
+export const inactiveMember = state => ['down', 'inactive', 'suspended', 'standby', 'removed',
   'waiting', 'unsuitable', 'min-links', 'failed'].includes(state);

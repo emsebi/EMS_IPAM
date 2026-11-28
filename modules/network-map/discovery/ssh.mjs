@@ -1,5 +1,6 @@
 import net from 'node:net';
-import {parseCisco,parseMikrotik,commandFailed,redactConfig} from './device-parsers.mjs';
+import {parseCisco,parseMikrotik,rosRows,commandFailed,redactConfig} from './device-parsers.mjs';
+import {MAX_BOND_MONITORS,routerosBondMonitorCommand} from './routeros-bonding.mjs';
 
 export function probeTcp(host,port,timeout=1500){return new Promise(resolve=>{
   const socket=net.connect({host,port});let done=false;
@@ -9,10 +10,11 @@ export function probeTcp(host,port,timeout=1500){return new Promise(resolve=>{
 const ciscoCommands={version:'show version',ports:'show interfaces status',switchports:'show interfaces switchport',cdp:'show cdp neighbors detail',lldp:'show lldp neighbors detail',macs:'show mac address-table',poe:'show power inline',config:'show running-config'};
 const iosCommands={...ciscoCommands,bundles:'show etherchannel summary'};
 const nxosCommands={...ciscoCommands,bundles:'show port-channel summary'};
-const rosCommands={version:'/system resource print',identity:'/system identity print',ports:'/interface print detail without-paging',bridgePorts:'/interface bridge port print detail without-paging',neighbors:'/ip neighbor print detail without-paging',macs:'/interface bridge host print detail without-paging',snmp:'/snmp print',aaa:'/user aaa print',poe:'/interface ethernet poe print detail without-paging',config:'/export'};
+const rosCommands={version:'/system resource print',identity:'/system identity print',ports:'/interface print detail without-paging',bridgePorts:'/interface bridge port print detail without-paging',neighbors:'/ip neighbor print detail without-paging',macs:'/interface bridge host print detail without-paging',snmp:'/snmp print',aaa:'/user aaa print',poe:'/interface ethernet poe print detail without-paging',config:'/export',bonding:'/interface bonding print detail without-paging'};
 const strip=s=>s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g,'').replace(/\r/g,'');
 
-// Only the fixed read commands above can reach the equipment. No arbitrary CLI API.
+// Only fixed read commands and bounded, validated one-shot bond monitors can reach
+// the equipment, through an already requested scoped collection. No arbitrary CLI API.
 export async function collectDevice(target,settings,password,{createSshClient,verifyHostKey}) {
   const client=createSshClient();const timeout=settings.timeout*1000;let mismatch=false,stream,waiter,pending='',platform=target.platform;
   let sessionError=null;
@@ -53,9 +55,21 @@ export async function collectDevice(target,settings,password,{createSshClient,ve
       if(key==='version'&&platform==='cisco')continue;
       // Running config also supplies capability evidence. It never enters the topology JSON.
       const command=platform==='mikrotik'&&key==='config'&&/version:\s*6\./.test(outputs.version)?'/export hide-sensitive':original;
-      try{outputs[key]=await run(command);if(commandFailed(outputs[key]))errors.push(key);}catch{errors.push(key);break;}
+      try{outputs[key]=await run(command);if(commandFailed(outputs[key])&&!(key==='bonding'&&outputs[key]===''))errors.push(key);}catch{errors.push(key);break;}
+    }
+    if(platform==='mikrotik'&&!sessionError&&!commandFailed(outputs.bonding)){
+      outputs.bondMonitors=Object.create(null);
+      const names=[...new Set(rosRows(outputs.bonding).filter(b=>!b.flags.includes('X')).map(b=>b.name).filter(Boolean))];
+      if(names.length>MAX_BOND_MONITORS)errors.push('bonding-monitor-limit');
+      for(const name of names.slice(0,MAX_BOND_MONITORS)){
+        const command=routerosBondMonitorCommand(name);
+        if(!command){errors.push('bonding-monitor-name');continue;}
+        try{outputs.bondMonitors[name]=await run(command);if(commandFailed(outputs.bondMonitors[name]))errors.push('bonding-monitor');}
+        catch{errors.push('bonding-monitor');break;}
+      }
     }
     const parsed=platform==='mikrotik'?parseMikrotik(outputs):parseCisco(outputs);
+    if(platform==='mikrotik'&&parsed.bundles.some(b=>b.monitorStatus==='unavailable'))errors.push('bonding-monitor-unverified');
     if(!parsed.ports.length&&!parsed.model&&!parsed.os)throw new Error('NO_READ_ACCESS');
     return {...parsed,platform,status:errors.length?'partial':'online',errors,
       config:settings.saveConfig&&!commandFailed(outputs.config)?redactConfig(outputs.config):null};

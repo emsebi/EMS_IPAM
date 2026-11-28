@@ -872,6 +872,27 @@ try {
   assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
   check('Saved LAG detail distinguishes suspended and standby members, independent endpoint bundles and highlight without discovery');
 
+  const rosWrites=[];
+  const onRosRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')rosWrites.push(req.url());};
+  page.on('request',onRosRequest);
+  for(const [port,name,protocol] of [['ether2','bond-lacp','802.3ad'],['ether4','bond backup','active-backup']]){
+    const savedLink=bundleBefore.topology.links.find(l=>l.targetPort===port);
+    assert.equal(savedLink.state,'down');assert.equal(savedLink.targetBundle.kind,'routeros-bond');
+    const element=page.locator(`[data-link="${savedLink.id}"]`);
+    await element.focus();await element.press('Enter');
+    const detail=page.locator(`.nm-link-endpoint[data-endpoint="target"] [data-bundle="${name}"]`);
+    await detail.waitFor();assert.match(await detail.textContent(),new RegExp(protocol));
+    assert.equal(await detail.locator('.nm-bundle-member').count(),2);
+    assert.match(await detail.locator('[data-member-state="inactive"]').textContent(),/غیرفعال \(قطع یا پشتیبان\)/);
+    assert.equal(await element.locator('.nm-link.down.nm-highlight').count(),1);
+    assert.match(await page.locator('#nmDetail').textContent(),/نه تست زنده/);
+  }
+  await page.screenshot({path:path.join(outputDir,'network-map-routeros-bonding.png'),fullPage:true});
+  assert.deepEqual(await api('/api/network-map/state?companyId=test-co'),bundleBefore);
+  page.off('request',onRosRequest);assert.deepEqual(rosWrites,[]);
+  assert.equal((await api('/api/network-map/snapshots?companyId=test-co')).items.length,0);
+  check('Saved RouterOS LACP and active-backup details retain independent members and inactive evidence without a scan or write');
+
   const traceMutations=[];
   const traceRequest=req=>{if(req.url().includes('/api/network-map/')&&req.method()!=='GET')traceMutations.push(req.url());};
   page.on('request',traceRequest);

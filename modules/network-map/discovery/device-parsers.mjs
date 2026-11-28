@@ -1,8 +1,9 @@
 import {parseCdpNeighborsDetail,parseLldpNeighborsDetail,normalizePort} from './parsers.mjs';
 import {normalizeMac} from '../backend/model.mjs';
 import {ciscoMemberState,ciscoBundleState} from './bundle-state.mjs';
+import {parseRouterosBonds} from './routeros-bonding.mjs';
 
-export const commandFailed=s=>!s||/(?:%\s*(?:Invalid|Incomplete|Ambiguous|Authorization|Error)|not enough permissions|bad command name|syntax error|permission denied)/i.test(s);
+export const commandFailed=s=>!s||/(?:%\s*(?:Invalid|Incomplete|Ambiguous|Authorization|Error)|not enough permissions|bad command name|syntax error|permission denied|^\s*failure:|^\s*expected end of command)/im.test(s);
 const mac=s=>{try{return normalizeMac(s);}catch{return null;}};
 const capability=(enabled,source,supported='unknown')=>({enabled,supported,source});
 export function parseCiscoBundles(raw) {
@@ -78,14 +79,20 @@ export function parseMikrotik(outputs) {
     const bridge=bridgePorts.find(b=>b.interface===p.name);
     return {name:p.name,status:p.flags.includes('X')?'disabled':p.flags.includes('R')?'up':'down',
       mode:bridge?.['frame-types']==='admit-only-vlan-tagged'?'trunk':bridge?.['frame-types']==='admit-only-untagged-and-priority-tagged'?'access':'unknown',
-      vlan:bridge?.pvid||'',mac:p['mac-address']||'',media:p.type||'',description:p.comment||''};
+      vlan:bridge?.pvid||'',mac:p['mac-address']||'',media:p.type||'',description:p.comment||'',
+      ...(['bond','bonding'].includes(p.type)?{bundle:p.name,bundleState:'unknown'}:{})};
   });
+  const bundles=parseRouterosBonds(commandFailed(outputs.bonding)?[]:rosRows(outputs.bonding),outputs.bondMonitors,ports);
+  for(const bundle of bundles)for(const member of bundle.members){
+    const port=ports.find(p=>p.name===member.port);
+    if(port){port.bundle=bundle.name;port.bundleState=member.state;}
+  }
   const config=outputs.config||'',configOk=!commandFailed(config)&&config.includes('/');
   const features={SNMP:capability(commandFailed(outputs.snmp)?null:/enabled:\s*yes/.test(outputs.snmp),'snmp print'),
     AAA:capability(commandFailed(outputs.aaa)?null:/use-radius:\s*yes/.test(outputs.aaa),'user aaa print'),
     PoE:capability(commandFailed(outputs.poe)?null:rosRows(outputs.poe).some(p=>p['poe-out']&&p['poe-out']!=='off'),'ethernet poe print',commandFailed(outputs.poe)?'unknown':'yes'),
     MAB:capability(null,'not collected'), '802.1X':capability(configOk&&/\/interface dot1x server/.test(config)?true:null,'export')};
-  return {hostname:(outputs.identity||'').match(/name:\s*(.+)/)?.[1]||'',model:properties['board-name']||'',os:properties.version||'',uptime:properties.uptime||'',ports,features,
+  return {hostname:(outputs.identity||'').match(/name:\s*(.+)/)?.[1]||'',model:properties['board-name']||'',os:properties.version||'',osFamily:'routeros',uptime:properties.uptime||'',ports,features,bundles,
     macs:rosRows(outputs.macs).filter(p=>mac(p['mac-address'])&&!p.flags.includes('L')).map(p=>({mac:mac(p['mac-address']),port:p['on-interface']||'',vlan:p.vid||'',kind:p.flags.includes('D')?'dynamic':'static'})),
     neighbors:rosRows(outputs.neighbors).map(p=>({deviceId:p.identity||p['mac-address'],address:p.address||'',localPort:p.interface||'',remotePort:p['interface-name']||'',protocol:p['discovered-by']||'mndp'}))};
 }

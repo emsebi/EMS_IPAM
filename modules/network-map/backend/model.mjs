@@ -56,10 +56,14 @@ const freshCollection=n=>{
   return ['online','partial'].includes(n?.status)&&age>=0&&age<=300000&&n.collectedAt===n.checkedAt;
 };
 function bundleAt(n,port) {
-  const bundle=n?.bundles?.find(b=>normalizePort(b.name)===port||b.members?.some(m=>normalizePort(m.port)===port));
+  const knownBond=n?.ports?.find(p=>normalizePort(p.name)===port&&['bond','bonding'].includes(p.media));
+  const bundle=n?.bundles?.find(b=>normalizePort(b.name)===port||b.members?.some(m=>normalizePort(m.port)===port))
+    ||(knownBond?{kind:'routeros-bond',name:knownBond.name,protocol:'unknown',flags:'',state:'unknown',members:[]}:null);
   if(!bundle)return null;
-  const members=(bundle.members||[]).map(m=>({...m,state:ciscoMemberState(m.flags)}));
-  return {name:bundle.name,protocol:bundle.protocol,flags:bundle.flags,state:ciscoBundleState(bundle.flags),members,
+  const ros=bundle.kind==='routeros-bond';
+  const members=(bundle.members||[]).map(m=>({...m,state:ros?(['bundled','inactive'].includes(m.state)?m.state:'unknown'):ciscoMemberState(m.flags)}));
+  return {kind:bundle.kind||'cisco-bundle',name:bundle.name,protocol:bundle.protocol,flags:bundle.flags,
+    state:ros?(['up','down'].includes(bundle.state)?bundle.state:'unknown'):ciscoBundleState(bundle.flags),members,
     memberState:members.find(m=>normalizePort(m.port)===port)?.state||null,
     observedAt:n.collectedAt||null,fresh:freshCollection(n)};
 }
@@ -93,7 +97,8 @@ function linkEvidence(link,byId) {
 // Old maps remain usable; no pairing is inferred from the order of bundle members.
 export function withBundleEvidence(topology) {
   const byId=new Map(topology.nodes.map(n=>[n.id,n]));
-  return {...topology,links:topology.links.map(l=>l.sourceBundle||l.targetBundle||byId.get(l.source)?.bundles?.length||byId.get(l.target)?.bundles?.length?linkEvidence(l,byId):l)};
+  const hasBundle=n=>n?.bundles?.length||n?.ports?.some(p=>['bond','bonding'].includes(p.media));
+  return {...topology,links:topology.links.map(l=>l.sourceBundle||l.targetBundle||hasBundle(byId.get(l.source))||hasBundle(byId.get(l.target))?linkEvidence(l,byId):l)};
 }
 export function buildTopology(nodes, previous=emptyTopology()) {
   const byId=new Map(nodes.map(n=>[n.id,n]));
