@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: emsebi/MikroTik-Route-Manager
-          ref: c9900bfe2737a5269f89a44d0da241e193782e64
+          ref: 492511f0a06ac63968d86940906241546035be53
           path: independent-mrm-source
           persist-credentials: false
           clean: true
