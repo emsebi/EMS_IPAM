@@ -1,0 +1,33 @@
+name: MikroTik Route Manager isolated host preflight
+on:
+  push:
+    branches:
+      - ops/mrm-host-access-20261128
+    paths:
+      - .github/workflows/mrm-host-preflight.yml
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  mrm-preflight:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 6
+    steps:
+      - name: Inspect existing runner prerequisites without altering services
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner: ${RUNNER_NAME}"
+          echo "Host: $(hostname)"
+          docker info --format 'Docker daemon: {{.ServerVersion}}'
+          docker compose version
+          command -v git
+          if docker container inspect mikrotik-route-manager >/dev/null 2>&1; then
+            echo "Route Manager container already exists"
+          else
+            echo "Route Manager container absent (safe to create separately)"
+          fi
+          echo "EMS_IPAM containers and volumes were not modified."
