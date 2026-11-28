@@ -1,0 +1,29 @@
+name: Route Manager user home smoke check
+on:
+  push:
+    branches: [ops/mrm-host-access-20261128]
+    paths: [.github/workflows/mrm-ui-smoke.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mrm-isolated-lab
+  cancel-in-progress: false
+jobs:
+  smoke:
+    if: github.repository == 'emsebi/EMS_IPAM'
+    runs-on: [self-hosted, Linux, X64, ems-ipam-lab]
+    timeout-minutes: 3
+    steps:
+      - name: Verify user-first page and tucked-away admin login
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=http://10.1.1.5:8088
+          login=$(curl --noproxy '*' -fsS --max-time 10 "$base/login")
+          printf '%s' "$login" | grep -q 'ورود به پنل مدیریت'
+          page=$(curl --noproxy '*' -fsS --max-time 12 "$base/")
+          printf '%s' "$page" | grep -q 'انتخاب مسیر'
+          printf '%s' "$page" | grep -q 'class="admin-link" href="/login"'
+          echo "USER_HOME_HTTP_OK: $base/"
+          echo "ADMIN_LOGIN_CORNER_OK: $base/login"
+          echo "No VM credentials or client information printed."
